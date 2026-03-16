@@ -9,6 +9,7 @@ export const bidsTable = pgTable("bids", {
   projectId: text("project_id").notNull().references(() => projectsTable.id),
   subId: text("sub_id").notNull().references(() => usersTable.id),
   amount: doublePrecision("amount").notNull(),
+  notes: text("notes"),
   status: text("status").notNull().default("PENDING"), // PENDING | AWARDED | REJECTED
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

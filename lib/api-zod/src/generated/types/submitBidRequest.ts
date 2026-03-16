@@ -8,4 +8,5 @@
 
 export interface SubmitBidRequest {
   amount: number;
+  notes?: string;
 }

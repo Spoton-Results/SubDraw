@@ -77,8 +77,8 @@ export default function ProjectDetail() {
   const [inviteResult, setInviteResult] = React.useState<{ temporaryPassword: string; email: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
 
-  const [isBidOpen, setIsBidOpen] = React.useState(false);
   const [bidAmount, setBidAmount] = React.useState("");
+  const [bidNotes, setBidNotes] = React.useState("");
 
   const [isPlanOpen, setIsPlanOpen] = React.useState(false);
   const [planDescription, setPlanDescription] = React.useState("");
@@ -192,12 +192,13 @@ export default function ProjectDetail() {
   const handleBidSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(bidAmount);
-    if (isNaN(amount) || amount <= 0) return toast.error("Invalid amount");
+    if (isNaN(amount) || amount <= 0) return toast.error("Invalid bid amount");
     try {
-      await submitBid.mutateAsync({ projectId, data: { amount } });
+      await submitBid.mutateAsync({ projectId, data: { amount, notes: bidNotes.trim() || undefined } });
       toast.success("Bid submitted successfully!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-      setIsBidOpen(false);
+      setBidAmount("");
+      setBidNotes("");
     } catch {
       toast.error("Failed to submit bid");
     }
@@ -348,12 +349,6 @@ export default function ProjectDetail() {
               <Button onClick={() => setIsInviteOpen(true)} className="gap-2 min-h-[44px]">
                 <Mail className="h-5 w-5" />
                 Invite Subcontractor
-              </Button>
-            )}
-            {!isGC && project.status === "BIDDING" && !myBid && (
-              <Button onClick={() => setIsBidOpen(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-green-600/30 min-h-[44px]">
-                <DollarSign className="h-5 w-5" />
-                Submit Bid
               </Button>
             )}
           </div>
@@ -558,46 +553,119 @@ export default function ProjectDetail() {
           )}
 
           {/* BIDS SECTION */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" /> Bids
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(project.bids?.length ?? 0) === 0 ? (
-                <p className="text-muted-foreground py-4 text-center">No bids submitted yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {project.bids
-                    ?.filter(b => isGC || b.subId === user.id)
-                    .map(bid => (
-                      <div key={bid.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/50 border border-border gap-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-bold">{isGC ? bid.sub?.companyName : "Your Bid"}</p>
-                            <Badge variant={
-                              bid.status === "AWARDED" ? "success" :
-                              bid.status === "REJECTED" ? "destructive" : "warning"
-                            }>{bid.status}</Badge>
+          {(isGC || project.status === "BIDDING" || myBid) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                  {isGC ? "Bids" : myBid ? "Your Bid" : "Submit Your Bid"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isGC ? (
+                  (project.bids?.length ?? 0) === 0 ? (
+                    <p className="text-muted-foreground py-4 text-center">No bids submitted yet.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {project.bids?.map(bid => (
+                        <div key={bid.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/50 border border-border gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-bold">{bid.sub?.companyName}</p>
+                              <Badge variant={
+                                bid.status === "AWARDED" ? "success" :
+                                bid.status === "REJECTED" ? "destructive" : "warning"
+                              }>{bid.status}</Badge>
+                            </div>
+                            <p className="text-2xl font-bold font-display text-primary">{formatCurrency(bid.amount)}</p>
+                            {bid.notes && (
+                              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{bid.notes}</p>
+                            )}
                           </div>
-                          <p className="text-2xl font-bold font-display text-primary">{formatCurrency(bid.amount)}</p>
+                          {bid.status === "PENDING" && project.status === "BIDDING" && (
+                            <Button
+                              onClick={() => setAwardBidConfirm({ open: true, id: bid.id, company: bid.sub?.companyName ?? "this subcontractor", amount: bid.amount })}
+                              className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20 shrink-0"
+                            >
+                              <Award className="h-4 w-4 mr-2" /> Award
+                            </Button>
+                          )}
                         </div>
-
-                        {isGC && bid.status === "PENDING" && project.status === "BIDDING" && (
-                          <Button
-                            onClick={() => setAwardBidConfirm({ open: true, id: bid.id, company: bid.sub?.companyName ?? "this subcontractor", amount: bid.amount })}
-                            className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20"
-                          >
-                            <Award className="h-4 w-4 mr-2" /> Award
-                          </Button>
+                      ))}
+                    </div>
+                  )
+                ) : !myBid ? (
+                  <form onSubmit={handleBidSubmit} className="space-y-5">
+                    <p className="text-sm text-muted-foreground">Submit your proposed bid for this project. You may only submit one bid per project.</p>
+                    <div>
+                      <label className="text-sm font-semibold mb-1.5 block">Bid Amount ($)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        placeholder="e.g. 50000.00"
+                        value={bidAmount}
+                        onChange={e => setBidAmount(e.target.value)}
+                        className="font-mono text-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold mb-1.5 block">
+                        Notes <span className="font-normal text-muted-foreground">(optional)</span>
+                      </label>
+                      <textarea
+                        className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none min-h-[90px]"
+                        placeholder="Describe your approach, timeline, qualifications, or any questions for the GC…"
+                        value={bidNotes}
+                        onChange={e => setBidNotes(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      isLoading={submitBid.isPending}
+                      className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white min-h-[44px]"
+                    >
+                      <DollarSign className="h-5 w-5" /> Submit Bid
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Bid</p>
+                        <p className="text-3xl font-bold font-display text-primary">{formatCurrency(myBid.amount)}</p>
+                        {myBid.notes && (
+                          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{myBid.notes}</p>
                         )}
                       </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      <Badge
+                        variant={myBid.status === "AWARDED" ? "success" : myBid.status === "REJECTED" ? "destructive" : "warning"}
+                        className="text-sm px-3 py-1"
+                      >
+                        {myBid.status}
+                      </Badge>
+                    </div>
+                    {myBid.status === "AWARDED" && (
+                      <p className="text-sm text-green-700 dark:text-green-400 mt-3 font-medium">
+                        Congratulations! Your bid was awarded. A subcontract has been created for this project.
+                      </p>
+                    )}
+                    {myBid.status === "PENDING" && (
+                      <p className="text-sm text-muted-foreground mt-3">
+                        Your bid is under review by the general contractor.
+                      </p>
+                    )}
+                    {myBid.status === "REJECTED" && (
+                      <p className="text-sm text-muted-foreground mt-3">
+                        Your bid was not selected for this project.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
         </div>
 
@@ -844,20 +912,6 @@ export default function ProjectDetail() {
             <Button type="submit" isLoading={isSubmitting} disabled={!selectedFile || isSubmitting} className="gap-2 min-h-[44px]">
               <Upload className="h-4 w-4" /> Upload
             </Button>
-          </div>
-        </form>
-      </Dialog>
-
-      {/* Sub Submit Bid Dialog */}
-      <Dialog open={isBidOpen} onOpenChange={setIsBidOpen} title="Submit Bid" description="Enter your proposed amount for this project.">
-        <form onSubmit={handleBidSubmit} className="space-y-4 mt-4">
-          <div>
-            <label className="text-sm font-semibold mb-1 block">Bid Amount ($)</label>
-            <Input type="number" step="0.01" required placeholder="50000.00" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setIsBidOpen(false)} className="min-h-[44px]">Cancel</Button>
-            <Button type="submit" isLoading={submitBid.isPending} className="min-h-[44px]">Submit Bid</Button>
           </div>
         </form>
       </Dialog>

@@ -202,6 +202,7 @@ export const GetProjectResponse = zod.object({
       projectId: zod.string(),
       subId: zod.string(),
       amount: zod.number(),
+      notes: zod.string().nullish(),
       status: zod.enum(["PENDING", "AWARDED", "REJECTED"]),
       createdAt: zod.date(),
       sub: zod.object({
@@ -339,6 +340,7 @@ export const UpdateProjectResponse = zod.object({
       projectId: zod.string(),
       subId: zod.string(),
       amount: zod.number(),
+      notes: zod.string().nullish(),
       status: zod.enum(["PENDING", "AWARDED", "REJECTED"]),
       createdAt: zod.date(),
       sub: zod.object({
@@ -516,6 +518,7 @@ export const GetProjectBidsResponseItem = zod.object({
   projectId: zod.string(),
   subId: zod.string(),
   amount: zod.number(),
+  notes: zod.string().nullish(),
   status: zod.enum(["PENDING", "AWARDED", "REJECTED"]),
   createdAt: zod.date(),
   sub: zod.object({
@@ -538,6 +541,7 @@ export const SubmitBidParams = zod.object({
 
 export const SubmitBidBody = zod.object({
   amount: zod.number(),
+  notes: zod.string().optional(),
 });
 
 /**

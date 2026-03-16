@@ -22,12 +22,17 @@ router.get("/", requireAuth, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { projectId } = req.params as any;
-  const { amount } = req.body;
+  const { amount, notes } = req.body;
   if (!amount || isNaN(Number(amount))) {
     res.status(400).json({ error: "amount is required" });
     return;
   }
-  const [bid] = await db.insert(bidsTable).values({ projectId, subId: user.id, amount: Number(amount) }).returning();
+  const [bid] = await db.insert(bidsTable).values({
+    projectId,
+    subId: user.id,
+    amount: Number(amount),
+    notes: notes?.trim() || null,
+  }).returning();
   const bidWithSub = await getBidWithSub(bid);
   res.status(201).json(bidWithSub);
 });

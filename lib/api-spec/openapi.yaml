@@ -1171,6 +1171,9 @@ components:
           type: string
         amount:
           type: number
+        notes:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [PENDING, AWARDED, REJECTED]
@@ -1186,6 +1189,8 @@ components:
       properties:
         amount:
           type: number
+        notes:
+          type: string
       required: [amount]
 
     Subcontract:

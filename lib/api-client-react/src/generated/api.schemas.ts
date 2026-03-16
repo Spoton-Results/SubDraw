@@ -140,6 +140,7 @@ export interface Bid {
   projectId: string;
   subId: string;
   amount: number;
+  notes?: string | null;
   status: BidStatus;
   createdAt: string;
   sub: User;
@@ -226,6 +227,7 @@ export interface InviteRequest {
 
 export interface SubmitBidRequest {
   amount: number;
+  notes?: string;
 }
 
 export type ChangeOrderStatus =

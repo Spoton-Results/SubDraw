@@ -13,6 +13,7 @@ export interface Bid {
   projectId: string;
   subId: string;
   amount: number;
+  notes?: string | null;
   status: BidStatus;
   createdAt: Date;
   sub: User;
