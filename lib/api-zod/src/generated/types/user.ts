@@ -12,5 +12,6 @@ export interface User {
   email: string;
   role: UserRole;
   companyName: string;
+  mustChangePassword: boolean;
   createdAt: Date;
 }

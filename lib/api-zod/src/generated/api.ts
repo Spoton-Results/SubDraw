@@ -38,6 +38,7 @@ export const LoginResponse = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
 });
@@ -57,7 +58,20 @@ export const GetMeResponse = zod.object({
   email: zod.string(),
   role: zod.enum(["GC", "SUB"]),
   companyName: zod.string(),
+  mustChangePassword: zod.boolean(),
   createdAt: zod.date(),
+});
+
+/**
+ * @summary Change the current user's password
+ */
+export const ChangePasswordBody = zod.object({
+  currentPassword: zod.string(),
+  newPassword: zod.string(),
+});
+
+export const ChangePasswordResponse = zod.object({
+  message: zod.string(),
 });
 
 /**
@@ -74,6 +88,7 @@ export const GetProjectsResponseItem = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
 });
@@ -104,6 +119,7 @@ export const GetProjectResponse = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
   members: zod.array(
@@ -117,6 +133,7 @@ export const GetProjectResponse = zod.object({
         email: zod.string(),
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
         createdAt: zod.date(),
       }),
     }),
@@ -134,6 +151,7 @@ export const GetProjectResponse = zod.object({
         email: zod.string(),
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
         createdAt: zod.date(),
       }),
     }),
@@ -156,6 +174,7 @@ export const GetProjectResponse = zod.object({
           email: zod.string(),
           role: zod.enum(["GC", "SUB"]),
           companyName: zod.string(),
+          mustChangePassword: zod.boolean(),
           createdAt: zod.date(),
         }),
       }),
@@ -164,6 +183,7 @@ export const GetProjectResponse = zod.object({
         email: zod.string(),
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
         createdAt: zod.date(),
       }),
     }),
@@ -231,6 +251,7 @@ export const GetProjectBidsResponseItem = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
 });
@@ -275,6 +296,7 @@ export const GetSubcontractsResponseItem = zod.object({
       email: zod.string(),
       role: zod.enum(["GC", "SUB"]),
       companyName: zod.string(),
+      mustChangePassword: zod.boolean(),
       createdAt: zod.date(),
     }),
   }),
@@ -283,6 +305,7 @@ export const GetSubcontractsResponseItem = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
 });
@@ -312,6 +335,7 @@ export const GetSubcontractResponse = zod.object({
       email: zod.string(),
       role: zod.enum(["GC", "SUB"]),
       companyName: zod.string(),
+      mustChangePassword: zod.boolean(),
       createdAt: zod.date(),
     }),
   }),
@@ -320,6 +344,7 @@ export const GetSubcontractResponse = zod.object({
     email: zod.string(),
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
   changeOrders: zod.array(
@@ -510,6 +535,7 @@ export const GetUsersResponseItem = zod.object({
   email: zod.string(),
   role: zod.enum(["GC", "SUB"]),
   companyName: zod.string(),
+  mustChangePassword: zod.boolean(),
   createdAt: zod.date(),
 });
 export const GetUsersResponse = zod.array(GetUsersResponseItem);

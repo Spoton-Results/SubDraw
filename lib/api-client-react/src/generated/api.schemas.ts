@@ -17,6 +17,17 @@ export interface MessageResponse {
   message: string;
 }
 
+export interface InviteResponse {
+  message: string;
+  isNewUser: boolean;
+  temporaryPassword?: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const UserRole = {
@@ -29,6 +40,7 @@ export interface User {
   email: string;
   role: UserRole;
   companyName: string;
+  mustChangePassword: boolean;
   createdAt: string;
 }
 

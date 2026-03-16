@@ -1,19 +1,15 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
-import { HardHat, LayoutDashboard, LogOut, Loader2, FileText, ChevronRight } from "lucide-react";
+import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { HardHat, LayoutDashboard, LogOut, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading, isError } = useGetMe({ query: { retry: false } });
+  const queryClient = useQueryClient();
+  const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const logout = useLogout();
-
-  React.useEffect(() => {
-    if (!isLoading && (isError || !user)) {
-      setLocation("/login");
-    }
-  }, [user, isLoading, isError, setLocation]);
 
   if (isLoading) {
     return (
@@ -28,6 +24,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     try {
       await logout.mutateAsync();
+      queryClient.clear();
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success("Logged out successfully");
       setLocation("/login");
     } catch {
@@ -87,9 +85,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-bold font-display">SubTracker</span>
           </div>
           <div className="flex items-center gap-4">
-             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-               {user.companyName.charAt(0).toUpperCase()}
-             </div>
+            <button
+              onClick={handleLogout}
+              className="md:hidden flex items-center gap-2 text-sm font-medium text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+              {user.companyName.charAt(0).toUpperCase()}
+            </div>
           </div>
         </header>
         <div className="flex-1 overflow-auto p-4 md:p-8">

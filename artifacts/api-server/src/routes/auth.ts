@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie, getAuthUser } from "../lib/auth.js";
+import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router = Router();
@@ -66,6 +66,44 @@ router.get("/me", requireAuth, async (req, res) => {
   }
   const { passwordHash: _, ...safeUser } = user;
   res.json(safeUser);
+});
+
+router.post("/change-password", requireAuth, async (req, res) => {
+  const userPayload = (req as any).user;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "currentPassword and newPassword are required" });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: "New password must be at least 8 characters" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userPayload.id)).limit(1);
+  if (!user) {
+    res.status(401).json({ error: "User not found" });
+    return;
+  }
+
+  const valid = await comparePassword(currentPassword, user.passwordHash);
+  if (!valid) {
+    res.status(400).json({ error: "Current password is incorrect" });
+    return;
+  }
+
+  const newHash = await hashPassword(newPassword);
+  const [updated] = await db
+    .update(usersTable)
+    .set({ passwordHash: newHash, mustChangePassword: false, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id))
+    .returning();
+
+  const token = generateToken(updated);
+  setAuthCookie(res, token);
+
+  res.json({ message: "Password changed successfully" });
 });
 
 export default router;

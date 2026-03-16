@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useLogin, useGetMe } from "@workspace/api-client-react";
+import { useLogin, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HardHat } from "lucide-react";
@@ -18,7 +19,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+  const queryClient = useQueryClient();
+  const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const login = useLogin();
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
@@ -32,10 +34,11 @@ export default function Login() {
   const onSubmit = async (data: LoginForm) => {
     try {
       await login.mutateAsync({ data });
+      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success("Welcome back!");
       setLocation("/");
     } catch (e: any) {
-      toast.error(e.response?.data?.error || "Login failed");
+      toast.error(e?.data?.error || e?.message || "Login failed");
     }
   };
 

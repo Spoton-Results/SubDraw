@@ -3,30 +3,41 @@ import { db } from "@workspace/db";
 import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable } from "@workspace/db/schema";
 import { eq, or, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
+import { hashPassword } from "../lib/auth.js";
+import { sendInviteEmail } from "../lib/email.js";
 
 const router = Router();
+
+function generateTempPassword(length = 10): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
 
 async function getProjectWithDetails(projectId: string) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
   if (!project) return null;
 
-  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
+  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
 
   const members = await db.select().from(projectMembersTable).where(eq(projectMembersTable.projectId, projectId));
   const membersWithUsers = await Promise.all(members.map(async (m) => {
-    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, m.userId)).limit(1);
+    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, m.userId)).limit(1);
     return { ...m, user };
   }));
 
   const bids = await db.select().from(bidsTable).where(eq(bidsTable.projectId, projectId));
   const bidsWithSubs = await Promise.all(bids.map(async (b) => {
-    const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, b.subId)).limit(1);
+    const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, b.subId)).limit(1);
     return { ...b, sub };
   }));
 
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
   const subcontractsWithDetails = await Promise.all(subcontracts.map(async (sc) => {
-    const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
     return { ...sc, project: { ...project, gc }, sub };
   }));
 
@@ -40,7 +51,7 @@ router.get("/", requireAuth, async (req, res) => {
   if (user.role === "GC") {
     const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, user.id));
     projects = await Promise.all(gcProjects.map(async (p) => {
-      const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
+      const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
       return { ...p, gc };
     }));
   } else {
@@ -52,7 +63,7 @@ router.get("/", requireAuth, async (req, res) => {
     }
     const subProjects = await db.select().from(projectsTable).where(inArray(projectsTable.id, projectIds));
     projects = await Promise.all(subProjects.map(async (p) => {
-      const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
+      const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
       return { ...p, gc };
     }));
   }
@@ -68,7 +79,7 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
     return;
   }
   const [project] = await db.insert(projectsTable).values({ name, gcId: user.id }).returning();
-  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
   res.status(201).json({ ...project, gc });
 });
 
@@ -88,23 +99,32 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
     return;
   }
 
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
   let [invitedUser] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  let isNewUser = false;
+  let temporaryPassword: string | undefined;
 
   if (!invitedUser) {
-    // Auto-create sub account if they don't exist yet
     if (!companyName) {
       res.status(400).json({ error: "companyName is required for new subcontractors" });
       return;
     }
-    const { hashPassword } = await import("../lib/auth.js");
-    const passwordHash = await hashPassword("subtracker123");
+    temporaryPassword = generateTempPassword();
+    const passwordHash = await hashPassword(temporaryPassword);
     const [created] = await db.insert(usersTable).values({
       email,
       passwordHash,
       role: "SUB",
       companyName,
+      mustChangePassword: true,
     }).returning();
     invitedUser = created;
+    isNewUser = true;
   }
 
   if (invitedUser.role !== "SUB") {
@@ -121,7 +141,23 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
   }
 
   await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
-  res.status(201).json({ message: "Subcontractor invited" });
+
+  // Send invite email (best-effort — don't fail the request if email fails)
+  if (isNewUser && temporaryPassword) {
+    const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+    sendInviteEmail({
+      toEmail: email,
+      temporaryPassword,
+      projectName: project.name,
+      appUrl,
+    }).catch((err) => console.error("[email] Failed to send invite email:", err));
+  }
+
+  res.status(201).json({
+    message: isNewUser ? "Subcontractor account created and invited" : "Subcontractor invited",
+    isNewUser,
+    ...(temporaryPassword ? { temporaryPassword } : {}),
+  });
 });
 
 export default router;
