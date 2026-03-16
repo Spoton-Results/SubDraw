@@ -14,6 +14,9 @@ export interface Project {
   name: string;
   gcId: string;
   status: ProjectStatus;
+  address?: string | null;
+  description?: string | null;
+  estimatedStartDate?: string | null;
   createdAt: Date;
   gc: User;
   financialSummary?: ProjectFinancialSummary;

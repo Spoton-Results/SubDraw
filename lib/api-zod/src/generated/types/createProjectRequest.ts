@@ -8,4 +8,7 @@
 
 export interface CreateProjectRequest {
   name: string;
+  address?: string;
+  description?: string;
+  estimatedStartDate?: string;
 }

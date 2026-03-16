@@ -42,6 +42,7 @@ export * from "./subcontractDetail";
 export * from "./submitBidRequest";
 export * from "./submitInvoiceRequest";
 export * from "./updateProfileRequest";
+export * from "./updateProjectRequest";
 export * from "./uploadUrlRequest";
 export * from "./uploadUrlResponse";
 export * from "./user";

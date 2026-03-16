@@ -110,22 +110,59 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
-  const { name } = req.body;
+  const { name, address, description, estimatedStartDate } = req.body;
   if (!name) {
     res.status(400).json({ error: "name is required" });
     return;
   }
-  const [project] = await db.insert(projectsTable).values({ name, gcId: user.id }).returning();
+  const [project] = await db.insert(projectsTable).values({
+    name,
+    gcId: user.id,
+    address: address || null,
+    description: description || null,
+    estimatedStartDate: estimatedStartDate || null,
+  }).returning();
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
   res.status(201).json({ ...project, gc });
 });
 
 router.get("/:projectId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
   const detail = await getProjectWithDetails(req.params.projectId);
   if (!detail) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
+  // Strip notes for non-GC users
+  if (user.role !== "GC" || user.id !== detail.gcId) {
+    const { notes: _notes, ...rest } = detail as any;
+    res.json(rest);
+    return;
+  }
+  res.json(detail);
+});
+
+router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+  if (project.gcId !== user.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const { name, address, description, estimatedStartDate, notes } = req.body;
+  const updates: Record<string, any> = { updatedAt: new Date() };
+  if (name !== undefined) updates.name = name;
+  if (address !== undefined) updates.address = address || null;
+  if (description !== undefined) updates.description = description || null;
+  if (estimatedStartDate !== undefined) updates.estimatedStartDate = estimatedStartDate || null;
+  if (notes !== undefined) updates.notes = notes || null;
+
+  await db.update(projectsTable).set(updates).where(eq(projectsTable.id, req.params.projectId));
+  const detail = await getProjectWithDetails(req.params.projectId);
   res.json(detail);
 });
 

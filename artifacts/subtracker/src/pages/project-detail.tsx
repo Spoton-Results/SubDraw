@@ -12,6 +12,7 @@ import {
   getGetProjectPlanFilesQueryKey,
   useAddPlanFile,
   useDeletePlanFile,
+  useUpdateProject,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import { formatCurrency, cn } from "@/lib/utils";
 import {
   Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
+  Pencil, MapPin, CalendarDays, StickyNote, Save,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -54,7 +56,18 @@ export default function ProjectDetail() {
   const awardBid = useAwardBid();
   const addPlanFile = useAddPlanFile();
   const deletePlanFileMutation = useDeletePlanFile();
+  const updateProject = useUpdateProject();
   const { data: planFiles = [], refetch: refetchPlans } = useGetProjectPlanFiles(projectId);
+
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [editName, setEditName] = React.useState("");
+  const [editAddress, setEditAddress] = React.useState("");
+  const [editDescription, setEditDescription] = React.useState("");
+  const [editStartDate, setEditStartDate] = React.useState("");
+
+  const [notes, setNotes] = React.useState("");
+  const [notesSaved, setNotesSaved] = React.useState(false);
+  const [notesDirty, setNotesDirty] = React.useState(false);
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
@@ -78,6 +91,54 @@ export default function ProjectDetail() {
       setUploadStep("idle");
     },
   });
+
+  // Initialize notes from project data
+  React.useEffect(() => {
+    if (project) {
+      setNotes((project as any).notes ?? "");
+    }
+  }, [project?.id]);
+
+  const handleOpenEdit = () => {
+    setEditName(project?.name ?? "");
+    setEditAddress((project as any)?.address ?? "");
+    setEditDescription((project as any)?.description ?? "");
+    setEditStartDate((project as any)?.estimatedStartDate ?? "");
+    setIsEditOpen(true);
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) return toast.error("Project name is required");
+    try {
+      await updateProject.mutateAsync({
+        projectId,
+        data: {
+          name: editName.trim(),
+          address: editAddress.trim() || undefined,
+          description: editDescription.trim() || undefined,
+          estimatedStartDate: editStartDate || undefined,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      toast.success("Project updated!");
+      setIsEditOpen(false);
+    } catch (err: any) {
+      toast.error(err?.data?.error || "Failed to update project");
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    try {
+      await updateProject.mutateAsync({ projectId, data: { notes: notes || undefined } });
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setNotesSaved(true);
+      setNotesDirty(false);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch (err: any) {
+      toast.error(err?.data?.error || "Failed to save notes");
+    }
+  };
 
   if (isLoading || !project || !user) {
     return <Layout><div className="animate-pulse h-64 bg-card rounded-2xl"></div></Layout>;
@@ -225,32 +286,59 @@ export default function ProjectDetail() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-card p-6 rounded-2xl border border-border/50 shadow-sm">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold font-display">{project.name}</h1>
-            <Badge variant={project.status === "ACTIVE" ? "success" : project.status === "BIDDING" ? "default" : "secondary"}>
-              {project.status}
-            </Badge>
+      <div className="mb-8 bg-card p-6 rounded-2xl border border-border/50 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <h1 className="text-3xl font-bold font-display">{project.name}</h1>
+              <Badge variant={project.status === "ACTIVE" ? "success" : project.status === "BIDDING" ? "default" : "secondary"}>
+                {project.status}
+              </Badge>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Building className="h-4 w-4 shrink-0" /> {project.gc?.companyName}
+              </p>
+              {(project as any).address && (
+                <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <MapPin className="h-4 w-4 shrink-0" /> {(project as any).address}
+                </p>
+              )}
+              {(project as any).estimatedStartDate && (
+                <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <CalendarDays className="h-4 w-4 shrink-0" />
+                  Est. Start: {format(new Date((project as any).estimatedStartDate), "MMMM d, yyyy")}
+                </p>
+              )}
+              {(project as any).description && (
+                <p className="text-muted-foreground text-sm mt-3 max-w-2xl leading-relaxed border-t border-border/50 pt-3">
+                  {(project as any).description}
+                </p>
+              )}
+            </div>
           </div>
-          <p className="text-muted-foreground flex items-center gap-2">
-            <Building className="h-4 w-4" /> {project.gc?.companyName}
-          </p>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isGC && (
+              <Button variant="outline" onClick={handleOpenEdit} className="gap-2">
+                <Pencil className="h-4 w-4" /> Edit Project
+              </Button>
+            )}
+            {isGC && project.status === "BIDDING" && (
+              <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
+                <Mail className="h-5 w-5" />
+                Invite Subcontractor
+              </Button>
+            )}
+            {!isGC && project.status === "BIDDING" && !myBid && (
+              <Button onClick={() => setIsBidOpen(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-green-600/30">
+                <DollarSign className="h-5 w-5" />
+                Submit Bid
+              </Button>
+            )}
+          </div>
         </div>
-
-        {isGC && project.status === "BIDDING" && (
-          <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
-            <Mail className="h-5 w-5" />
-            Invite Subcontractor
-          </Button>
-        )}
-
-        {!isGC && project.status === "BIDDING" && !myBid && (
-          <Button onClick={() => setIsBidOpen(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-green-600/30">
-            <DollarSign className="h-5 w-5" />
-            Submit Bid
-          </Button>
-        )}
       </div>
 
       {/* GC FINANCIAL OVERVIEW */}
@@ -520,6 +608,71 @@ export default function ProjectDetail() {
           </Card>
         </div>
       </div>
+
+      {/* GC Private Notes */}
+      {isGC && (
+        <Card className="mt-8 border-amber-200/60 dark:border-amber-800/40">
+          <CardHeader className="border-b border-amber-200/60 dark:border-amber-800/40 pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                <StickyNote className="h-5 w-5" /> Private Notes
+                <span className="text-xs font-normal text-muted-foreground ml-1">(Only visible to you)</span>
+              </CardTitle>
+              <Button
+                size="sm"
+                variant={notesSaved ? "default" : notesDirty ? "default" : "ghost"}
+                onClick={handleSaveNotes}
+                isLoading={updateProject.isPending}
+                disabled={!notesDirty}
+                className={cn("gap-2 transition-all", notesSaved && "bg-green-600 hover:bg-green-700 text-white")}
+              >
+                <Save className="h-4 w-4" />
+                {notesSaved ? "Saved!" : "Save Notes"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <textarea
+              className="w-full min-h-[140px] bg-amber-50/50 dark:bg-amber-950/10 rounded-xl border border-amber-200/60 dark:border-amber-800/40 p-4 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 resize-y placeholder:text-muted-foreground/60"
+              placeholder="Add internal notes for this project — observations, reminders, vendor contacts, or anything the team shouldn't see…"
+              value={notes}
+              onChange={e => { setNotes(e.target.value); setNotesDirty(true); setNotesSaved(false); }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen} title="Edit Project" description="Update the project details. Changes are visible to all members.">
+        <form onSubmit={handleEditSave} className="space-y-4 mt-2">
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Project Name *</label>
+            <Input required value={editName} onChange={e => setEditName(e.target.value)} placeholder="e.g. Downtown Office Renovation" />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Full Address</label>
+            <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="e.g. 123 Main St, Chicago, IL 60601" />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Project Description</label>
+            <textarea
+              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              rows={3}
+              placeholder="Brief overview of the project scope and objectives..."
+              value={editDescription}
+              onChange={e => setEditDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Estimated Start Date</label>
+            <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+            <Button type="submit" isLoading={updateProject.isPending}>Save Changes</Button>
+          </div>
+        </form>
+      </Dialog>
 
       {/* GC Invite Dialog */}
       <Dialog

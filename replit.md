@@ -39,7 +39,7 @@ artifacts-monorepo/
 ## Database Schema (PostgreSQL)
 
 - `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires)
-- `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED
+- `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED; optional fields: address, description, estimatedStartDate (text), notes (GC-only, stripped from API response for non-GC users)
 - `project_members` — Which subs are invited to a project
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
 - `subcontracts` — Awarded contract with baseContractAmount

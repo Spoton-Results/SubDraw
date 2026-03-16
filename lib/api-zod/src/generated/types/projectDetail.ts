@@ -16,6 +16,10 @@ export interface ProjectDetail {
   name: string;
   gcId: string;
   status: ProjectDetailStatus;
+  address?: string | null;
+  description?: string | null;
+  estimatedStartDate?: string | null;
+  notes?: string | null;
   createdAt: Date;
   gc: User;
   members: ProjectMember[];

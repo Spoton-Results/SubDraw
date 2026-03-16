@@ -102,6 +102,9 @@ export interface Project {
   name: string;
   gcId: string;
   status: ProjectStatus;
+  address?: string | null;
+  description?: string | null;
+  estimatedStartDate?: string | null;
   createdAt: string;
   gc: User;
   financialSummary?: ProjectFinancialSummary;
@@ -190,6 +193,10 @@ export interface ProjectDetail {
   name: string;
   gcId: string;
   status: ProjectDetailStatus;
+  address?: string | null;
+  description?: string | null;
+  estimatedStartDate?: string | null;
+  notes?: string | null;
   createdAt: string;
   gc: User;
   members: ProjectMember[];
@@ -199,6 +206,17 @@ export interface ProjectDetail {
 
 export interface CreateProjectRequest {
   name: string;
+  address?: string;
+  description?: string;
+  estimatedStartDate?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  address?: string;
+  description?: string;
+  estimatedStartDate?: string;
+  notes?: string;
 }
 
 export interface InviteRequest {

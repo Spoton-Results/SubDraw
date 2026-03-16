@@ -121,6 +121,9 @@ export const GetProjectsResponseItem = zod.object({
   name: zod.string(),
   gcId: zod.string(),
   status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+  address: zod.string().nullish(),
+  description: zod.string().nullish(),
+  estimatedStartDate: zod.string().nullish(),
   createdAt: zod.date(),
   gc: zod.object({
     id: zod.string(),
@@ -147,6 +150,9 @@ export const GetProjectsResponse = zod.array(GetProjectsResponseItem);
  */
 export const CreateProjectBody = zod.object({
   name: zod.string(),
+  address: zod.string().optional(),
+  description: zod.string().optional(),
+  estimatedStartDate: zod.string().optional(),
 });
 
 /**
@@ -161,6 +167,10 @@ export const GetProjectResponse = zod.object({
   name: zod.string(),
   gcId: zod.string(),
   status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+  address: zod.string().nullish(),
+  description: zod.string().nullish(),
+  estimatedStartDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
   createdAt: zod.date(),
   gc: zod.object({
     id: zod.string(),
@@ -216,6 +226,146 @@ export const GetProjectResponse = zod.object({
         name: zod.string(),
         gcId: zod.string(),
         status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+        address: zod.string().nullish(),
+        description: zod.string().nullish(),
+        estimatedStartDate: zod.string().nullish(),
+        createdAt: zod.date(),
+        gc: zod.object({
+          id: zod.string(),
+          email: zod.string(),
+          role: zod.enum(["GC", "SUB"]),
+          companyName: zod.string(),
+          mustChangePassword: zod.boolean(),
+          createdAt: zod.date(),
+        }),
+        financialSummary: zod
+          .object({
+            subcontractCount: zod.number(),
+            totalApprovedAmount: zod.number(),
+            totalInvoiced: zod.number(),
+            hasFlaggedInvoices: zod.boolean(),
+            totalCOApproved: zod.number(),
+          })
+          .optional(),
+      }),
+      sub: zod.object({
+        id: zod.string(),
+        email: zod.string(),
+        role: zod.enum(["GC", "SUB"]),
+        companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
+        createdAt: zod.date(),
+      }),
+      scoreboard: zod
+        .object({
+          base: zod.number(),
+          coTotal: zod.number(),
+          currentApprovedTotal: zod.number(),
+          invoicedTotal: zod.number(),
+          remaining: zod.number(),
+          hasFlaggedInvoices: zod.boolean(),
+          lastInvoice: zod
+            .object({
+              id: zod.string(),
+              subcontractId: zod.string(),
+              invoiceNumber: zod.string(),
+              amount: zod.number(),
+              description: zod.string().nullish(),
+              status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
+              flaggedOverAmount: zod.number(),
+              overrideReason: zod.string().nullish(),
+              createdAt: zod.date(),
+              updatedAt: zod.date(),
+            })
+            .nullish(),
+        })
+        .optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Update project details (GC only)
+ */
+export const UpdateProjectParams = zod.object({
+  projectId: zod.coerce.string(),
+});
+
+export const UpdateProjectBody = zod.object({
+  name: zod.string().optional(),
+  address: zod.string().optional(),
+  description: zod.string().optional(),
+  estimatedStartDate: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateProjectResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  gcId: zod.string(),
+  status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+  address: zod.string().nullish(),
+  description: zod.string().nullish(),
+  estimatedStartDate: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+  gc: zod.object({
+    id: zod.string(),
+    email: zod.string(),
+    role: zod.enum(["GC", "SUB"]),
+    companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
+    createdAt: zod.date(),
+  }),
+  members: zod.array(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      userId: zod.string(),
+      roleOnProject: zod.string(),
+      user: zod.object({
+        id: zod.string(),
+        email: zod.string(),
+        role: zod.enum(["GC", "SUB"]),
+        companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
+        createdAt: zod.date(),
+      }),
+    }),
+  ),
+  bids: zod.array(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      subId: zod.string(),
+      amount: zod.number(),
+      status: zod.enum(["PENDING", "AWARDED", "REJECTED"]),
+      createdAt: zod.date(),
+      sub: zod.object({
+        id: zod.string(),
+        email: zod.string(),
+        role: zod.enum(["GC", "SUB"]),
+        companyName: zod.string(),
+        mustChangePassword: zod.boolean(),
+        createdAt: zod.date(),
+      }),
+    }),
+  ),
+  subcontracts: zod.array(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      subId: zod.string(),
+      baseContractAmount: zod.number(),
+      createdAt: zod.date(),
+      project: zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        gcId: zod.string(),
+        status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+        address: zod.string().nullish(),
+        description: zod.string().nullish(),
+        estimatedStartDate: zod.string().nullish(),
         createdAt: zod.date(),
         gc: zod.object({
           id: zod.string(),
@@ -404,6 +554,9 @@ export const GetSubcontractsResponseItem = zod.object({
     name: zod.string(),
     gcId: zod.string(),
     status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+    address: zod.string().nullish(),
+    description: zod.string().nullish(),
+    estimatedStartDate: zod.string().nullish(),
     createdAt: zod.date(),
     gc: zod.object({
       id: zod.string(),
@@ -476,6 +629,9 @@ export const GetSubcontractResponse = zod.object({
     name: zod.string(),
     gcId: zod.string(),
     status: zod.enum(["BIDDING", "ACTIVE", "CLOSED"]),
+    address: zod.string().nullish(),
+    description: zod.string().nullish(),
+    estimatedStartDate: zod.string().nullish(),
     createdAt: zod.date(),
     gc: zod.object({
       id: zod.string(),

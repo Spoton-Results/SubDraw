@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, Receipt } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -20,17 +20,28 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
 
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
-  const [newProjectName, setNewProjectName] = React.useState("");
+  const [newName, setNewName] = React.useState("");
+  const [newAddress, setNewAddress] = React.useState("");
+  const [newDescription, setNewDescription] = React.useState("");
+  const [newStartDate, setNewStartDate] = React.useState("");
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectName.trim()) return;
+    if (!newName.trim()) return;
     try {
-      await createProject.mutateAsync({ data: { name: newProjectName } });
+      await createProject.mutateAsync({ data: {
+        name: newName.trim(),
+        address: newAddress.trim() || undefined,
+        description: newDescription.trim() || undefined,
+        estimatedStartDate: newStartDate || undefined,
+      }});
       toast.success("Project created!");
       queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
       setIsCreateOpen(false);
-      setNewProjectName("");
+      setNewName("");
+      setNewAddress("");
+      setNewDescription("");
+      setNewStartDate("");
     } catch {
       toast.error("Failed to create project");
     }
@@ -114,36 +125,41 @@ export default function Dashboard() {
                     <h3 className="text-xl font-bold font-display mb-1 group-hover:text-primary transition-colors line-clamp-1">
                       {project.name}
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                      <Building2 className="h-4 w-4" />
-                      <span className="truncate">{project.gc.companyName}</span>
+                    <div className="space-y-1 mb-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Building2 className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{project.gc.companyName}</span>
+                      </div>
+                      {(project as any).address && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{(project as any).address}</span>
+                        </div>
+                      )}
+                      {(project as any).estimatedStartDate && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <CalendarDays className="h-4 w-4 shrink-0" />
+                          <span>Start: {format(new Date((project as any).estimatedStartDate), "MMM d, yyyy")}</span>
+                        </div>
+                      )}
                     </div>
 
                     {isGC && fs && (
-                      <div className="grid grid-cols-3 gap-2 mb-4 p-3 bg-muted/40 rounded-xl border border-border/50">
+                      <div className="grid grid-cols-2 gap-2 mb-4 p-3 bg-muted/40 rounded-xl border border-border/50">
                         <div className="text-center">
                           <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                             <FileSignature className="h-3 w-3" />
-                            <span className="text-xs">Subs</span>
+                            <span className="text-xs">Active Subs</span>
                           </div>
                           <p className="text-lg font-bold font-mono">{fs.subcontractCount}</p>
                         </div>
-                        <div className="text-center border-x border-border/50">
+                        <div className="text-center border-l border-border/50">
                           <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                             <DollarSign className="h-3 w-3" />
-                            <span className="text-xs">Approved</span>
+                            <span className="text-xs">Total Value</span>
                           </div>
                           <p className="text-sm font-bold font-mono text-foreground leading-tight">
                             {formatCurrency(fs.totalApprovedAmount)}
-                          </p>
-                        </div>
-                        <div className="text-center">
-                          <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
-                            <Receipt className="h-3 w-3" />
-                            <span className="text-xs">Invoiced</span>
-                          </div>
-                          <p className="text-sm font-bold font-mono text-foreground leading-tight">
-                            {formatCurrency(fs.totalInvoiced)}
                           </p>
                         </div>
                       </div>
@@ -163,20 +179,47 @@ export default function Dashboard() {
         </div>
       )}
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project">
-        <form onSubmit={handleCreate} className="space-y-4">
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project" description="Add details about your project. Only the name is required.">
+        <form onSubmit={handleCreate} className="space-y-4 mt-2">
           <div>
-            <label className="text-sm font-semibold mb-1 block">Project Name</label>
+            <label className="text-sm font-semibold mb-1 block">Project Name *</label>
             <Input
               autoFocus
+              required
               placeholder="e.g. Downtown Office Renovation"
-              value={newProjectName}
-              onChange={e => setNewProjectName(e.target.value)}
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Full Address</label>
+            <Input
+              placeholder="e.g. 123 Main St, Chicago, IL 60601"
+              value={newAddress}
+              onChange={e => setNewAddress(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Project Description</label>
+            <textarea
+              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              rows={3}
+              placeholder="Brief overview of the project scope and objectives..."
+              value={newDescription}
+              onChange={e => setNewDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Estimated Start Date</label>
+            <Input
+              type="date"
+              value={newStartDate}
+              onChange={e => setNewStartDate(e.target.value)}
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={createProject.isPending}>Create</Button>
+            <Button type="submit" isLoading={createProject.isPending}>Create Project</Button>
           </div>
         </form>
       </Dialog>

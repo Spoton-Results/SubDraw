@@ -8,6 +8,10 @@ export const projectsTable = pgTable("projects", {
   name: text("name").notNull(),
   gcId: text("gc_id").notNull().references(() => usersTable.id),
   status: text("status").notNull().default("BIDDING"), // BIDDING | ACTIVE | CLOSED
+  address: text("address"),
+  description: text("description"),
+  estimatedStartDate: text("estimated_start_date"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
