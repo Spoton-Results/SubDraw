@@ -172,7 +172,7 @@ export default function SubcontractDetail() {
                         {getCOStatusBadge(co.status)}
                       </div>
                     </div>
-                    {isGC && co.status === 'PENDING_GC' && (
+                    {!isGC && co.status === 'PENDING_GC' && (
                       <div className="flex gap-2">
                         <Button size="icon" variant="success" className="h-8 w-8 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleActionCO(co.id, 'approve')}>
                           <Check className="h-4 w-4"/>

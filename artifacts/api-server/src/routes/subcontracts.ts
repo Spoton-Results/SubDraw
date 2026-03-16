@@ -2,9 +2,20 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
+import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
+import {
+  sendChangeOrderCreatedEmail,
+  sendChangeOrderDecisionEmail,
+  sendInvoiceSubmittedEmail,
+  sendInvoiceFlaggedEmail,
+  sendInvoiceDecisionEmail,
+} from "../lib/email.js";
 
 const router = Router();
+
+function getAppUrl(req: any) {
+  return process.env.APP_URL || `https://${req.hostname}`;
+}
 
 async function computeScoreboard(subcontractId: string, baseContractAmount: number) {
   const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
@@ -76,16 +87,56 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     amount: Number(amount),
     status: "PENDING_GC",
   }).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendChangeOrderCreatedEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    description,
+    amount: Number(amount),
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendChangeOrderCreatedEmail failed:", err));
+
   res.status(201).json(co);
 });
 
-router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth, requireGC, async (req, res) => {
+router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth, requireSub, async (req, res) => {
   const [co] = await db.update(changeOrdersTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendChangeOrderDecisionEmail({
+    toEmail: sc.project.gc.email,
+    projectName: sc.project.name,
+    subCompanyName: sc.sub.companyName,
+    description: co.description,
+    amount: co.amount,
+    decision: "APPROVED",
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendChangeOrderDecisionEmail failed:", err));
+
   res.json(co);
 });
 
-router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, requireGC, async (req, res) => {
+router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, requireSub, async (req, res) => {
   const [co] = await db.update(changeOrdersTable).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendChangeOrderDecisionEmail({
+    toEmail: sc.project.gc.email,
+    projectName: sc.project.name,
+    subCompanyName: sc.sub.companyName,
+    description: co.description,
+    amount: co.amount,
+    decision: "REJECTED",
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendChangeOrderDecisionEmail failed:", err));
+
   res.json(co);
 });
 
@@ -120,16 +171,66 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     status,
     flaggedOverAmount,
   }).returning();
+
+  const scWithRelations = await getSubcontractWithRelations(sc);
+  const appUrl = getAppUrl(req);
+
+  if (status === "FLAGGED") {
+    sendInvoiceFlaggedEmail({
+      toEmail: scWithRelations.project.gc.email,
+      projectName: scWithRelations.project.name,
+      subCompanyName: scWithRelations.sub.companyName,
+      invoiceAmount,
+      approvedTotal: scoreboard.currentApprovedTotal,
+      overAmount: flaggedOverAmount,
+      appUrl,
+    }).catch((err) => console.error("[email] sendInvoiceFlaggedEmail failed:", err));
+  } else {
+    sendInvoiceSubmittedEmail({
+      toEmail: scWithRelations.project.gc.email,
+      projectName: scWithRelations.project.name,
+      subCompanyName: scWithRelations.sub.companyName,
+      amount: invoiceAmount,
+      appUrl,
+    }).catch((err) => console.error("[email] sendInvoiceSubmittedEmail failed:", err));
+  }
+
   res.status(201).json(invoice);
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireGC, async (req, res) => {
   const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendInvoiceDecisionEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    gcCompanyName: sc.project.gc.companyName,
+    amount: invoice.amount,
+    decision: "APPROVED",
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendInvoiceDecisionEmail failed:", err));
+
   res.json(invoice);
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC, async (req, res) => {
   const [invoice] = await db.update(invoicesTable).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendInvoiceDecisionEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    gcCompanyName: sc.project.gc.companyName,
+    amount: invoice.amount,
+    decision: "REJECTED",
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendInvoiceDecisionEmail failed:", err));
+
   res.json(invoice);
 });
 
@@ -140,6 +241,20 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
     return;
   }
   const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", overrideReason, updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+  sendInvoiceDecisionEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    gcCompanyName: sc.project.gc.companyName,
+    amount: invoice.amount,
+    decision: "APPROVED",
+    overrideReason,
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendInvoiceDecisionEmail (override) failed:", err));
+
   res.json(invoice);
 });
 

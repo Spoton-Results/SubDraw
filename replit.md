@@ -58,6 +58,22 @@ artifacts-monorepo/
 - **Invoice auto-flagging**: Invoices over remaining contract amount are auto-flagged
 - **Invoice override**: GC can override a flagged invoice with a reason
 
+## Email Notifications
+
+Uses SendGrid (`@sendgrid/mail`). Secrets: `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`.
+Note: Replit's SendGrid integration was dismissed — credentials provided manually as Replit Secrets instead.
+
+Email triggers (all best-effort, non-blocking):
+1. Sub invited to project (new account only) → send login + temp password
+2. GC awards bid → email sub that their bid was accepted
+3. GC creates change order → email sub to review and approve/reject
+4. Sub approves/rejects change order → email GC with the decision
+5. Sub submits invoice (normal) → email GC that invoice was submitted
+6. Sub submits invoice (flagged over budget) → red-warning email to GC
+7. GC approves/rejects/overrides invoice → email sub with the result
+
+Change order flow: GC creates (status: PENDING_GC) → Sub approves/rejects (`requireSub` middleware).
+
 ## Routes (Frontend)
 
 - `/login` — Login

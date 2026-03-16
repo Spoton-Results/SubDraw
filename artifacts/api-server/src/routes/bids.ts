@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { bidsTable, subcontractsTable, projectsTable, usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
+import { sendBidAwardedEmail } from "../lib/email.js";
 
 const router = Router({ mergeParams: true });
 
@@ -39,7 +40,6 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     return;
   }
   await db.update(bidsTable).set({ status: "AWARDED", updatedAt: new Date() }).where(eq(bidsTable.id, bidId));
-
   await db.update(projectsTable).set({ status: "ACTIVE", updatedAt: new Date() }).where(eq(projectsTable.id, bid.projectId));
 
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, bid.projectId)).limit(1);
@@ -51,6 +51,15 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     subId: bid.subId,
     baseContractAmount: bid.amount,
   }).returning();
+
+  const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+  sendBidAwardedEmail({
+    toEmail: sub.email,
+    subCompanyName: sub.companyName,
+    projectName: project.name,
+    bidAmount: bid.amount,
+    appUrl,
+  }).catch((err) => console.error("[email] sendBidAwardedEmail failed:", err));
 
   res.status(201).json({ ...subcontract, project: { ...project, gc }, sub });
 });
