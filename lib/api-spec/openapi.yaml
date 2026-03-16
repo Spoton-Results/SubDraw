@@ -870,6 +870,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/Invoice"
 
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/pdf:
+    get:
+      operationId: downloadInvoicePdf
+      tags: [invoices]
+      summary: Download invoice as PDF
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
   /subcontracts/{subcontractId}/activity:
     get:
       operationId: getSubcontractActivity

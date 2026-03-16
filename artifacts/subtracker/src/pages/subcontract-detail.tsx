@@ -21,7 +21,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
-  HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2,
+  HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
@@ -507,6 +507,7 @@ export default function SubcontractDetail() {
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -523,6 +524,17 @@ export default function SubcontractDetail() {
                       <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
                       <td className="px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
                       <td className="px-4 py-3">{getInvStatusBadge(inv.status)}</td>
+                      <td className="px-4 py-3">
+                        <a
+                          href={`/api/subcontracts/${subcontractId}/invoices/${inv.id}/pdf`}
+                          download={`Invoice-${inv.invoiceNumber}.pdf`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          title="Download PDF"
+                        >
+                          <FileDown className="h-4 w-4" />
+                          PDF
+                        </a>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

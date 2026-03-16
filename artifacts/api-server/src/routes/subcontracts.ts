@@ -10,6 +10,7 @@ import {
   sendInvoiceFlaggedEmail,
   sendInvoiceDecisionEmail,
 } from "../lib/email.js";
+import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 
 const router = Router();
 
@@ -42,6 +43,28 @@ async function getSubcontractWithRelations(sc: any) {
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
   const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
   return { ...sc, project: { ...project, gc }, sub };
+}
+
+async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scoreboard: any): Promise<InvoicePDFData> {
+  return {
+    invoice: {
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      description: invoice.description,
+      status: invoice.status,
+      flaggedOverAmount: invoice.flaggedOverAmount ?? 0,
+      overrideReason: invoice.overrideReason ?? null,
+      createdAt: invoice.createdAt,
+    },
+    subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount },
+    project: {
+      name: scWithRelations.project.name,
+      address: (scWithRelations.project as any).address ?? null,
+    },
+    sub: { companyName: scWithRelations.sub.companyName, email: scWithRelations.sub.email },
+    gc: { companyName: scWithRelations.project.gc.companyName },
+    scoreboard,
+  };
 }
 
 router.get("/", requireAuth, async (req, res) => {
@@ -197,6 +220,22 @@ router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
   res.json(invs);
 });
 
+router.get("/:subcontractId/invoices/:invoiceId/pdf", requireAuth, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
+  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const scWithRelations = await getSubcontractWithRelations(sc);
+  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount);
+  const pdfData = await buildPdfData(invoice, sc, scWithRelations, scoreboard);
+  const pdfBuffer = await generateInvoicePDF(pdfData);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Invoice-${invoice.invoiceNumber}.pdf"`);
+  res.setHeader("Content-Length", pdfBuffer.length);
+  res.send(pdfBuffer);
+});
+
 router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { subcontractId } = req.params;
@@ -235,7 +274,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const appUrl = getAppUrl(req);
 
   const actorName = user.role === "GC" ? scWithRelations.project.gc.companyName : scWithRelations.sub.companyName;
-  const flagNote = status === "FLAGGED" ? " ⚑ (flagged — exceeds contract balance)" : "";
+  const flagNote = status === "FLAGGED" ? " (flagged — exceeds contract balance)" : "";
   await logActivity(
     subcontractId,
     status === "FLAGGED" ? "INVOICE_FLAGGED" : "INVOICE_SUBMITTED",
@@ -244,25 +283,38 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     user.role
   );
 
-  if (status === "FLAGGED") {
-    sendInvoiceFlaggedEmail({
-      toEmail: scWithRelations.project.gc.email,
-      projectName: scWithRelations.project.name,
-      subCompanyName: scWithRelations.sub.companyName,
-      invoiceAmount,
-      approvedTotal: scoreboard.currentApprovedTotal,
-      overAmount: flaggedOverAmount,
-      appUrl,
-    }).catch((err) => console.error("[email] sendInvoiceFlaggedEmail failed:", err));
-  } else {
-    sendInvoiceSubmittedEmail({
-      toEmail: scWithRelations.project.gc.email,
-      projectName: scWithRelations.project.name,
-      subCompanyName: scWithRelations.sub.companyName,
-      amount: invoiceAmount,
-      appUrl,
-    }).catch((err) => console.error("[email] sendInvoiceSubmittedEmail failed:", err));
-  }
+  // Generate PDF and email to GC asynchronously
+  (async () => {
+    try {
+      const pdfData = await buildPdfData(invoice, sc, scWithRelations, scoreboard);
+      const pdfBuffer = await generateInvoicePDF(pdfData);
+      if (status === "FLAGGED") {
+        await sendInvoiceFlaggedEmail({
+          toEmail: scWithRelations.project.gc.email,
+          projectName: scWithRelations.project.name,
+          subCompanyName: scWithRelations.sub.companyName,
+          invoiceAmount,
+          approvedTotal: scoreboard.currentApprovedTotal,
+          overAmount: flaggedOverAmount,
+          invoiceNumber: String(invoiceNumber).trim(),
+          appUrl,
+          pdfBuffer,
+        });
+      } else {
+        await sendInvoiceSubmittedEmail({
+          toEmail: scWithRelations.project.gc.email,
+          projectName: scWithRelations.project.name,
+          subCompanyName: scWithRelations.sub.companyName,
+          amount: invoiceAmount,
+          invoiceNumber: String(invoiceNumber).trim(),
+          appUrl,
+          pdfBuffer,
+        });
+      }
+    } catch (err) {
+      console.error("[email+pdf] Invoice submission email failed:", err);
+    }
+  })();
 
   res.status(201).json(invoice);
 });
@@ -296,28 +348,40 @@ router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, as
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireGC, async (req, res) => {
-  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+  const { subcontractId, invoiceId } = req.params;
+  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(invoicesTable.id, invoiceId)).returning();
 
-  const sc = await getSubcontractWithRelations(
-    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
-  );
+  const rawSc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0];
+  const sc = await getSubcontractWithRelations(rawSc);
+  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount);
 
   await logActivity(
-    req.params.subcontractId,
+    subcontractId,
     "INVOICE_APPROVED",
     `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} approved`,
     sc.project.gc.companyName,
     "GC"
   );
 
-  sendInvoiceDecisionEmail({
-    toEmail: sc.sub.email,
-    projectName: sc.project.name,
-    gcCompanyName: sc.project.gc.companyName,
-    amount: invoice.amount,
-    decision: "APPROVED",
-    appUrl: getAppUrl(req),
-  }).catch((err) => console.error("[email] sendInvoiceDecisionEmail failed:", err));
+  const appUrl = getAppUrl(req);
+  (async () => {
+    try {
+      const pdfData = await buildPdfData(invoice, rawSc, sc, scoreboard);
+      const pdfBuffer = await generateInvoicePDF(pdfData);
+      await sendInvoiceDecisionEmail({
+        toEmail: sc.sub.email,
+        projectName: sc.project.name,
+        gcCompanyName: sc.project.gc.companyName,
+        amount: invoice.amount,
+        invoiceNumber: invoice.invoiceNumber,
+        decision: "APPROVED",
+        appUrl,
+        pdfBuffer,
+      });
+    } catch (err) {
+      console.error("[email+pdf] Invoice approval email failed:", err);
+    }
+  })();
 
   res.json(invoice);
 });
@@ -350,34 +414,46 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, requireGC, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
   const { overrideReason } = req.body;
   if (!overrideReason) {
     res.status(400).json({ error: "overrideReason is required" });
     return;
   }
-  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", overrideReason, updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", overrideReason, updatedAt: new Date() }).where(eq(invoicesTable.id, invoiceId)).returning();
 
-  const sc = await getSubcontractWithRelations(
-    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
-  );
+  const rawSc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0];
+  const sc = await getSubcontractWithRelations(rawSc);
+  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount);
 
   await logActivity(
-    req.params.subcontractId,
+    subcontractId,
     "INVOICE_OVERRIDDEN",
     `Invoice #${invoice.invoiceNumber} overridden and approved — ${overrideReason}`,
     sc.project.gc.companyName,
     "GC"
   );
 
-  sendInvoiceDecisionEmail({
-    toEmail: sc.sub.email,
-    projectName: sc.project.name,
-    gcCompanyName: sc.project.gc.companyName,
-    amount: invoice.amount,
-    decision: "APPROVED",
-    overrideReason,
-    appUrl: getAppUrl(req),
-  }).catch((err) => console.error("[email] sendInvoiceDecisionEmail (override) failed:", err));
+  const appUrl = getAppUrl(req);
+  (async () => {
+    try {
+      const pdfData = await buildPdfData(invoice, rawSc, sc, scoreboard);
+      const pdfBuffer = await generateInvoicePDF(pdfData);
+      await sendInvoiceDecisionEmail({
+        toEmail: sc.sub.email,
+        projectName: sc.project.name,
+        gcCompanyName: sc.project.gc.companyName,
+        amount: invoice.amount,
+        invoiceNumber: invoice.invoiceNumber,
+        decision: "APPROVED",
+        overrideReason,
+        appUrl,
+        pdfBuffer,
+      });
+    } catch (err) {
+      console.error("[email+pdf] Invoice override email failed:", err);
+    }
+  })();
 
   res.json(invoice);
 });

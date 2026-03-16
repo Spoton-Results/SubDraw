@@ -3100,6 +3100,111 @@ export const useOverrideInvoice = <
 };
 
 /**
+ * @summary Download invoice as PDF
+ */
+export const getDownloadInvoicePdfUrl = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return `/api/subcontracts/${subcontractId}/invoices/${invoiceId}/pdf`;
+};
+
+export const downloadInvoicePdf = async (
+  subcontractId: string,
+  invoiceId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadInvoicePdfUrl(subcontractId, invoiceId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadInvoicePdfQueryKey = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return [
+    `/api/subcontracts/${subcontractId}/invoices/${invoiceId}/pdf`,
+  ] as const;
+};
+
+export const getDownloadInvoicePdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadInvoicePdf>>,
+  TError = ErrorType<unknown>,
+>(
+  subcontractId: string,
+  invoiceId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadInvoicePdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getDownloadInvoicePdfQueryKey(subcontractId, invoiceId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof downloadInvoicePdf>>
+  > = ({ signal }) =>
+    downloadInvoicePdf(subcontractId, invoiceId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(subcontractId && invoiceId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadInvoicePdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadInvoicePdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadInvoicePdf>>
+>;
+export type DownloadInvoicePdfQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download invoice as PDF
+ */
+
+export function useDownloadInvoicePdf<
+  TData = Awaited<ReturnType<typeof downloadInvoicePdf>>,
+  TError = ErrorType<unknown>,
+>(
+  subcontractId: string,
+  invoiceId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadInvoicePdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadInvoicePdfQueryOptions(
+    subcontractId,
+    invoiceId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get activity log for a subcontract
  */
 export const getGetSubcontractActivityUrl = (subcontractId: string) => {

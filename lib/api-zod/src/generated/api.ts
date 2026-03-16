@@ -909,6 +909,14 @@ export const OverrideInvoiceResponse = zod.object({
 });
 
 /**
+ * @summary Download invoice as PDF
+ */
+export const DownloadInvoicePdfParams = zod.object({
+  subcontractId: zod.coerce.string(),
+  invoiceId: zod.coerce.string(),
+});
+
+/**
  * @summary Get activity log for a subcontract
  */
 export const GetSubcontractActivityParams = zod.object({

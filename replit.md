@@ -44,7 +44,7 @@ artifacts-monorepo/
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
 - `subcontracts` — Awarded contract with baseContractAmount
 - `change_orders` — Proposed/approved scope changes; status: PENDING_GC | APPROVED | REJECTED
-- `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED
+- `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED. Professional PDF generated on every invoice action, attached to all email notifications and downloadable via GET /api/subcontracts/:id/invoices/:id/pdf
 - `activity_logs` — Immutable audit trail per subcontract; fields: id, subcontractId, type, description, actorName, actorRole, createdAt. Written on every major action (subcontract created, CO created/approved/rejected, invoice submitted/flagged/approved/rejected/overridden/cancelled)
 
 ## Auth
