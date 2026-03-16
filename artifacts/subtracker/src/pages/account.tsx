@@ -109,6 +109,7 @@ export default function Account() {
                   type="submit"
                   isLoading={updateProfile.isPending}
                   disabled={companyName === user.companyName}
+                  className="w-full sm:w-auto min-h-[44px]"
                 >
                   Save Changes
                 </Button>
@@ -177,7 +178,7 @@ export default function Account() {
                 />
               </div>
               <div className="flex justify-end pt-2">
-                <Button type="submit" isLoading={changePassword.isPending}>
+                <Button type="submit" isLoading={changePassword.isPending} className="w-full sm:w-auto min-h-[44px]">
                   Update Password
                 </Button>
               </div>

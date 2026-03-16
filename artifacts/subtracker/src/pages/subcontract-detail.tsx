@@ -181,8 +181,8 @@ export default function SubcontractDetail() {
         <Link href={`/projects/${sub.projectId}`} className="text-primary hover:underline flex items-center gap-1 text-sm font-semibold mb-4 w-fit">
           <ArrowLeft className="h-4 w-4" /> Back to Project
         </Link>
-        <h1 className="text-3xl font-bold font-display">Subcontract: {sub.sub.companyName}</h1>
-        <p className="text-muted-foreground mt-1 text-lg">{sub.project.name}</p>
+        <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">Subcontract: {sub.sub.companyName}</h1>
+        <p className="text-muted-foreground mt-1 md:text-lg">{sub.project.name}</p>
       </div>
 
       {/* SCOREBOARD */}
@@ -226,11 +226,11 @@ export default function SubcontractDetail() {
           <span>{formatCurrency(sb.currentApprovedTotal)} approved total</span>
         </div>
         {lastInvoice && (
-          <div className="flex items-center gap-3 pt-2 border-t border-border">
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
             <Receipt className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground">Most recent invoice:</span>
+            <span className="text-sm text-muted-foreground">Most recent:</span>
             <span className="text-sm font-bold font-mono">{formatCurrency(lastInvoice.amount)}</span>
-            <span className="text-sm text-muted-foreground">on {format(new Date(lastInvoice.createdAt), "MMM d, yyyy")}</span>
+            <span className="text-sm text-muted-foreground">{format(new Date(lastInvoice.createdAt), "MMM d, yyyy")}</span>
             {getInvStatusBadge(lastInvoice.status)}
           </div>
         )}
@@ -267,11 +267,11 @@ export default function SubcontractDetail() {
 
       <div className="grid lg:grid-cols-2 gap-8 mb-10">
         {/* CHANGE ORDERS */}
-        <Card className="flex flex-col h-[600px]">
+        <Card className="flex flex-col min-h-[360px] lg:h-[600px]">
           <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
             <CardTitle>Change Orders</CardTitle>
             {isGC && (
-              <Button size="sm" onClick={() => setCoDialogOpen(true)} className="gap-1 h-9">
+              <Button size="sm" onClick={() => setCoDialogOpen(true)} className="gap-1 min-h-[44px]">
                 <PlusCircle className="h-4 w-4" /> Create CO
               </Button>
             )}
@@ -314,10 +314,10 @@ export default function SubcontractDetail() {
                       </div>
                       {!isGC && co.status === "PENDING_GC" && (
                         <div className="flex flex-col gap-2 shrink-0">
-                          <Button size="sm" className="h-8 bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => handleApproveCO(co.id)}>
+                          <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => handleApproveCO(co.id)}>
                             <Check className="h-3.5 w-3.5" /> Approve
                           </Button>
-                          <Button size="sm" variant="destructive" className="h-8 gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
+                          <Button size="sm" variant="destructive" className="min-h-[44px] gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
                             <X className="h-3.5 w-3.5" /> Reject
                           </Button>
                         </div>
@@ -331,11 +331,11 @@ export default function SubcontractDetail() {
         </Card>
 
         {/* INVOICES */}
-        <Card className="flex flex-col h-[600px]">
+        <Card className="flex flex-col min-h-[360px] lg:h-[600px]">
           <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
             <CardTitle>Invoices</CardTitle>
             {!isGC && (
-              <Button size="sm" onClick={() => setInvDialogOpen(true)} className="gap-1 h-9">
+              <Button size="sm" onClick={() => setInvDialogOpen(true)} className="gap-1 min-h-[44px]">
                 <PlusCircle className="h-4 w-4" /> Submit Invoice
               </Button>
             )}
@@ -379,15 +379,15 @@ export default function SubcontractDetail() {
                         {isGC && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
                           <>
                             {inv.status === "FLAGGED" ? (
-                              <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white h-8 text-xs" onClick={() => setOverrideDialogOpen({ open: true, id: inv.id })}>
+                              <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white min-h-[44px] text-xs" onClick={() => setOverrideDialogOpen({ open: true, id: inv.id })}>
                                 Override &amp; Approve
                               </Button>
                             ) : (
-                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "approve")}>
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white min-h-[44px] min-w-[44px] p-0" onClick={() => handleActionInv(inv.id, "approve")}>
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "reject")}>
+                            <Button size="sm" variant="destructive" className="min-h-[44px] min-w-[44px] p-0" onClick={() => handleActionInv(inv.id, "reject")}>
                               <X className="h-4 w-4" />
                             </Button>
                           </>
@@ -396,11 +396,11 @@ export default function SubcontractDetail() {
                           cancelConfirm === inv.id ? (
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-red-600 font-semibold">Cancel?</span>
-                              <Button size="sm" variant="destructive" className="h-7 text-xs px-2" isLoading={deleteInv.isPending} onClick={() => handleCancelInvoice(inv.id)}>Yes</Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setCancelConfirm(null)}>No</Button>
+                              <Button size="sm" variant="destructive" className="min-h-[44px] text-xs px-3" isLoading={deleteInv.isPending} onClick={() => handleCancelInvoice(inv.id)}>Yes</Button>
+                              <Button size="sm" variant="ghost" className="min-h-[44px] text-xs px-3" onClick={() => setCancelConfirm(null)}>No</Button>
                             </div>
                           ) : (
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600" title="Cancel invoice" onClick={() => setCancelConfirm(inv.id)}>
+                            <Button size="sm" variant="ghost" className="min-h-[44px] min-w-[44px] p-0 text-muted-foreground hover:text-red-600" title="Cancel invoice" onClick={() => setCancelConfirm(inv.id)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )
@@ -486,9 +486,9 @@ export default function SubcontractDetail() {
             </label>
             <Input required type="number" step="0.01" placeholder="1500.00" value={coAmount} onChange={e => setCoAmount(e.target.value)} />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setCoDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={createCO.isPending}>Submit Change Order</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setCoDialogOpen(false)} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={createCO.isPending} className="min-h-[44px]">Submit Change Order</Button>
           </div>
         </form>
       </Dialog>
@@ -508,9 +508,9 @@ export default function SubcontractDetail() {
               className="resize-none text-sm"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setRejectCODialogOpen({ open: false, id: "" })}>Back</Button>
-            <Button type="submit" variant="destructive" isLoading={rejectCO.isPending}>Confirm Rejection</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setRejectCODialogOpen({ open: false, id: "" })} className="min-h-[44px]">Back</Button>
+            <Button type="submit" variant="destructive" isLoading={rejectCO.isPending} className="min-h-[44px]">Confirm Rejection</Button>
           </div>
         </form>
       </Dialog>
@@ -551,9 +551,9 @@ export default function SubcontractDetail() {
               onChange={e => setInvDescription(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setInvDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={submitInv.isPending}>Submit Invoice</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setInvDialogOpen(false)} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={submitInv.isPending} className="min-h-[44px]">Submit Invoice</Button>
           </div>
         </form>
       </Dialog>
@@ -565,9 +565,9 @@ export default function SubcontractDetail() {
             <label className="text-sm font-semibold mb-1 block">Override Reason</label>
             <Input required placeholder="Authorized verbal agreement..." value={overrideReason} onChange={e => setOverrideReason(e.target.value)} />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setOverrideDialogOpen({ open: false, id: "" })}>Cancel</Button>
-            <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white" isLoading={overrideInv.isPending}>Override &amp; Approve</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setOverrideDialogOpen({ open: false, id: "" })} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white min-h-[44px]" isLoading={overrideInv.isPending}>Override &amp; Approve</Button>
           </div>
         </form>
       </Dialog>

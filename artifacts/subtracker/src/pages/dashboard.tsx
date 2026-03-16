@@ -62,13 +62,14 @@ export default function Dashboard() {
     <Layout>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
-          <p className="text-muted-foreground mt-1">Manage your active bids and subcontracts</p>
+          <h1 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">Manage your active bids and subcontracts</p>
         </div>
         {isGC && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 min-h-[44px] shrink-0">
             <Plus className="h-5 w-5" />
-            New Project
+            <span className="hidden sm:inline">New Project</span>
+            <span className="sm:hidden">New</span>
           </Button>
         )}
       </div>
@@ -217,9 +218,9 @@ export default function Dashboard() {
               onChange={e => setNewStartDate(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={createProject.isPending}>Create Project</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={createProject.isPending} className="min-h-[44px]">Create Project</Button>
           </div>
         </form>
       </Dialog>

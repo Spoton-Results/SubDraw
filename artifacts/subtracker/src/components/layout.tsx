@@ -59,7 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-secondary/30 flex">
-      {/* Sidebar */}
+      {/* Sidebar — desktop only */}
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
@@ -111,7 +111,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 hover:bg-secondary rounded-xl px-2 py-1.5 transition-colors">
+              <button className="flex items-center gap-2 hover:bg-secondary rounded-xl px-2 py-1.5 transition-colors min-h-[44px]">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
                   {user.companyName.charAt(0).toUpperCase()}
                 </div>
@@ -140,12 +140,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <div className="flex-1 overflow-auto p-4 md:p-8">
+
+        <div className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-stretch shadow-lg">
+        <Link
+          href="/"
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+            isActive("/") ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <LayoutDashboard className={`h-5 w-5 ${isActive("/") ? "text-primary" : ""}`} />
+          Projects
+        </Link>
+        <Link
+          href="/account"
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+            isActive("/account") ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <Settings className={`h-5 w-5 ${isActive("/account") ? "text-primary" : ""}`} />
+          Account
+        </Link>
+      </nav>
     </div>
   );
 }

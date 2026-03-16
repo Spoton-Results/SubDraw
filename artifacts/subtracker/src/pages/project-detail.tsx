@@ -290,7 +290,7 @@ export default function ProjectDetail() {
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <h1 className="text-3xl font-bold font-display">{project.name}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">{project.name}</h1>
               <Badge variant={project.status === "ACTIVE" ? "success" : project.status === "BIDDING" ? "default" : "secondary"}>
                 {project.status}
               </Badge>
@@ -319,20 +319,20 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
             {isGC && (
-              <Button variant="outline" onClick={handleOpenEdit} className="gap-2">
+              <Button variant="outline" onClick={handleOpenEdit} className="gap-2 min-h-[44px]">
                 <Pencil className="h-4 w-4" /> Edit Project
               </Button>
             )}
             {isGC && project.status === "BIDDING" && (
-              <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
+              <Button onClick={() => setIsInviteOpen(true)} className="gap-2 min-h-[44px]">
                 <Mail className="h-5 w-5" />
                 Invite Subcontractor
               </Button>
             )}
             {!isGC && project.status === "BIDDING" && !myBid && (
-              <Button onClick={() => setIsBidOpen(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-green-600/30">
+              <Button onClick={() => setIsBidOpen(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white shadow-green-600/30 min-h-[44px]">
                 <DollarSign className="h-5 w-5" />
                 Submit Bid
               </Button>
@@ -467,7 +467,7 @@ export default function ProjectDetail() {
                   );
                   return (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm min-w-[580px]">
                         <thead>
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
@@ -667,9 +667,9 @@ export default function ProjectDetail() {
             <label className="text-sm font-semibold mb-1 block">Estimated Start Date</label>
             <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} />
           </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setIsEditOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={updateProject.isPending}>Save Changes</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsEditOpen(false)} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={updateProject.isPending} className="min-h-[44px]">Save Changes</Button>
           </div>
         </form>
       </Dialog>
@@ -714,7 +714,7 @@ export default function ProjectDetail() {
               An invitation email has been sent if your SMTP server is configured. The subcontractor will be prompted to set a new password on first login.
             </p>
             <div className="flex justify-end pt-1">
-              <Button onClick={handleInviteClose}>Done</Button>
+              <Button onClick={handleInviteClose} className="min-h-[44px] w-full sm:w-auto">Done</Button>
             </div>
           </div>
         ) : (
@@ -730,9 +730,9 @@ export default function ProjectDetail() {
             <p className="text-xs text-muted-foreground">
               If this subcontractor isn't in the system yet, an account will be created with a secure temporary password that you'll be able to share with them.
             </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="ghost" onClick={handleInviteClose}>Cancel</Button>
-              <Button type="submit" isLoading={inviteSub.isPending}>Add Subcontractor</Button>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+              <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
+              <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">Add Subcontractor</Button>
             </div>
           </form>
         )}
@@ -760,34 +760,42 @@ export default function ProjectDetail() {
 
           <div>
             <label className="text-sm font-semibold mb-1 block">File</label>
-            <div
-              className="relative border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
-              onClick={() => !isSubmitting && fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
-                onChange={handleFileSelect}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
+              onChange={handleFileSelect}
+              disabled={isSubmitting}
+            />
+            {selectedFile ? (
+              <div className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 flex items-center gap-3">
+                <FileText className="h-8 w-8 text-primary shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{selectedFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  className="text-muted-foreground hover:text-destructive transition-colors p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  disabled={isSubmitting}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => !isSubmitting && fileInputRef.current?.click()}
                 disabled={isSubmitting}
-              />
-              {selectedFile ? (
-                <div className="flex items-center justify-center gap-2 text-sm">
-                  <FileText className="h-5 w-5 text-primary" />
-                  <span className="font-medium truncate max-w-xs">{selectedFile.name}</span>
-                  <span className="text-muted-foreground shrink-0">
-                    ({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)
-                  </span>
-                </div>
-              ) : (
-                <div className="text-muted-foreground">
-                  <Upload className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-medium">Click to browse files</p>
-                  <p className="text-xs mt-1">PDF, PNG, JPG, DWG, DOCX · max 50 MB</p>
-                </div>
-              )}
-            </div>
+                className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 active:bg-muted/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <Upload className="h-8 w-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
+                <p className="text-sm font-medium text-muted-foreground">Tap to browse files</p>
+                <p className="text-xs mt-1 text-muted-foreground">PDF, PNG, JPG, DWG, DOCX · max 50 MB</p>
+              </button>
+            )}
             {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
           </div>
 
@@ -798,9 +806,9 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={handleClosePlanDialog} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" isLoading={isSubmitting} disabled={!selectedFile || isSubmitting} className="gap-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={handleClosePlanDialog} disabled={isSubmitting} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={isSubmitting} disabled={!selectedFile || isSubmitting} className="gap-2 min-h-[44px]">
               <Upload className="h-4 w-4" /> Upload
             </Button>
           </div>
@@ -814,9 +822,9 @@ export default function ProjectDetail() {
             <label className="text-sm font-semibold mb-1 block">Bid Amount ($)</label>
             <Input type="number" step="0.01" required placeholder="50000.00" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setIsBidOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={submitBid.isPending}>Submit Bid</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsBidOpen(false)} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={submitBid.isPending} className="min-h-[44px]">Submit Bid</Button>
           </div>
         </form>
       </Dialog>
