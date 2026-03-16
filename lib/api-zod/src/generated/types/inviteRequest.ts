@@ -8,4 +8,5 @@
 
 export interface InviteRequest {
   email: string;
+  companyName?: string;
 }

@@ -702,6 +702,8 @@ components:
       properties:
         email:
           type: string
+        companyName:
+          type: string
       required: [email]
 
     Bid:

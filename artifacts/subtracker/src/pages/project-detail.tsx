@@ -27,6 +27,7 @@ export default function ProjectDetail() {
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
+  const [inviteCompanyName, setInviteCompanyName] = React.useState("");
 
   const [isBidOpen, setIsBidOpen] = React.useState(false);
   const [bidAmount, setBidAmount] = React.useState("");
@@ -41,13 +42,15 @@ export default function ProjectDetail() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await inviteSub.mutateAsync({ projectId, data: { email: inviteEmail } });
-      toast.success("Invitation sent!");
+      await inviteSub.mutateAsync({ projectId, data: { email: inviteEmail, companyName: inviteCompanyName } });
+      toast.success("Subcontractor added to project!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       setIsInviteOpen(false);
       setInviteEmail("");
-    } catch {
-      toast.error("Failed to send invite");
+      setInviteCompanyName("");
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.message || "Failed to send invite";
+      toast.error(msg);
     }
   };
 
@@ -215,10 +218,10 @@ export default function ProjectDetail() {
       </div>
 
       {/* GC Invite Dialog */}
-      <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen} title="Invite Subcontractor" description="Send an email invite to a subcontractor.">
+      <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen} title="Invite Subcontractor" description="Enter the subcontractor's email and company name. A new account will be created for them if they aren't registered yet.">
         <form onSubmit={handleInvite} className="space-y-4 mt-4">
           <div>
-            <label className="text-sm font-semibold mb-1 block">Subcontractor Email</label>
+            <label className="text-sm font-semibold mb-1 block">Email Address</label>
             <Input 
               type="email"
               required
@@ -227,9 +230,20 @@ export default function ProjectDetail() {
               onChange={e => setInviteEmail(e.target.value)}
             />
           </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Company Name</label>
+            <Input 
+              type="text"
+              required
+              placeholder="ABC Electric LLC" 
+              value={inviteCompanyName}
+              onChange={e => setInviteCompanyName(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">If this subcontractor isn't in the system yet, an account will be created with the temporary password <strong>subtracker123</strong>.</p>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setIsInviteOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={inviteSub.isPending}>Send Invite</Button>
+            <Button type="submit" isLoading={inviteSub.isPending}>Add Subcontractor</Button>
           </div>
         </form>
       </Dialog>

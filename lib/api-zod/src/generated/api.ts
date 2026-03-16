@@ -179,6 +179,7 @@ export const InviteSubcontractorParams = zod.object({
 
 export const InviteSubcontractorBody = zod.object({
   email: zod.string(),
+  companyName: zod.string().optional(),
 });
 
 /**

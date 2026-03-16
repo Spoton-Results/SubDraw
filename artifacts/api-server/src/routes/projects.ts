@@ -82,25 +82,44 @@ router.get("/:projectId", requireAuth, async (req, res) => {
 });
 
 router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
-  const { email } = req.body;
+  const { email, companyName } = req.body;
   if (!email) {
     res.status(400).json({ error: "email is required" });
     return;
   }
-  const [invitedUser] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+
+  let [invitedUser] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+
   if (!invitedUser) {
-    res.status(404).json({ error: "User not found with that email" });
-    return;
+    // Auto-create sub account if they don't exist yet
+    if (!companyName) {
+      res.status(400).json({ error: "companyName is required for new subcontractors" });
+      return;
+    }
+    const { hashPassword } = await import("../lib/auth.js");
+    const passwordHash = await hashPassword("subtracker123");
+    const [created] = await db.insert(usersTable).values({
+      email,
+      passwordHash,
+      role: "SUB",
+      companyName,
+    }).returning();
+    invitedUser = created;
   }
+
   if (invitedUser.role !== "SUB") {
     res.status(400).json({ error: "Can only invite subcontractors" });
     return;
   }
-  const existing = await db.select().from(projectMembersTable).where(eq(projectMembersTable.projectId, req.params.projectId)).then(rows => rows.find(r => r.userId === invitedUser.id));
+
+  const existing = await db.select().from(projectMembersTable)
+    .where(eq(projectMembersTable.projectId, req.params.projectId))
+    .then(rows => rows.find(r => r.userId === invitedUser.id));
   if (existing) {
-    res.status(400).json({ error: "User already a member" });
+    res.status(400).json({ error: "This subcontractor is already on the project" });
     return;
   }
+
   await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
   res.status(201).json({ message: "Subcontractor invited" });
 });

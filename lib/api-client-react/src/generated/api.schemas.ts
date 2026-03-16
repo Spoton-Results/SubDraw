@@ -136,6 +136,7 @@ export interface CreateProjectRequest {
 
 export interface InviteRequest {
   email: string;
+  companyName?: string;
 }
 
 export interface SubmitBidRequest {
