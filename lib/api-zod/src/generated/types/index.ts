@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./activityLogEntry";
 export * from "./addPlanFileRequest";
 export * from "./authResponse";
 export * from "./bid";

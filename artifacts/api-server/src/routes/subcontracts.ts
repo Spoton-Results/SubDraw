@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable } from "@workspace/db/schema";
+import { eq, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import {
   sendChangeOrderCreatedEmail,
@@ -15,6 +15,12 @@ const router = Router();
 
 function getAppUrl(req: any) {
   return process.env.APP_URL || `https://${req.hostname}`;
+}
+
+async function logActivity(subcontractId: string, type: string, description: string, actorName: string, actorRole: string) {
+  await db.insert(activityLogsTable).values({ subcontractId, type, description, actorName, actorRole }).catch(err =>
+    console.error("[activity] Failed to log:", err)
+  );
 }
 
 async function computeScoreboard(subcontractId: string, baseContractAmount: number) {
@@ -73,12 +79,22 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
   res.json({ ...base, changeOrders, invoices, scoreboard });
 });
 
+router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
+  const logs = await db
+    .select()
+    .from(activityLogsTable)
+    .where(eq(activityLogsTable.subcontractId, req.params.subcontractId))
+    .orderBy(desc(activityLogsTable.createdAt));
+  res.json(logs);
+});
+
 router.get("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, req.params.subcontractId));
   res.json(cos);
 });
 
 router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
+  const user = (req as any).user;
   const { description, scope, amount } = req.body;
   if (!description || !amount) {
     res.status(400).json({ error: "description and amount are required" });
@@ -95,6 +111,15 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "CO_CREATED",
+    `Change order "${description}" for $${Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2 })} created`,
+    user.role === "GC" ? sc.project.gc.companyName : sc.sub.companyName,
+    user.role
+  );
+
   sendChangeOrderCreatedEmail({
     toEmail: sc.sub.email,
     projectName: sc.project.name,
@@ -112,6 +137,15 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "CO_APPROVED",
+    `Change order "${co.description}" approved`,
+    sc.sub.companyName,
+    "SUB"
+  );
+
   sendChangeOrderDecisionEmail({
     toEmail: sc.project.gc.email,
     projectName: sc.project.name,
@@ -136,6 +170,15 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "CO_REJECTED",
+    `Change order "${co.description}" rejected${rejectionReason ? ` — ${String(rejectionReason).trim()}` : ""}`,
+    sc.sub.companyName,
+    "SUB"
+  );
+
   sendChangeOrderDecisionEmail({
     toEmail: sc.project.gc.email,
     projectName: sc.project.name,
@@ -155,6 +198,7 @@ router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
 });
 
 router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
+  const user = (req as any).user;
   const { subcontractId } = req.params;
   const { amount, invoiceNumber, description } = req.body;
   if (!amount || isNaN(Number(amount))) {
@@ -190,6 +234,16 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const scWithRelations = await getSubcontractWithRelations(sc);
   const appUrl = getAppUrl(req);
 
+  const actorName = user.role === "GC" ? scWithRelations.project.gc.companyName : scWithRelations.sub.companyName;
+  const flagNote = status === "FLAGGED" ? " ⚑ (flagged — exceeds contract balance)" : "";
+  await logActivity(
+    subcontractId,
+    status === "FLAGGED" ? "INVOICE_FLAGGED" : "INVOICE_SUBMITTED",
+    `Invoice #${String(invoiceNumber).trim()} for $${invoiceAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} submitted${flagNote}`,
+    actorName,
+    user.role
+  );
+
   if (status === "FLAGGED") {
     sendInvoiceFlaggedEmail({
       toEmail: scWithRelations.project.gc.email,
@@ -214,7 +268,8 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
 });
 
 router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, async (req, res) => {
-  const { invoiceId } = req.params;
+  const user = (req as any).user;
+  const { invoiceId, subcontractId } = req.params;
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
   if (!invoice) {
     res.status(404).json({ error: "Invoice not found" });
@@ -225,6 +280,18 @@ router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, as
     return;
   }
   await db.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId));
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0]
+  );
+  await logActivity(
+    subcontractId,
+    "INVOICE_CANCELLED",
+    `Invoice #${invoice.invoiceNumber} cancelled`,
+    sc.sub.companyName,
+    "SUB"
+  );
+
   res.status(204).send();
 });
 
@@ -234,6 +301,15 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "INVOICE_APPROVED",
+    `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} approved`,
+    sc.project.gc.companyName,
+    "GC"
+  );
+
   sendInvoiceDecisionEmail({
     toEmail: sc.sub.email,
     projectName: sc.project.name,
@@ -252,6 +328,15 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "INVOICE_REJECTED",
+    `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} rejected`,
+    sc.project.gc.companyName,
+    "GC"
+  );
+
   sendInvoiceDecisionEmail({
     toEmail: sc.sub.email,
     projectName: sc.project.name,
@@ -275,6 +360,15 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
   );
+
+  await logActivity(
+    req.params.subcontractId,
+    "INVOICE_OVERRIDDEN",
+    `Invoice #${invoice.invoiceNumber} overridden and approved — ${overrideReason}`,
+    sc.project.gc.companyName,
+    "GC"
+  );
+
   sendInvoiceDecisionEmail({
     toEmail: sc.sub.email,
     projectName: sc.project.name,

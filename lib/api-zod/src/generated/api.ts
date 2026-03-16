@@ -897,6 +897,26 @@ export const OverrideInvoiceResponse = zod.object({
 });
 
 /**
+ * @summary Get activity log for a subcontract
+ */
+export const GetSubcontractActivityParams = zod.object({
+  subcontractId: zod.coerce.string(),
+});
+
+export const GetSubcontractActivityResponseItem = zod.object({
+  id: zod.string(),
+  subcontractId: zod.string(),
+  type: zod.string(),
+  description: zod.string(),
+  actorName: zod.string(),
+  actorRole: zod.string(),
+  createdAt: zod.date(),
+});
+export const GetSubcontractActivityResponse = zod.array(
+  GetSubcontractActivityResponseItem,
+);
+
+/**
  * @summary List all subcontractors (GC use — for inviting)
  */
 export const GetUsersResponseItem = zod.object({

@@ -5,8 +5,8 @@ import {
   useGetSubcontract, useGetMe,
   useCreateChangeOrder, useApproveChangeOrder, useRejectChangeOrder,
   useSubmitInvoice, useApproveInvoice, useRejectInvoice, useOverrideInvoice,
-  useDeleteInvoice,
-  getGetSubcontractQueryKey
+  useDeleteInvoice, useGetSubcontractActivity,
+  getGetSubcontractQueryKey, getGetSubcontractActivityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -15,11 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
-  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare
+  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
+  HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
@@ -30,6 +32,7 @@ export default function SubcontractDetail() {
 
   const { data: user } = useGetMe();
   const { data: sub, isLoading } = useGetSubcontract(subcontractId);
+  const { data: activityLog = [], isLoading: activityLoading } = useGetSubcontractActivity(subcontractId);
   const queryClient = useQueryClient();
 
   const createCO = useCreateChangeOrder();
@@ -50,18 +53,32 @@ export default function SubcontractDetail() {
   const [rejectCODialogOpen, setRejectCODialogOpen] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [coRejectReason, setCoRejectReason] = React.useState("");
 
+  const [approveCOConfirm, setApproveCOConfirm] = React.useState<string | null>(null);
+
   const [invDialogOpen, setInvDialogOpen] = React.useState(false);
   const [invNumber, setInvNumber] = React.useState("");
   const [invAmount, setInvAmount] = React.useState("");
   const [invDescription, setInvDescription] = React.useState("");
 
+  const [rejectInvConfirm, setRejectInvConfirm] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
   const [overrideDialogOpen, setOverrideDialogOpen] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [overrideReason, setOverrideReason] = React.useState("");
 
   const [cancelConfirm, setCancelConfirm] = React.useState<string | null>(null);
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+    queryClient.invalidateQueries({ queryKey: getGetSubcontractActivityQueryKey(subcontractId) });
+  };
+
   if (isLoading || !sub || !user) {
-    return <Layout><div className="animate-pulse h-64 bg-card rounded-2xl"></div></Layout>;
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
   }
 
   const isGC = user.role === "GC";
@@ -82,22 +99,23 @@ export default function SubcontractDetail() {
   const handleCreateCO = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(coAmount);
-    if (!coDesc || isNaN(amount)) return toast.error("Invalid input");
+    if (!coDesc || isNaN(amount)) return toast.error("Please fill in all required fields");
     try {
       await createCO.mutateAsync({ subcontractId, data: { description: coDesc, scope: coScope.trim() || undefined, amount } });
-      toast.success("Change order submitted");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      toast.success("Change order submitted successfully");
+      invalidate();
       setCoDialogOpen(false);
       setCoDesc(""); setCoScope(""); setCoAmount("");
-    } catch { toast.error("Failed to submit"); }
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to submit change order"); }
   };
 
   const handleApproveCO = async (id: string) => {
     try {
       await approveCO.mutateAsync({ subcontractId, changeOrderId: id });
       toast.success("Change order approved");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
-    } catch { toast.error("Action failed"); }
+      invalidate();
+      setApproveCOConfirm(null);
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to approve change order"); }
   };
 
   const handleRejectCO = async (e: React.FormEvent) => {
@@ -109,36 +127,44 @@ export default function SubcontractDetail() {
         data: { rejectionReason: coRejectReason.trim() || undefined },
       });
       toast.success("Change order rejected");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      invalidate();
       setRejectCODialogOpen({ open: false, id: "" });
       setCoRejectReason("");
-    } catch { toast.error("Action failed"); }
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to reject change order"); }
   };
 
   const handleSubmitInv = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(invAmount);
-    if (isNaN(amount) || amount <= 0) return toast.error("Invalid amount");
+    if (isNaN(amount) || amount <= 0) return toast.error("Please enter a valid invoice amount");
     if (!invNumber.trim()) return toast.error("Invoice number is required");
     try {
       await submitInv.mutateAsync({
         subcontractId,
         data: { invoiceNumber: invNumber.trim(), amount, description: invDescription.trim() || undefined },
       });
-      toast.success("Invoice submitted");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      toast.success("Invoice submitted successfully");
+      invalidate();
       setInvDialogOpen(false);
       setInvNumber(""); setInvAmount(""); setInvDescription("");
-    } catch { toast.error("Failed to submit invoice"); }
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to submit invoice"); }
   };
 
-  const handleActionInv = async (id: string, action: "approve" | "reject") => {
+  const handleActionInv = async (id: string, action: "approve") => {
     try {
-      if (action === "approve") await approveInv.mutateAsync({ subcontractId, invoiceId: id });
-      else await rejectInv.mutateAsync({ subcontractId, invoiceId: id });
-      toast.success(`Invoice ${action}d`);
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
-    } catch { toast.error("Action failed"); }
+      await approveInv.mutateAsync({ subcontractId, invoiceId: id });
+      toast.success("Invoice approved");
+      invalidate();
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to approve invoice"); }
+  };
+
+  const handleRejectInv = async () => {
+    try {
+      await rejectInv.mutateAsync({ subcontractId, invoiceId: rejectInvConfirm.id });
+      toast.success("Invoice rejected");
+      invalidate();
+      setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 });
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to reject invoice"); }
   };
 
   const handleOverride = async (e: React.FormEvent) => {
@@ -147,19 +173,19 @@ export default function SubcontractDetail() {
     try {
       await overrideInv.mutateAsync({ subcontractId, invoiceId: overrideDialogOpen.id, data: { overrideReason } });
       toast.success("Invoice overridden and approved");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      invalidate();
       setOverrideDialogOpen({ open: false, id: "" });
       setOverrideReason("");
-    } catch { toast.error("Override failed"); }
+    } catch (err: any) { toast.error(err?.data?.error || "Override failed"); }
   };
 
   const handleCancelInvoice = async (id: string) => {
     try {
       await deleteInv.mutateAsync({ subcontractId, invoiceId: id });
       toast.success("Invoice cancelled");
-      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      invalidate();
       setCancelConfirm(null);
-    } catch { toast.error("Failed to cancel invoice"); }
+    } catch (err: any) { toast.error(err?.data?.error || "Failed to cancel invoice"); }
   };
 
   const getCOStatusBadge = (s: string) => {
@@ -173,6 +199,20 @@ export default function SubcontractDetail() {
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
     if (s === "FLAGGED") return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Flagged</Badge>;
     return <Badge variant="warning">Pending</Badge>;
+  };
+
+  const getActivityIcon = (type: string) => {
+    if (type === "SUBCONTRACT_CREATED") return <FileSignature className="h-4 w-4 text-primary" />;
+    if (type === "CO_CREATED") return <PlusCircle className="h-4 w-4 text-blue-500" />;
+    if (type === "CO_APPROVED") return <BadgeCheck className="h-4 w-4 text-green-600" />;
+    if (type === "CO_REJECTED") return <Ban className="h-4 w-4 text-red-500" />;
+    if (type === "INVOICE_SUBMITTED") return <Receipt className="h-4 w-4 text-primary" />;
+    if (type === "INVOICE_FLAGGED") return <AlertTriangle className="h-4 w-4 text-orange-500" />;
+    if (type === "INVOICE_APPROVED") return <Check className="h-4 w-4 text-green-600" />;
+    if (type === "INVOICE_REJECTED") return <X className="h-4 w-4 text-red-500" />;
+    if (type === "INVOICE_OVERRIDDEN") return <BadgeCheck className="h-4 w-4 text-orange-500" />;
+    if (type === "INVOICE_CANCELLED") return <Trash2 className="h-4 w-4 text-muted-foreground" />;
+    return <Activity className="h-4 w-4 text-muted-foreground" />;
   };
 
   return (
@@ -191,15 +231,33 @@ export default function SubcontractDetail() {
       </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <ScoreCard title="Base Contract" amount={sb.base} />
-        <ScoreCard title="Approved COs" amount={sb.coTotal} />
-        <ScoreCard title="Current Total" amount={sb.currentApprovedTotal} highlight />
-        <ScoreCard title="Invoiced To Date" amount={sb.invoicedTotal} />
+        <ScoreCard
+          title="Base Contract"
+          amount={sb.base}
+          tooltip="The original awarded contract amount before any changes."
+        />
+        <ScoreCard
+          title="Approved COs"
+          amount={sb.coTotal}
+          tooltip="Total dollar value of all approved change orders added to this contract."
+        />
+        <ScoreCard
+          title="Current Total"
+          amount={sb.currentApprovedTotal}
+          highlight
+          tooltip="Base contract plus all approved change orders — the current maximum the sub can invoice."
+        />
+        <ScoreCard
+          title="Invoiced To Date"
+          amount={sb.invoicedTotal}
+          tooltip="Total of all approved invoices paid or approved so far."
+        />
         <ScoreCard
           title="Remaining Balance"
           amount={sb.remaining}
           danger={isOverBudget}
           className={isOverBudget ? "border-red-500 bg-red-50 dark:bg-red-950/20" : "border-green-500/50 bg-green-50/50 dark:bg-green-950/10"}
+          tooltip="How much is left to invoice before hitting the approved contract ceiling. Negative means over budget."
         />
       </div>
 
@@ -313,14 +371,24 @@ export default function SubcontractDetail() {
                         )}
                       </div>
                       {!isGC && co.status === "PENDING_GC" && (
-                        <div className="flex flex-col gap-2 shrink-0">
-                          <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => handleApproveCO(co.id)}>
-                            <Check className="h-3.5 w-3.5" /> Approve
-                          </Button>
-                          <Button size="sm" variant="destructive" className="min-h-[44px] gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
-                            <X className="h-3.5 w-3.5" /> Reject
-                          </Button>
-                        </div>
+                        approveCOConfirm === co.id ? (
+                          <div className="flex flex-col gap-2 shrink-0">
+                            <p className="text-xs text-muted-foreground text-right">Confirm approve?</p>
+                            <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" isLoading={approveCO.isPending} onClick={() => handleApproveCO(co.id)}>
+                              <Check className="h-3.5 w-3.5" /> Yes, Approve
+                            </Button>
+                            <Button size="sm" variant="ghost" className="min-h-[44px]" onClick={() => setApproveCOConfirm(null)}>Cancel</Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2 shrink-0">
+                            <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => setApproveCOConfirm(co.id)}>
+                              <Check className="h-3.5 w-3.5" /> Approve
+                            </Button>
+                            <Button size="sm" variant="destructive" className="min-h-[44px] gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
+                              <X className="h-3.5 w-3.5" /> Reject
+                            </Button>
+                          </div>
+                        )
                       )}
                     </div>
                   </div>
@@ -383,11 +451,16 @@ export default function SubcontractDetail() {
                                 Override &amp; Approve
                               </Button>
                             ) : (
-                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white min-h-[44px] min-w-[44px] p-0" onClick={() => handleActionInv(inv.id, "approve")}>
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white min-h-[44px] min-w-[44px] p-0" isLoading={approveInv.isPending} onClick={() => handleActionInv(inv.id, "approve")}>
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button size="sm" variant="destructive" className="min-h-[44px] min-w-[44px] p-0" onClick={() => handleActionInv(inv.id, "reject")}>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="min-h-[44px] min-w-[44px] p-0"
+                              onClick={() => setRejectInvConfirm({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}
+                            >
                               <X className="h-4 w-4" />
                             </Button>
                           </>
@@ -415,7 +488,7 @@ export default function SubcontractDetail() {
         </Card>
       </div>
 
-      {/* INVOICE HISTORY */}
+      {/* INVOICE HISTORY TABLE */}
       {sub.invoices.length > 0 && (
         <Card className="mb-8">
           <CardHeader className="border-b pb-4">
@@ -425,7 +498,7 @@ export default function SubcontractDetail() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
@@ -459,6 +532,55 @@ export default function SubcontractDetail() {
         </Card>
       )}
 
+      {/* ACTIVITY LOG */}
+      <Card className="mb-8">
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" /> Activity Log
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {activityLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : activityLog.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              <Clock className="h-10 w-10 mx-auto mb-2 opacity-20" />
+              <p className="text-sm">No activity recorded yet.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-5 top-0 bottom-0 w-px bg-border" />
+              <div className="space-y-0">
+                {activityLog.map((entry, idx) => (
+                  <div key={entry.id} className="relative flex items-start gap-4 pb-6 last:pb-0">
+                    <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card border border-border shadow-sm">
+                      {getActivityIcon(entry.type)}
+                    </div>
+                    <div className="flex-1 min-w-0 pt-1.5">
+                      <p className="text-sm font-medium text-foreground leading-snug">{entry.description}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Building2 className="h-3 w-3" />
+                          {entry.actorName}
+                        </span>
+                        <Badge variant={entry.actorRole === "GC" ? "default" : "secondary"} className="text-[10px] py-0 h-4">
+                          {entry.actorRole}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* DIALOGS */}
       <Dialog open={coDialogOpen} onOpenChange={setCoDialogOpen} title="Create Change Order">
         <form onSubmit={handleCreateCO} className="space-y-4">
@@ -473,10 +595,10 @@ export default function SubcontractDetail() {
               Full Scope of Work & Reason <span className="text-muted-foreground font-normal text-xs">(optional)</span>
             </label>
             <Textarea
-              placeholder={"Describe why this change is needed and the full scope of work the sub must perform...\n\ne.g. Owner requested 6 additional duplex outlets in the main conference room due to AV equipment upgrade. Includes trenching through existing drywall, running 12/2 wire from panel 2B, installing outlets with USB ports."}
+              placeholder={"Describe why this change is needed and the full scope of work the sub must perform..."}
               value={coScope}
               onChange={e => setCoScope(e.target.value)}
-              rows={5}
+              rows={4}
               className="resize-none text-sm"
             />
           </div>
@@ -487,8 +609,8 @@ export default function SubcontractDetail() {
             <Input required type="number" step="0.01" placeholder="1500.00" value={coAmount} onChange={e => setCoAmount(e.target.value)} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setCoDialogOpen(false)} className="min-h-[44px]">Cancel</Button>
-            <Button type="submit" isLoading={createCO.isPending} className="min-h-[44px]">Submit Change Order</Button>
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setCoDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px]" isLoading={createCO.isPending}>Submit Change Order</Button>
           </div>
         </form>
       </Dialog>
@@ -509,8 +631,8 @@ export default function SubcontractDetail() {
             />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setRejectCODialogOpen({ open: false, id: "" })} className="min-h-[44px]">Back</Button>
-            <Button type="submit" variant="destructive" isLoading={rejectCO.isPending} className="min-h-[44px]">Confirm Rejection</Button>
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setRejectCODialogOpen({ open: false, id: "" })}>Back</Button>
+            <Button type="submit" variant="destructive" className="min-h-[44px]" isLoading={rejectCO.isPending}>Confirm Rejection</Button>
           </div>
         </form>
       </Dialog>
@@ -521,41 +643,63 @@ export default function SubcontractDetail() {
             <label className="text-sm font-semibold mb-1 block">
               Invoice Number <span className="text-red-500">*</span>
             </label>
-            <Input
-              required
-              placeholder="e.g. INV-2024-001"
-              value={invNumber}
-              onChange={e => setInvNumber(e.target.value)}
-            />
+            <Input required placeholder="e.g. INV-2024-001" value={invNumber} onChange={e => setInvNumber(e.target.value)} />
           </div>
           <div>
             <label className="text-sm font-semibold mb-1 block">
               Amount ($) <span className="text-red-500">*</span>
             </label>
-            <Input
-              required
-              type="number"
-              step="0.01"
-              placeholder="5000.00"
-              value={invAmount}
-              onChange={e => setInvAmount(e.target.value)}
-            />
+            <Input required type="number" step="0.01" placeholder="5000.00" value={invAmount} onChange={e => setInvAmount(e.target.value)} />
           </div>
           <div>
             <label className="text-sm font-semibold mb-1 block">
               Description / Notes <span className="text-muted-foreground font-normal text-xs">(optional)</span>
             </label>
-            <Input
-              placeholder="e.g. Rough-in electrical work, weeks 3–4"
-              value={invDescription}
-              onChange={e => setInvDescription(e.target.value)}
-            />
+            <Input placeholder="e.g. Rough-in electrical work, weeks 3–4" value={invDescription} onChange={e => setInvDescription(e.target.value)} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setInvDialogOpen(false)} className="min-h-[44px]">Cancel</Button>
-            <Button type="submit" isLoading={submitInv.isPending} className="min-h-[44px]">Submit Invoice</Button>
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setInvDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px]" isLoading={submitInv.isPending}>Submit Invoice</Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Reject Invoice Confirmation Dialog */}
+      <Dialog
+        open={rejectInvConfirm.open}
+        onOpenChange={(open) => !open && setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 })}
+        title="Reject Invoice"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to reject{" "}
+              <span className="font-semibold">Invoice #{rejectInvConfirm.invoiceNumber}</span>
+              {" "}for{" "}
+              <span className="font-mono font-bold">{formatCurrency(rejectInvConfirm.amount)}</span>?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will notify the subcontractor. The invoice cannot be un-rejected once confirmed.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="min-h-[44px]"
+              isLoading={rejectInv.isPending}
+              onClick={handleRejectInv}
+            >
+              Reject Invoice
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       <Dialog open={overrideDialogOpen.open} onOpenChange={(open) => !open && setOverrideDialogOpen({ open: false, id: "" })} title="Override Flagged Invoice">
@@ -566,7 +710,7 @@ export default function SubcontractDetail() {
             <Input required placeholder="Authorized verbal agreement..." value={overrideReason} onChange={e => setOverrideReason(e.target.value)} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setOverrideDialogOpen({ open: false, id: "" })} className="min-h-[44px]">Cancel</Button>
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setOverrideDialogOpen({ open: false, id: "" })}>Cancel</Button>
             <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white min-h-[44px]" isLoading={overrideInv.isPending}>Override &amp; Approve</Button>
           </div>
         </form>
@@ -576,21 +720,34 @@ export default function SubcontractDetail() {
 }
 
 function ScoreCard({
-  title, amount, highlight, danger, className,
+  title, amount, highlight, danger, className, tooltip,
 }: {
   title: string;
   amount: number;
   highlight?: boolean;
   danger?: boolean;
   className?: string;
+  tooltip: string;
 }) {
   return (
     <Card className={cn("overflow-hidden border-border/50", highlight && "border-primary shadow-primary/10", className)}>
       <CardContent className={cn("p-4", highlight ? "bg-primary/5" : "bg-card")}>
-        <p className={cn(
-          "text-xs font-semibold mb-2 uppercase tracking-wider",
-          highlight ? "text-primary" : danger ? "text-red-600" : "text-muted-foreground"
-        )}>{title}</p>
+        <div className="flex items-center gap-1 mb-2">
+          <p className={cn(
+            "text-xs font-semibold uppercase tracking-wider",
+            highlight ? "text-primary" : danger ? "text-red-600" : "text-muted-foreground"
+          )}>{title}</p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground transition-colors shrink-0">
+                <HelpCircle className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[200px] text-center">
+              {tooltip}
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <p className={cn(
           "text-xl md:text-2xl font-bold font-mono tracking-tight truncate",
           danger ? "text-red-600" : "text-foreground"

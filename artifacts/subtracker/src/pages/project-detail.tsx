@@ -85,6 +85,9 @@ export default function ProjectDetail() {
   const [uploadStep, setUploadStep] = React.useState<"idle" | "uploading" | "saving">("idle");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [deletePlanConfirm, setDeletePlanConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
+  const [awardBidConfirm, setAwardBidConfirm] = React.useState<{ open: boolean; id: string; company: string; amount: number }>({ open: false, id: "", company: "", amount: 0 });
+
   const { uploadFile, progress, isUploading } = useUpload({
     onError: (err) => {
       toast.error(err.message || "Upload failed");
@@ -197,16 +200,6 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleAward = async (bidId: string) => {
-    try {
-      await awardBid.mutateAsync({ projectId, bidId });
-      toast.success("Bid awarded and subcontract created!");
-      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-    } catch {
-      toast.error("Failed to award bid");
-    }
-  };
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
     const file = e.target.files?.[0];
@@ -264,14 +257,25 @@ export default function ProjectDetail() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleDeletePlan = async (planFileId: string) => {
-    if (!confirm("Delete this plan file?")) return;
+  const handleDeletePlan = async () => {
     try {
-      await deletePlanFileMutation.mutateAsync({ projectId, planFileId });
+      await deletePlanFileMutation.mutateAsync({ projectId, planFileId: deletePlanConfirm.id });
       toast.success("Plan file deleted");
       queryClient.invalidateQueries({ queryKey: getGetProjectPlanFilesQueryKey(projectId) });
+      setDeletePlanConfirm({ open: false, id: "", name: "" });
     } catch {
       toast.error("Failed to delete plan file");
+    }
+  };
+
+  const handleAward = async () => {
+    try {
+      await awardBid.mutateAsync({ projectId, bidId: awardBidConfirm.id });
+      toast.success("Bid awarded and subcontract created!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 });
+    } catch {
+      toast.error("Failed to award bid");
     }
   };
 
@@ -425,7 +429,7 @@ export default function ProjectDetail() {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeletePlan(plan.id)}
+                            onClick={() => setDeletePlanConfirm({ open: true, id: plan.id, name: plan.fileName ?? plan.description })}
                             disabled={deletePlanFileMutation.isPending}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -567,7 +571,7 @@ export default function ProjectDetail() {
 
                         {isGC && bid.status === "PENDING" && project.status === "BIDDING" && (
                           <Button
-                            onClick={() => handleAward(bid.id)}
+                            onClick={() => setAwardBidConfirm({ open: true, id: bid.id, company: bid.sub?.companyName ?? "this subcontractor", amount: bid.amount })}
                             className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20"
                           >
                             <Award className="h-4 w-4 mr-2" /> Award
@@ -827,6 +831,79 @@ export default function ProjectDetail() {
             <Button type="submit" isLoading={submitBid.isPending} className="min-h-[44px]">Submit Bid</Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Award Bid Confirmation */}
+      <Dialog
+        open={awardBidConfirm.open}
+        onOpenChange={(open) => !open && setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 })}
+        title="Award Bid"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+            <p className="text-sm text-foreground">
+              Award this bid to{" "}
+              <span className="font-semibold">{awardBidConfirm.company}</span>
+              {" "}for{" "}
+              <span className="font-mono font-bold">{formatCurrency(awardBidConfirm.amount)}</span>?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will create a subcontract and move the project to <strong>Active</strong> status. This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 })}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="min-h-[44px] bg-green-600 hover:bg-green-700 text-white"
+              isLoading={awardBid.isPending}
+              onClick={handleAward}
+            >
+              <Award className="h-4 w-4 mr-2" /> Confirm Award
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Delete Plan File Confirmation */}
+      <Dialog
+        open={deletePlanConfirm.open}
+        onOpenChange={(open) => !open && setDeletePlanConfirm({ open: false, id: "", name: "" })}
+        title="Delete Plan File"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{deletePlanConfirm.name}</span>?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will permanently remove the file. All team members will lose access to it.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setDeletePlanConfirm({ open: false, id: "", name: "" })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="min-h-[44px]"
+              isLoading={deletePlanFileMutation.isPending}
+              onClick={handleDeletePlan}
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete File
+            </Button>
+          </div>
+        </div>
       </Dialog>
     </Layout>
   );

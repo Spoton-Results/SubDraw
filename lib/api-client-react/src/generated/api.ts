@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ActivityLogEntry,
   AddPlanFileRequest,
   AuthResponse,
   Bid,
@@ -3009,6 +3010,101 @@ export const useOverrideInvoice = <
 > => {
   return useMutation(getOverrideInvoiceMutationOptions(options));
 };
+
+/**
+ * @summary Get activity log for a subcontract
+ */
+export const getGetSubcontractActivityUrl = (subcontractId: string) => {
+  return `/api/subcontracts/${subcontractId}/activity`;
+};
+
+export const getSubcontractActivity = async (
+  subcontractId: string,
+  options?: RequestInit,
+): Promise<ActivityLogEntry[]> => {
+  return customFetch<ActivityLogEntry[]>(
+    getGetSubcontractActivityUrl(subcontractId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetSubcontractActivityQueryKey = (subcontractId: string) => {
+  return [`/api/subcontracts/${subcontractId}/activity`] as const;
+};
+
+export const getGetSubcontractActivityQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSubcontractActivity>>,
+  TError = ErrorType<unknown>,
+>(
+  subcontractId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSubcontractActivity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSubcontractActivityQueryKey(subcontractId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSubcontractActivity>>
+  > = ({ signal }) =>
+    getSubcontractActivity(subcontractId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!subcontractId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSubcontractActivity>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSubcontractActivityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSubcontractActivity>>
+>;
+export type GetSubcontractActivityQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get activity log for a subcontract
+ */
+
+export function useGetSubcontractActivity<
+  TData = Awaited<ReturnType<typeof getSubcontractActivity>>,
+  TError = ErrorType<unknown>,
+>(
+  subcontractId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSubcontractActivity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSubcontractActivityQueryOptions(
+    subcontractId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List all subcontractors (GC use — for inviting)

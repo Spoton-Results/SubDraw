@@ -38,6 +38,16 @@ export const invoicesTable = pgTable("invoices", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const activityLogsTable = pgTable("subcontract_activity_logs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  actorName: text("actor_name").notNull(),
+  actorRole: text("actor_role").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertSubcontractSchema = createInsertSchema(subcontractsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSubcontract = z.infer<typeof insertSubcontractSchema>;
 export type Subcontract = typeof subcontractsTable.$inferSelect;

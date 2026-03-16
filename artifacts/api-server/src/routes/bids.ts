@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bidsTable, subcontractsTable, projectsTable, usersTable } from "@workspace/db/schema";
+import { bidsTable, subcontractsTable, projectsTable, usersTable, activityLogsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { sendBidAwardedEmail } from "../lib/email.js";
@@ -51,6 +51,14 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     subId: bid.subId,
     baseContractAmount: bid.amount,
   }).returning();
+
+  await db.insert(activityLogsTable).values({
+    subcontractId: subcontract.id,
+    type: "SUBCONTRACT_CREATED",
+    description: `Subcontract awarded to ${sub.companyName} for $${bid.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+    actorName: gc.companyName,
+    actorRole: "GC",
+  }).catch(err => console.error("[activity] Failed to log subcontract creation:", err));
 
   const appUrl = process.env.APP_URL || `https://${req.hostname}`;
   sendBidAwardedEmail({

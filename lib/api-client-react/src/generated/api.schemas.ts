@@ -312,3 +312,13 @@ export interface UploadUrlResponse {
   uploadURL: string;
   objectPath: string;
 }
+
+export interface ActivityLogEntry {
+  id: string;
+  subcontractId: string;
+  type: string;
+  description: string;
+  actorName: string;
+  actorRole: string;
+  createdAt: string;
+}
