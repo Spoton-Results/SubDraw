@@ -931,6 +931,118 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+  /contacts:
+    get:
+      operationId: getContacts
+      tags: [contacts]
+      summary: Get GC's contact book
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GcContact"
+
+  /contacts/{subId}:
+    patch:
+      operationId: updateContactNote
+      tags: [contacts]
+      summary: Update note for a contact
+      parameters:
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateContactNoteRequest"
+      responses:
+        "200":
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GcContact"
+    delete:
+      operationId: removeContact
+      tags: [contacts]
+      summary: Remove a sub from GC's contact book
+      parameters:
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /contacts/{subId}/invite/{projectId}:
+    post:
+      operationId: inviteContactToProject
+      tags: [contacts]
+      summary: Add an existing contact to a project
+      parameters:
+        - name: subId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required: [message]
+
+  /profile/me:
+    get:
+      operationId: getMyProfile
+      tags: [profile]
+      summary: Get sub's own profile
+      responses:
+        "200":
+          description: Sub profile (null if not set)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubProfile"
+                nullable: true
+    put:
+      operationId: upsertMyProfile
+      tags: [profile]
+      summary: Create or update sub's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertSubProfileRequest"
+      responses:
+        "200":
+          description: Upserted profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubProfile"
+
 components:
   schemas:
     HealthStatus:
@@ -997,6 +1109,84 @@ components:
           type: string
       required: [token, newPassword]
 
+    SubProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        trade:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        businessAddress:
+          type: string
+          nullable: true
+        licenseNumber:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, userId, trade, createdAt, updatedAt]
+
+    GcContact:
+      type: object
+      properties:
+        id:
+          type: string
+        gcId:
+          type: string
+        subId:
+          type: string
+        note:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        sub:
+          $ref: "#/components/schemas/User"
+        subProfile:
+          $ref: "#/components/schemas/SubProfile"
+          nullable: true
+        sharedProjects:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+            required: [id, name]
+      required: [id, gcId, subId, createdAt, sub, sharedProjects]
+
+    UpsertSubProfileRequest:
+      type: object
+      properties:
+        trade:
+          type: string
+        phone:
+          type: string
+        businessAddress:
+          type: string
+        licenseNumber:
+          type: string
+      required: [trade]
+
+    UpdateContactNoteRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          nullable: true
+
     User:
       type: object
       properties:
@@ -1011,6 +1201,9 @@ components:
           type: string
         mustChangePassword:
           type: boolean
+        subProfile:
+          $ref: "#/components/schemas/SubProfile"
+          nullable: true
         createdAt:
           type: string
           format: date-time

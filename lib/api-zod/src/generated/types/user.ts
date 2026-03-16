@@ -5,6 +5,7 @@
  * SubTracker API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SubProfile } from "./subProfile";
 import type { UserRole } from "./userRole";
 
 export interface User {
@@ -13,5 +14,6 @@ export interface User {
   role: UserRole;
   companyName: string;
   mustChangePassword: boolean;
+  subProfile?: SubProfile | null;
   createdAt: Date;
 }

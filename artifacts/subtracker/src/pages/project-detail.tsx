@@ -14,6 +14,8 @@ import {
   useDeletePlanFile,
   useUpdateProject,
   useRemoveProjectMember,
+  useGetContacts,
+  useInviteContactToProject,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -53,6 +55,7 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
 
   const inviteSub = useInviteSubcontractor();
+  const inviteContactToProject = useInviteContactToProject();
   const submitBid = useSubmitBid();
   const awardBid = useAwardBid();
   const addPlanFile = useAddPlanFile();
@@ -60,6 +63,7 @@ export default function ProjectDetail() {
   const updateProject = useUpdateProject();
   const removeMember = useRemoveProjectMember();
   const { data: planFiles = [], refetch: refetchPlans } = useGetProjectPlanFiles(projectId);
+  const { data: contacts = [] } = useGetContacts({ query: { enabled: user?.role === "GC" } });
 
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [editName, setEditName] = React.useState("");
@@ -72,6 +76,8 @@ export default function ProjectDetail() {
   const [notesDirty, setNotesDirty] = React.useState(false);
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
+  const [inviteTab, setInviteTab] = React.useState<"contact" | "new">("contact");
+  const [contactSearch, setContactSearch] = React.useState("");
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteCompanyName, setInviteCompanyName] = React.useState("");
   const [inviteResult, setInviteResult] = React.useState<{ temporaryPassword: string; email: string } | null>(null);
@@ -178,6 +184,19 @@ export default function ProjectDetail() {
     setInviteCompanyName("");
     setInviteResult(null);
     setCopied(false);
+    setContactSearch("");
+    setInviteTab("contact");
+  };
+
+  const handleContactInvite = async (subId: string, companyName: string) => {
+    try {
+      await inviteContactToProject.mutateAsync({ subId, projectId });
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      toast.success(`${companyName} added to project!`);
+      handleInviteClose();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to add to project");
+    }
   };
 
   const handleCopyPassword = () => {
@@ -789,11 +808,11 @@ export default function ProjectDetail() {
       <Dialog
         open={isInviteOpen}
         onOpenChange={(open) => { if (!open) handleInviteClose(); }}
-        title={inviteResult ? "Subcontractor Invited" : "Invite Subcontractor"}
+        title={inviteResult ? "Subcontractor Invited" : "Add Subcontractor"}
         description={
           inviteResult
             ? "Share these credentials with the subcontractor so they can log in."
-            : "Enter the subcontractor's email and company name. A new account will be created if they aren't registered yet."
+            : undefined
         }
       >
         {inviteResult ? (
@@ -829,23 +848,94 @@ export default function ProjectDetail() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleInvite} className="space-y-4 mt-4">
-            <div>
-              <label className="text-sm font-semibold mb-1 block">Email Address</label>
-              <Input type="email" required placeholder="sub@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+          <div className="mt-4">
+            {/* Tab buttons */}
+            <div className="flex rounded-xl border border-border overflow-hidden mb-4">
+              <button
+                type="button"
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${inviteTab === "contact" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`}
+                onClick={() => setInviteTab("contact")}
+              >
+                From Contact Book
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${inviteTab === "new" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`}
+                onClick={() => setInviteTab("new")}
+              >
+                Invite New Sub
+              </button>
             </div>
-            <div>
-              <label className="text-sm font-semibold mb-1 block">Company Name</label>
-              <Input type="text" required placeholder="ABC Electric LLC" value={inviteCompanyName} onChange={e => setInviteCompanyName(e.target.value)} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              If this subcontractor isn't in the system yet, an account will be created with a secure temporary password that you'll be able to share with them.
-            </p>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-              <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
-              <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">Add Subcontractor</Button>
-            </div>
-          </form>
+
+            {inviteTab === "contact" ? (
+              <div className="space-y-3">
+                <Input
+                  placeholder="Search contacts…"
+                  value={contactSearch}
+                  onChange={e => setContactSearch(e.target.value)}
+                />
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {contacts.filter(c =>
+                    c.sub.companyName.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                    c.sub.email.toLowerCase().includes(contactSearch.toLowerCase())
+                  ).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      {contacts.length === 0 ? "Your contact book is empty. Use 'Invite New Sub' to get started." : "No contacts match your search."}
+                    </p>
+                  ) : (
+                    contacts
+                      .filter(c =>
+                        c.sub.companyName.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                        c.sub.email.toLowerCase().includes(contactSearch.toLowerCase())
+                      )
+                      .map(contact => {
+                        const alreadyOnProject = project?.members?.some((m: any) => m.id === contact.subId);
+                        return (
+                          <div key={contact.subId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
+                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
+                              {contact.sub.companyName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm truncate">{contact.sub.companyName}</p>
+                              <p className="text-xs text-muted-foreground truncate">{contact.subProfile?.trade ?? contact.sub.email}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={alreadyOnProject ? "outline" : "default"}
+                              disabled={alreadyOnProject || inviteContactToProject.isPending}
+                              onClick={() => handleContactInvite(contact.subId, contact.sub.companyName)}
+                            >
+                              {alreadyOnProject ? "Added" : "Add"}
+                            </Button>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+                <div className="flex justify-end pt-1">
+                  <Button type="button" variant="ghost" onClick={handleInviteClose}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleInvite} className="space-y-4">
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Email Address</label>
+                  <Input type="email" required placeholder="sub@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Company Name</label>
+                  <Input type="text" required placeholder="ABC Electric LLC" value={inviteCompanyName} onChange={e => setInviteCompanyName(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  If this subcontractor isn't in the system yet, an account will be created with a temporary password you can share with them.
+                </p>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+                  <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
+                  <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">Add Subcontractor</Button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </Dialog>
 

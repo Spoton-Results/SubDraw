@@ -39,6 +39,18 @@ export const LoginResponse = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
 });
@@ -59,6 +71,18 @@ export const GetMeResponse = zod.object({
   role: zod.enum(["GC", "SUB"]),
   companyName: zod.string(),
   mustChangePassword: zod.boolean(),
+  subProfile: zod
+    .object({
+      id: zod.string(),
+      userId: zod.string(),
+      trade: zod.string(),
+      phone: zod.string().nullish(),
+      businessAddress: zod.string().nullish(),
+      licenseNumber: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
   createdAt: zod.date(),
 });
 
@@ -87,6 +111,18 @@ export const UpdateProfileResponse = zod.object({
   role: zod.enum(["GC", "SUB"]),
   companyName: zod.string(),
   mustChangePassword: zod.boolean(),
+  subProfile: zod
+    .object({
+      id: zod.string(),
+      userId: zod.string(),
+      trade: zod.string(),
+      phone: zod.string().nullish(),
+      businessAddress: zod.string().nullish(),
+      licenseNumber: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
   createdAt: zod.date(),
 });
 
@@ -131,6 +167,18 @@ export const GetProjectsResponseItem = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
   financialSummary: zod
@@ -178,6 +226,18 @@ export const GetProjectResponse = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
   members: zod.array(
@@ -192,6 +252,18 @@ export const GetProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
     }),
@@ -211,6 +283,18 @@ export const GetProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
     }),
@@ -237,6 +321,18 @@ export const GetProjectResponse = zod.object({
           role: zod.enum(["GC", "SUB"]),
           companyName: zod.string(),
           mustChangePassword: zod.boolean(),
+          subProfile: zod
+            .object({
+              id: zod.string(),
+              userId: zod.string(),
+              trade: zod.string(),
+              phone: zod.string().nullish(),
+              businessAddress: zod.string().nullish(),
+              licenseNumber: zod.string().nullish(),
+              createdAt: zod.date(),
+              updatedAt: zod.date(),
+            })
+            .nullish(),
           createdAt: zod.date(),
         }),
         financialSummary: zod
@@ -255,6 +351,18 @@ export const GetProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
       scoreboard: zod
@@ -316,6 +424,18 @@ export const UpdateProjectResponse = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
   members: zod.array(
@@ -330,6 +450,18 @@ export const UpdateProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
     }),
@@ -349,6 +481,18 @@ export const UpdateProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
     }),
@@ -375,6 +519,18 @@ export const UpdateProjectResponse = zod.object({
           role: zod.enum(["GC", "SUB"]),
           companyName: zod.string(),
           mustChangePassword: zod.boolean(),
+          subProfile: zod
+            .object({
+              id: zod.string(),
+              userId: zod.string(),
+              trade: zod.string(),
+              phone: zod.string().nullish(),
+              businessAddress: zod.string().nullish(),
+              licenseNumber: zod.string().nullish(),
+              createdAt: zod.date(),
+              updatedAt: zod.date(),
+            })
+            .nullish(),
           createdAt: zod.date(),
         }),
         financialSummary: zod
@@ -393,6 +549,18 @@ export const UpdateProjectResponse = zod.object({
         role: zod.enum(["GC", "SUB"]),
         companyName: zod.string(),
         mustChangePassword: zod.boolean(),
+        subProfile: zod
+          .object({
+            id: zod.string(),
+            userId: zod.string(),
+            trade: zod.string(),
+            phone: zod.string().nullish(),
+            businessAddress: zod.string().nullish(),
+            licenseNumber: zod.string().nullish(),
+            createdAt: zod.date(),
+            updatedAt: zod.date(),
+          })
+          .nullish(),
         createdAt: zod.date(),
       }),
       scoreboard: zod
@@ -527,6 +695,18 @@ export const GetProjectBidsResponseItem = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
 });
@@ -576,6 +756,18 @@ export const GetSubcontractsResponseItem = zod.object({
       role: zod.enum(["GC", "SUB"]),
       companyName: zod.string(),
       mustChangePassword: zod.boolean(),
+      subProfile: zod
+        .object({
+          id: zod.string(),
+          userId: zod.string(),
+          trade: zod.string(),
+          phone: zod.string().nullish(),
+          businessAddress: zod.string().nullish(),
+          licenseNumber: zod.string().nullish(),
+          createdAt: zod.date(),
+          updatedAt: zod.date(),
+        })
+        .nullish(),
       createdAt: zod.date(),
     }),
     financialSummary: zod
@@ -594,6 +786,18 @@ export const GetSubcontractsResponseItem = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
   scoreboard: zod
@@ -651,6 +855,18 @@ export const GetSubcontractResponse = zod.object({
       role: zod.enum(["GC", "SUB"]),
       companyName: zod.string(),
       mustChangePassword: zod.boolean(),
+      subProfile: zod
+        .object({
+          id: zod.string(),
+          userId: zod.string(),
+          trade: zod.string(),
+          phone: zod.string().nullish(),
+          businessAddress: zod.string().nullish(),
+          licenseNumber: zod.string().nullish(),
+          createdAt: zod.date(),
+          updatedAt: zod.date(),
+        })
+        .nullish(),
       createdAt: zod.date(),
     }),
     financialSummary: zod
@@ -669,6 +885,18 @@ export const GetSubcontractResponse = zod.object({
     role: zod.enum(["GC", "SUB"]),
     companyName: zod.string(),
     mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
     createdAt: zod.date(),
   }),
   changeOrders: zod.array(
@@ -945,6 +1173,181 @@ export const GetUsersResponseItem = zod.object({
   role: zod.enum(["GC", "SUB"]),
   companyName: zod.string(),
   mustChangePassword: zod.boolean(),
+  subProfile: zod
+    .object({
+      id: zod.string(),
+      userId: zod.string(),
+      trade: zod.string(),
+      phone: zod.string().nullish(),
+      businessAddress: zod.string().nullish(),
+      licenseNumber: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
   createdAt: zod.date(),
 });
 export const GetUsersResponse = zod.array(GetUsersResponseItem);
+
+/**
+ * @summary Get GC's contact book
+ */
+export const GetContactsResponseItem = zod.object({
+  id: zod.string(),
+  gcId: zod.string(),
+  subId: zod.string(),
+  note: zod.string().nullish(),
+  createdAt: zod.date(),
+  sub: zod.object({
+    id: zod.string(),
+    email: zod.string(),
+    role: zod.enum(["GC", "SUB"]),
+    companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
+    createdAt: zod.date(),
+  }),
+  subProfile: zod
+    .object({
+      id: zod.string(),
+      userId: zod.string(),
+      trade: zod.string(),
+      phone: zod.string().nullish(),
+      businessAddress: zod.string().nullish(),
+      licenseNumber: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
+  sharedProjects: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+});
+export const GetContactsResponse = zod.array(GetContactsResponseItem);
+
+/**
+ * @summary Update note for a contact
+ */
+export const UpdateContactNoteParams = zod.object({
+  subId: zod.coerce.string(),
+});
+
+export const UpdateContactNoteBody = zod.object({
+  note: zod.string().nullish(),
+});
+
+export const UpdateContactNoteResponse = zod.object({
+  id: zod.string(),
+  gcId: zod.string(),
+  subId: zod.string(),
+  note: zod.string().nullish(),
+  createdAt: zod.date(),
+  sub: zod.object({
+    id: zod.string(),
+    email: zod.string(),
+    role: zod.enum(["GC", "SUB"]),
+    companyName: zod.string(),
+    mustChangePassword: zod.boolean(),
+    subProfile: zod
+      .object({
+        id: zod.string(),
+        userId: zod.string(),
+        trade: zod.string(),
+        phone: zod.string().nullish(),
+        businessAddress: zod.string().nullish(),
+        licenseNumber: zod.string().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullish(),
+    createdAt: zod.date(),
+  }),
+  subProfile: zod
+    .object({
+      id: zod.string(),
+      userId: zod.string(),
+      trade: zod.string(),
+      phone: zod.string().nullish(),
+      businessAddress: zod.string().nullish(),
+      licenseNumber: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
+  sharedProjects: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Remove a sub from GC's contact book
+ */
+export const RemoveContactParams = zod.object({
+  subId: zod.coerce.string(),
+});
+
+/**
+ * @summary Add an existing contact to a project
+ */
+export const InviteContactToProjectParams = zod.object({
+  subId: zod.coerce.string(),
+  projectId: zod.coerce.string(),
+});
+
+export const InviteContactToProjectResponse = zod.object({
+  message: zod.string(),
+});
+
+/**
+ * @summary Get sub's own profile
+ */
+export const GetMyProfileResponse = zod
+  .object({
+    id: zod.string(),
+    userId: zod.string(),
+    trade: zod.string(),
+    phone: zod.string().nullish(),
+    businessAddress: zod.string().nullish(),
+    licenseNumber: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  })
+  .nullable();
+
+/**
+ * @summary Create or update sub's profile
+ */
+export const UpsertMyProfileBody = zod.object({
+  trade: zod.string(),
+  phone: zod.string().optional(),
+  businessAddress: zod.string().optional(),
+  licenseNumber: zod.string().optional(),
+});
+
+export const UpsertMyProfileResponse = zod.object({
+  id: zod.string(),
+  userId: zod.string(),
+  trade: zod.string(),
+  phone: zod.string().nullish(),
+  businessAddress: zod.string().nullish(),
+  licenseNumber: zod.string().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});

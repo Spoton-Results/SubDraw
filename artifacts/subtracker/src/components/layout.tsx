@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import {
@@ -72,6 +72,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-3 px-2">Menu</div>
           <nav className="space-y-1">
             {navItem("/", <LayoutDashboard className="h-5 w-5" />, "Projects")}
+            {user.role === "GC" && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
+            {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
           </nav>
         </div>
@@ -159,6 +161,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <LayoutDashboard className={`h-5 w-5 ${isActive("/") ? "text-primary" : ""}`} />
           Projects
         </Link>
+        {user.role === "GC" && (
+          <Link
+            href="/contacts"
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+              isActive("/contacts") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <BookUser className={`h-5 w-5 ${isActive("/contacts") ? "text-primary" : ""}`} />
+            Contacts
+          </Link>
+        )}
         <Link
           href="/account"
           className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${

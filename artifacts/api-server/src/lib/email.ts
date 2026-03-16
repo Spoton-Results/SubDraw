@@ -302,7 +302,25 @@ export async function sendSubRemovedEmail(opts: {
   await send(opts.toEmail, `You've been removed from ${opts.projectName} on SubTracker`, html);
 }
 
-// ─── 9. Password reset email ───────────────────────────────────────────────────
+// ─── 9. Existing sub added to a new project ───────────────────────────────────
+export async function sendAddedToProjectEmail(opts: {
+  toEmail: string;
+  subCompanyName: string;
+  projectName: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("You've been added to a new project")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+    ])}
+    ${ctaButton("View Project", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `You've been added to ${opts.projectName} on SubTracker`, html);
+}
+
+// ─── 10. Password reset email ──────────────────────────────────────────────────
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   companyName: string;

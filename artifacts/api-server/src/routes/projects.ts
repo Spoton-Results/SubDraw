@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
@@ -215,6 +215,13 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
   }
 
   await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
+
+  const gcUser = (req as any).user;
+  const existingContact = await db.select().from(gcContactsTable)
+    .where(and(eq(gcContactsTable.gcId, gcUser.id), eq(gcContactsTable.subId, invitedUser.id))).limit(1);
+  if (existingContact.length === 0) {
+    await db.insert(gcContactsTable).values({ gcId: gcUser.id, subId: invitedUser.id }).onConflictDoNothing();
+  }
 
   if (isNewUser && temporaryPassword) {
     const appUrl = process.env.APP_URL || `https://${req.hostname}`;

@@ -27,7 +27,9 @@ import type {
   CreateProjectRequest,
   ErrorResponse,
   ForgotPasswordRequest,
+  GcContact,
   HealthStatus,
+  InviteContactToProject200,
   InviteRequest,
   InviteResponse,
   Invoice,
@@ -40,14 +42,17 @@ import type {
   RegisterRequest,
   RejectChangeOrderRequest,
   ResetPasswordRequest,
+  SubProfile,
   Subcontract,
   SubcontractDetail,
   SubmitBidRequest,
   SubmitInvoiceRequest,
+  UpdateContactNoteRequest,
   UpdateProfileRequest,
   UpdateProjectRequest,
   UploadUrlRequest,
   UploadUrlResponse,
+  UpsertSubProfileRequest,
   User,
 } from "./api.schemas";
 
@@ -3363,3 +3368,501 @@ export function useGetUsers<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get GC's contact book
+ */
+export const getGetContactsUrl = () => {
+  return `/api/contacts`;
+};
+
+export const getContacts = async (
+  options?: RequestInit,
+): Promise<GcContact[]> => {
+  return customFetch<GcContact[]>(getGetContactsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetContactsQueryKey = () => {
+  return [`/api/contacts`] as const;
+};
+
+export const getGetContactsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContacts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getContacts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetContactsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getContacts>>> = ({
+    signal,
+  }) => getContacts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContacts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContactsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContacts>>
+>;
+export type GetContactsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get GC's contact book
+ */
+
+export function useGetContacts<
+  TData = Awaited<ReturnType<typeof getContacts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getContacts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContactsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update note for a contact
+ */
+export const getUpdateContactNoteUrl = (subId: string) => {
+  return `/api/contacts/${subId}`;
+};
+
+export const updateContactNote = async (
+  subId: string,
+  updateContactNoteRequest: UpdateContactNoteRequest,
+  options?: RequestInit,
+): Promise<GcContact> => {
+  return customFetch<GcContact>(getUpdateContactNoteUrl(subId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateContactNoteRequest),
+  });
+};
+
+export const getUpdateContactNoteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContactNote>>,
+    TError,
+    { subId: string; data: BodyType<UpdateContactNoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateContactNote>>,
+  TError,
+  { subId: string; data: BodyType<UpdateContactNoteRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateContactNote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateContactNote>>,
+    { subId: string; data: BodyType<UpdateContactNoteRequest> }
+  > = (props) => {
+    const { subId, data } = props ?? {};
+
+    return updateContactNote(subId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateContactNoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateContactNote>>
+>;
+export type UpdateContactNoteMutationBody = BodyType<UpdateContactNoteRequest>;
+export type UpdateContactNoteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update note for a contact
+ */
+export const useUpdateContactNote = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContactNote>>,
+    TError,
+    { subId: string; data: BodyType<UpdateContactNoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateContactNote>>,
+  TError,
+  { subId: string; data: BodyType<UpdateContactNoteRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateContactNoteMutationOptions(options));
+};
+
+/**
+ * @summary Remove a sub from GC's contact book
+ */
+export const getRemoveContactUrl = (subId: string) => {
+  return `/api/contacts/${subId}`;
+};
+
+export const removeContact = async (
+  subId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRemoveContactUrl(subId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveContactMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContact>>,
+    TError,
+    { subId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeContact>>,
+  TError,
+  { subId: string },
+  TContext
+> => {
+  const mutationKey = ["removeContact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeContact>>,
+    { subId: string }
+  > = (props) => {
+    const { subId } = props ?? {};
+
+    return removeContact(subId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveContactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeContact>>
+>;
+
+export type RemoveContactMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a sub from GC's contact book
+ */
+export const useRemoveContact = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContact>>,
+    TError,
+    { subId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeContact>>,
+  TError,
+  { subId: string },
+  TContext
+> => {
+  return useMutation(getRemoveContactMutationOptions(options));
+};
+
+/**
+ * @summary Add an existing contact to a project
+ */
+export const getInviteContactToProjectUrl = (
+  subId: string,
+  projectId: string,
+) => {
+  return `/api/contacts/${subId}/invite/${projectId}`;
+};
+
+export const inviteContactToProject = async (
+  subId: string,
+  projectId: string,
+  options?: RequestInit,
+): Promise<InviteContactToProject200> => {
+  return customFetch<InviteContactToProject200>(
+    getInviteContactToProjectUrl(subId, projectId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getInviteContactToProjectMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inviteContactToProject>>,
+    TError,
+    { subId: string; projectId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inviteContactToProject>>,
+  TError,
+  { subId: string; projectId: string },
+  TContext
+> => {
+  const mutationKey = ["inviteContactToProject"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inviteContactToProject>>,
+    { subId: string; projectId: string }
+  > = (props) => {
+    const { subId, projectId } = props ?? {};
+
+    return inviteContactToProject(subId, projectId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InviteContactToProjectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inviteContactToProject>>
+>;
+
+export type InviteContactToProjectMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an existing contact to a project
+ */
+export const useInviteContactToProject = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inviteContactToProject>>,
+    TError,
+    { subId: string; projectId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof inviteContactToProject>>,
+  TError,
+  { subId: string; projectId: string },
+  TContext
+> => {
+  return useMutation(getInviteContactToProjectMutationOptions(options));
+};
+
+/**
+ * @summary Get sub's own profile
+ */
+export const getGetMyProfileUrl = () => {
+  return `/api/profile/me`;
+};
+
+export const getMyProfile = async (
+  options?: RequestInit,
+): Promise<SubProfile | null> => {
+  return customFetch<SubProfile | null>(getGetMyProfileUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyProfileQueryKey = () => {
+  return [`/api/profile/me`] as const;
+};
+
+export const getGetMyProfileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyProfile>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyProfileQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyProfile>>> = ({
+    signal,
+  }) => getMyProfile({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyProfile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyProfileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyProfile>>
+>;
+export type GetMyProfileQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get sub's own profile
+ */
+
+export function useGetMyProfile<
+  TData = Awaited<ReturnType<typeof getMyProfile>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyProfileQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create or update sub's profile
+ */
+export const getUpsertMyProfileUrl = () => {
+  return `/api/profile/me`;
+};
+
+export const upsertMyProfile = async (
+  upsertSubProfileRequest: UpsertSubProfileRequest,
+  options?: RequestInit,
+): Promise<SubProfile> => {
+  return customFetch<SubProfile>(getUpsertMyProfileUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(upsertSubProfileRequest),
+  });
+};
+
+export const getUpsertMyProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertMyProfile>>,
+    TError,
+    { data: BodyType<UpsertSubProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertMyProfile>>,
+  TError,
+  { data: BodyType<UpsertSubProfileRequest> },
+  TContext
+> => {
+  const mutationKey = ["upsertMyProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertMyProfile>>,
+    { data: BodyType<UpsertSubProfileRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return upsertMyProfile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpsertMyProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertMyProfile>>
+>;
+export type UpsertMyProfileMutationBody = BodyType<UpsertSubProfileRequest>;
+export type UpsertMyProfileMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create or update sub's profile
+ */
+export const useUpsertMyProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertMyProfile>>,
+    TError,
+    { data: BodyType<UpsertSubProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertMyProfile>>,
+  TError,
+  { data: BodyType<UpsertSubProfileRequest> },
+  TContext
+> => {
+  return useMutation(getUpsertMyProfileMutationOptions(options));
+};

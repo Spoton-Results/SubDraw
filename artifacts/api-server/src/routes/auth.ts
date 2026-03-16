@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, subProfilesTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -67,7 +67,12 @@ router.get("/me", requireAuth, async (req, res) => {
     return;
   }
   const { passwordHash: _, ...safeUser } = user;
-  res.json(safeUser);
+  let subProfile = null;
+  if (user.role === "SUB") {
+    const [profile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, user.id)).limit(1);
+    subProfile = profile ?? null;
+  }
+  res.json({ ...safeUser, subProfile });
 });
 
 router.post("/change-password", requireAuth, async (req, res) => {

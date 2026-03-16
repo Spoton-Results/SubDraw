@@ -46,6 +46,8 @@ artifacts-monorepo/
 - `change_orders` — Proposed/approved scope changes; status: PENDING_GC | APPROVED | REJECTED
 - `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED. Professional PDF generated on every invoice action, attached to all email notifications and downloadable via GET /api/subcontracts/:id/invoices/:id/pdf
 - `activity_logs` — Immutable audit trail per subcontract; fields: id, subcontractId, type, description, actorName, actorRole, createdAt. Written on every major action (subcontract created, CO created/approved/rejected, invoice submitted/flagged/approved/rejected/overridden/cancelled)
+- `gc_contacts` — GC's contact book; auto-populated when a GC invites a sub to any project; unique on (gcId, subId); supports private notes
+- `sub_profiles` — Sub's trade profile (trade, phone, businessAddress, licenseNumber); subs are forced to complete on first login via ProtectedRoute redirect
 
 ## Auth
 
@@ -69,12 +71,13 @@ Note: Replit's SendGrid integration was dismissed — credentials provided manua
 
 Email triggers (all best-effort, non-blocking):
 1. Sub invited to project (new account only) → send login + temp password
-2. GC awards bid → email sub that their bid was accepted
-3. GC creates change order → email sub to review and approve/reject
-4. Sub approves/rejects change order → email GC with the decision
-5. Sub submits invoice (normal) → email GC that invoice was submitted
-6. Sub submits invoice (flagged over budget) → red-warning email to GC
-7. GC approves/rejects/overrides invoice → email sub with the result
+2. Existing contact added to project → send "added to project" notification
+3. GC awards bid → email sub that their bid was accepted
+4. GC creates change order → email sub to review and approve/reject
+5. Sub approves/rejects change order → email GC with the decision
+6. Sub submits invoice (normal) → email GC that invoice was submitted
+7. Sub submits invoice (flagged over budget) → red-warning email to GC
+8. GC approves/rejects/overrides invoice → email sub with the result
 
 Change order flow: GC creates (status: PENDING_GC) → Sub approves/rejects (`requireSub` middleware).
 
@@ -86,15 +89,17 @@ Change order flow: GC creates (status: PENDING_GC) → Sub approves/rejects (`re
 - `/projects/new` — Create project (GC only)
 - `/projects/:id` — Project detail (members, bids, subcontracts)
 - `/subcontracts/:id` — Subcontract detail (scoreboard, change orders, invoices)
+- `/contacts` — GC Contact Book (GC-only; lists all subs ever invited, with trade profiles, notes, and "Add to Project" action)
+- Profile setup — inline in ProtectedRoute; shown to SUB users with `subProfile === null` before any protected page
 
 ## API Routes
 
 All prefixed with `/api`
 
-- `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (includes subProfile for SUB users)
 - `GET /users` — List all users
 - `GET /projects`, `POST /projects`
-- `GET /projects/:id`, `POST /projects/:id/invite`
+- `GET /projects/:id`, `POST /projects/:id/invite` (auto-saves sub to GC contact book)
 - `GET /projects/:id/bids`, `POST /projects/:id/bids`
 - `POST /projects/:id/bids/:bidId/award` — Award bid, creates subcontract
 - `GET /subcontracts`, `GET /subcontracts/:id`
@@ -102,6 +107,12 @@ All prefixed with `/api`
 - `POST /subcontracts/:id/change-orders/:coId/approve|reject`
 - `GET/POST /subcontracts/:id/invoices`
 - `POST /subcontracts/:id/invoices/:invId/approve|reject|override`
+- `GET /contacts` — GC contact book (GC-only)
+- `PATCH /contacts/:subId` — Update note on a contact
+- `DELETE /contacts/:subId` — Remove contact
+- `POST /contacts/:subId/invite/:projectId` — Add existing contact to a project
+- `GET /profile/me` — Get sub's own profile (SUB-only)
+- `PUT /profile/me` — Upsert sub's trade profile (SUB-only)
 
 ## TypeScript & Composite Projects
 

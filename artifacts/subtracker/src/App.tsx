@@ -15,6 +15,8 @@ import ChangePassword from "./pages/change-password";
 import ForgotPassword from "./pages/forgot-password";
 import ResetPassword from "./pages/reset-password";
 import Account from "./pages/account";
+import Contacts from "./pages/contacts";
+import ProfileSetup from "./pages/profile-setup";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,7 +35,7 @@ function RedirectTo({ path }: { path: string }) {
   return null;
 }
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function ProtectedRoute({ component: Component, gcOnly }: { component: React.ComponentType; gcOnly?: boolean }) {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
 
   if (isLoading) return null;
@@ -49,6 +51,18 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
+  if (user.role === "SUB" && user.subProfile === null) {
+    return (
+      <ProfileSetup
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        }}
+      />
+    );
+  }
+
+  if (gcOnly && user.role !== "GC") return <RedirectTo path="/" />;
+
   return <Component />;
 }
 
@@ -61,6 +75,7 @@ function Router() {
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
       <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
+      <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} gcOnly />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />

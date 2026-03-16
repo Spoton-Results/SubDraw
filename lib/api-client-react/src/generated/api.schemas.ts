@@ -41,6 +41,22 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
+export interface SubProfile {
+  id: string;
+  userId: string;
+  trade: string;
+  phone?: string | null;
+  businessAddress?: string | null;
+  licenseNumber?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GcContactSharedProjectsItem = {
+  id: string;
+  name: string;
+};
+
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const UserRole = {
@@ -54,7 +70,30 @@ export interface User {
   role: UserRole;
   companyName: string;
   mustChangePassword: boolean;
+  subProfile?: SubProfile | null;
   createdAt: string;
+}
+
+export interface GcContact {
+  id: string;
+  gcId: string;
+  subId: string;
+  note?: string | null;
+  createdAt: string;
+  sub: User;
+  subProfile?: SubProfile | null;
+  sharedProjects: GcContactSharedProjectsItem[];
+}
+
+export interface UpsertSubProfileRequest {
+  trade: string;
+  phone?: string;
+  businessAddress?: string;
+  licenseNumber?: string;
+}
+
+export interface UpdateContactNoteRequest {
+  note?: string | null;
 }
 
 export type RegisterRequestRole =
@@ -324,3 +363,7 @@ export interface ActivityLogEntry {
   actorRole: string;
   createdAt: string;
 }
+
+export type InviteContactToProject200 = {
+  message: string;
+};

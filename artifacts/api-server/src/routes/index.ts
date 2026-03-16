@@ -7,6 +7,8 @@ import bidsRouter from "./bids.js";
 import subcontractsRouter from "./subcontracts.js";
 import planFilesRouter from "./plan-files.js";
 import storageRouter from "./storage.js";
+import contactsRouter from "./contacts.js";
+import profileRouter from "./profile.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use("/projects/:projectId/bids", bidsRouter);
 router.use("/projects/:projectId/plan-files", planFilesRouter);
 router.use("/subcontracts", subcontractsRouter);
 router.use("/storage", storageRouter);
+router.use("/contacts", contactsRouter);
+router.use("/profile", profileRouter);
 
 export default router;
