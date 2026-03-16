@@ -1,0 +1,20 @@
+packages:
+  "react-hot-toast": "Simple and beautiful toast notifications"
+  "@hookform/resolvers": "Zod validation resolver for React Hook Form"
+  "react-hook-form": "Performant, flexible and extensible forms"
+  "framer-motion": "Animations and layout transitions"
+  "date-fns": "Modern date utility library"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to safely merge Tailwind classes"
+
+images:
+  - path: "artifacts/subtracker/public/images/hero-bg.png"
+    description: "Abstract architectural lines and light blue gradients, clean professional enterprise dashboard background"
+    aspect_ratio: "16:9"
+  - path: "artifacts/subtracker/public/images/login-bg.png"
+    description: "Modern construction site abstract, glassmorphism, deep blue and slate colors, professional"
+    aspect_ratio: "16:9"
+
+notes:
+  - Using generated Orval hooks from @workspace/api-client-react
+  - Replaced local toaster with react-hot-toast for simplicity

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "SubTracker"
+version = "1.0.0"
+id = "artifacts/subtracker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 19937
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/subtracker run dev"
+
+[services.env]
+PORT = "19937"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/subtracker", "run", "build"]
+publicDir = "artifacts/subtracker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"

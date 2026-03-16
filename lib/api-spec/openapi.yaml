@@ -1,22 +1,33 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SubTracker API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: projects
+    description: Project management
+  - name: bids
+    description: Bid management
+  - name: subcontracts
+    description: Subcontract management
+  - name: changeOrders
+    description: Change order management
+  - name: invoices
+    description: Invoice management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +35,526 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List projects for current user
+      responses:
+        "200":
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a project (GC only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project details
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/invite:
+    post:
+      operationId: inviteSubcontractor
+      tags: [projects]
+      summary: Invite a subcontractor to a project (GC only)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteRequest"
+      responses:
+        "201":
+          description: Invited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/bids:
+    get:
+      operationId: getProjectBids
+      tags: [bids]
+      summary: Get bids for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bid"
+    post:
+      operationId: submitBid
+      tags: [bids]
+      summary: Submit a bid (Sub only)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitBidRequest"
+      responses:
+        "201":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bid"
+
+  /projects/{projectId}/bids/{bidId}/award:
+    post:
+      operationId: awardBid
+      tags: [bids]
+      summary: Award a bid (GC only) — creates a subcontract
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bidId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Awarded and subcontract created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subcontract"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /subcontracts:
+    get:
+      operationId: getSubcontracts
+      tags: [subcontracts]
+      summary: List subcontracts for current user
+      responses:
+        "200":
+          description: Subcontracts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Subcontract"
+
+  /subcontracts/{subcontractId}:
+    get:
+      operationId: getSubcontract
+      tags: [subcontracts]
+      summary: Get subcontract details with scoreboard
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Subcontract detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubcontractDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /subcontracts/{subcontractId}/change-orders:
+    get:
+      operationId: getChangeOrders
+      tags: [changeOrders]
+      summary: Get change orders for a subcontract
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Change orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChangeOrder"
+    post:
+      operationId: createChangeOrder
+      tags: [changeOrders]
+      summary: Create a change order (Sub proposes, GC approves)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChangeOrderRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeOrder"
+
+  /subcontracts/{subcontractId}/change-orders/{changeOrderId}/approve:
+    post:
+      operationId: approveChangeOrder
+      tags: [changeOrders]
+      summary: Approve a change order (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: changeOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeOrder"
+
+  /subcontracts/{subcontractId}/change-orders/{changeOrderId}/reject:
+    post:
+      operationId: rejectChangeOrder
+      tags: [changeOrders]
+      summary: Reject a change order (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: changeOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeOrder"
+
+  /subcontracts/{subcontractId}/invoices:
+    get:
+      operationId: getInvoices
+      tags: [invoices]
+      summary: Get invoices for a subcontract
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: submitInvoice
+      tags: [invoices]
+      summary: Submit an invoice (Sub only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitInvoiceRequest"
+      responses:
+        "201":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/approve:
+    post:
+      operationId: approveInvoice
+      tags: [invoices]
+      summary: Approve an invoice (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/reject:
+    post:
+      operationId: rejectInvoice
+      tags: [invoices]
+      summary: Reject an invoice (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/override:
+    post:
+      operationId: overrideInvoice
+      tags: [invoices]
+      summary: Override a flagged invoice with reason (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OverrideInvoiceRequest"
+      responses:
+        "200":
+          description: Overridden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /users:
+    get:
+      operationId: getUsers
+      tags: [auth]
+      summary: List all subcontractors (GC use — for inviting)
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +562,301 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [GC, SUB]
+        companyName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, role, companyName, createdAt]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [GC, SUB]
+        companyName:
+          type: string
+      required: [email, password, role, companyName]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+      required: [user]
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gcId:
+          type: string
+        status:
+          type: string
+          enum: [BIDDING, ACTIVE, CLOSED]
+        createdAt:
+          type: string
+          format: date-time
+        gc:
+          $ref: "#/components/schemas/User"
+      required: [id, name, gcId, status, createdAt, gc]
+
+    ProjectDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gcId:
+          type: string
+        status:
+          type: string
+          enum: [BIDDING, ACTIVE, CLOSED]
+        createdAt:
+          type: string
+          format: date-time
+        gc:
+          $ref: "#/components/schemas/User"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectMember"
+        bids:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bid"
+        subcontracts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subcontract"
+      required: [id, name, gcId, status, createdAt, gc, members, bids, subcontracts]
+
+    ProjectMember:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        userId:
+          type: string
+        roleOnProject:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required: [id, projectId, userId, roleOnProject, user]
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+
+    InviteRequest:
+      type: object
+      properties:
+        email:
+          type: string
+      required: [email]
+
+    Bid:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        subId:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [PENDING, AWARDED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+        sub:
+          $ref: "#/components/schemas/User"
+      required: [id, projectId, subId, amount, status, createdAt, sub]
+
+    SubmitBidRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+      required: [amount]
+
+    Subcontract:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        subId:
+          type: string
+        baseContractAmount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        project:
+          $ref: "#/components/schemas/Project"
+        sub:
+          $ref: "#/components/schemas/User"
+      required: [id, projectId, subId, baseContractAmount, createdAt, project, sub]
+
+    Scoreboard:
+      type: object
+      properties:
+        base:
+          type: number
+        coTotal:
+          type: number
+        currentApprovedTotal:
+          type: number
+        invoicedTotal:
+          type: number
+        remaining:
+          type: number
+      required: [base, coTotal, currentApprovedTotal, invoicedTotal, remaining]
+
+    SubcontractDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        subId:
+          type: string
+        baseContractAmount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        project:
+          $ref: "#/components/schemas/Project"
+        sub:
+          $ref: "#/components/schemas/User"
+        changeOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChangeOrder"
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        scoreboard:
+          $ref: "#/components/schemas/Scoreboard"
+      required: [id, projectId, subId, baseContractAmount, createdAt, project, sub, changeOrders, invoices, scoreboard]
+
+    ChangeOrder:
+      type: object
+      properties:
+        id:
+          type: string
+        subcontractId:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [PENDING_SUB, PENDING_GC, APPROVED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, subcontractId, description, amount, status, createdAt]
+
+    CreateChangeOrderRequest:
+      type: object
+      properties:
+        description:
+          type: string
+        amount:
+          type: number
+      required: [description, amount]
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        subcontractId:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, FLAGGED]
+        flaggedOverAmount:
+          type: number
+        overrideReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, subcontractId, amount, status, flaggedOverAmount, createdAt]
+
+    SubmitInvoiceRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+      required: [amount]
+
+    OverrideInvoiceRequest:
+      type: object
+      properties:
+        overrideReason:
+          type: string
+      required: [overrideReason]

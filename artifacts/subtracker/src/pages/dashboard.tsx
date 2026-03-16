@@ -1,0 +1,133 @@
+import * as React from "react";
+import { Link } from "wouter";
+import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Layout } from "@/components/layout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/dialog";
+import { format } from "date-fns";
+import { Plus, Briefcase, Building2, ChevronRight } from "lucide-react";
+import toast from "react-hot-toast";
+
+export default function Dashboard() {
+  const { data: user } = useGetMe();
+  const { data: projects, isLoading } = useGetProjects();
+  const createProject = useCreateProject();
+  const queryClient = useQueryClient();
+  
+  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [newProjectName, setNewProjectName] = React.useState("");
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    
+    try {
+      await createProject.mutateAsync({ data: { name: newProjectName } });
+      toast.success("Project created!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+      setIsCreateOpen(false);
+      setNewProjectName("");
+    } catch {
+      toast.error("Failed to create project");
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'BIDDING': return 'default';
+      case 'ACTIVE': return 'success';
+      case 'CLOSED': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
+  return (
+    <Layout>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
+          <p className="text-muted-foreground mt-1">Manage your active bids and subcontracts</p>
+        </div>
+        {user?.role === "GC" && (
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+            <Plus className="h-5 w-5" />
+            New Project
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1,2,3].map(i => (
+            <Card key={i} className="animate-pulse h-48 bg-card/50" />
+          ))}
+        </div>
+      ) : projects?.length === 0 ? (
+        <div className="text-center py-20 bg-card rounded-3xl border border-border/50 shadow-sm">
+          <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
+          <h3 className="text-xl font-bold mb-2">No projects yet</h3>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            {user?.role === "GC" 
+              ? "Create your first project to start inviting subcontractors."
+              : "You haven't been invited to any projects yet."}
+          </p>
+          {user?.role === "GC" && (
+            <Button onClick={() => setIsCreateOpen(true)}>Create Project</Button>
+          )}
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects?.map(project => (
+            <Link key={project.id} href={`/projects/${project.id}`}>
+              <Card className="h-full hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 transition-all duration-300 cursor-pointer group">
+                <CardContent className="p-6 flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="bg-primary/10 p-3 rounded-xl text-primary">
+                      <Briefcase className="h-6 w-6" />
+                    </div>
+                    <Badge variant={getStatusColor(project.status) as any}>
+                      {project.status}
+                    </Badge>
+                  </div>
+                  <h3 className="text-xl font-bold font-display mb-2 group-hover:text-primary transition-colors line-clamp-1">{project.name}</h3>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                    <Building2 className="h-4 w-4" />
+                    <span className="truncate">{project.gc.companyName}</span>
+                  </div>
+                  <div className="mt-auto pt-4 border-t border-border flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {format(new Date(project.createdAt), 'MMM d, yyyy')}
+                    </span>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Project Name</label>
+            <Input 
+              autoFocus
+              placeholder="e.g. Downtown Office Renovation" 
+              value={newProjectName}
+              onChange={e => setNewProjectName(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+            <Button type="submit" isLoading={createProject.isPending}>Create</Button>
+          </div>
+        </form>
+      </Dialog>
+    </Layout>
+  );
+}
