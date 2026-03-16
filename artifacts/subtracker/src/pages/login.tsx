@@ -87,6 +87,12 @@ export default function Login() {
               {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
             </div>
             
+            <div className="flex justify-end">
+              <Link href="/forgot-password" className="text-xs text-primary font-semibold hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+
             <Button 
               type="submit" 
               className="w-full mt-2" 

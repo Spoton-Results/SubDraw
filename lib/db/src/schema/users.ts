@@ -9,6 +9,8 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull(), // GC | SUB
   companyName: text("company_name").notNull(),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

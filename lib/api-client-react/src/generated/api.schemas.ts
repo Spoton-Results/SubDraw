@@ -28,6 +28,19 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface UpdateProfileRequest {
+  companyName: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const UserRole = {

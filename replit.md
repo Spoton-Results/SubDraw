@@ -38,7 +38,7 @@ artifacts-monorepo/
 
 ## Database Schema (PostgreSQL)
 
-- `users` — GC and SUB accounts (role, companyName, passwordHash)
+- `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires)
 - `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED
 - `project_members` — Which subs are invited to a project
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
@@ -51,6 +51,9 @@ artifacts-monorepo/
 - Cookie-based JWT auth via `/api/auth/*` routes
 - bcryptjs password hashing
 - `requireAuth`, `requireGC`, `requireSub` middleware in `artifacts/api-server/src/middlewares/requireAuth.ts`
+- Password reset: `POST /auth/forgot-password` → generates token + sends email; `POST /auth/reset-password` → verifies token, sets new password
+- Profile update: `PATCH /auth/update-profile` → updates companyName
+- Force-change flow: `mustChangePassword` flag on users; `ProtectedRoute` renders inline `<ChangePassword>` if set
 
 ## Key Features
 

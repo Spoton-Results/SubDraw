@@ -75,6 +75,45 @@ export const ChangePasswordResponse = zod.object({
 });
 
 /**
+ * @summary Update current user's profile (company name)
+ */
+export const UpdateProfileBody = zod.object({
+  companyName: zod.string(),
+});
+
+export const UpdateProfileResponse = zod.object({
+  id: zod.string(),
+  email: zod.string(),
+  role: zod.enum(["GC", "SUB"]),
+  companyName: zod.string(),
+  mustChangePassword: zod.boolean(),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary Request a password reset email
+ */
+export const ForgotPasswordBody = zod.object({
+  email: zod.string(),
+});
+
+export const ForgotPasswordResponse = zod.object({
+  message: zod.string(),
+});
+
+/**
+ * @summary Reset password using a token from email
+ */
+export const ResetPasswordBody = zod.object({
+  token: zod.string(),
+  newPassword: zod.string(),
+});
+
+export const ResetPasswordResponse = zod.object({
+  message: zod.string(),
+});
+
+/**
  * @summary List projects for current user
  */
 export const GetProjectsResponseItem = zod.object({

@@ -12,6 +12,9 @@ import ProjectDetail from "./pages/project-detail";
 import SubcontractDetail from "./pages/subcontract-detail";
 import NotFound from "./pages/not-found";
 import ChangePassword from "./pages/change-password";
+import ForgotPassword from "./pages/forgot-password";
+import ResetPassword from "./pages/reset-password";
+import Account from "./pages/account";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +60,9 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
+      <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -245,3 +245,19 @@ export async function sendInvoiceDecisionEmail(opts: {
   `);
   await send(opts.toEmail, `Invoice ${verb} on ${opts.projectName}`, html);
 }
+
+// ─── 8. Password reset email ───────────────────────────────────────────────────
+export async function sendPasswordResetEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  resetUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Reset your password")}
+    ${subtext(`Hi <strong>${opts.companyName}</strong>, we received a request to reset your SubTracker password.`)}
+    ${subtext("Click the button below to set a new password. This link expires in <strong>1 hour</strong>.")}
+    ${ctaButton("Reset Password", opts.resetUrl)}
+    ${subtext("If you didn't request this, you can safely ignore this email. Your password will not change.")}
+  `);
+  await send(opts.toEmail, "Reset your SubTracker password", html);
+}
