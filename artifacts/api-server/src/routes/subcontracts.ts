@@ -79,7 +79,7 @@ router.get("/:subcontractId/change-orders", requireAuth, async (req, res) => {
 });
 
 router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
-  const { description, amount } = req.body;
+  const { description, scope, amount } = req.body;
   if (!description || !amount) {
     res.status(400).json({ error: "description and amount are required" });
     return;
@@ -87,6 +87,7 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   const [co] = await db.insert(changeOrdersTable).values({
     subcontractId: req.params.subcontractId,
     description,
+    scope: scope ? String(scope).trim() : null,
     amount: Number(amount),
     status: "PENDING_GC",
   }).returning();
@@ -125,7 +126,12 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
 });
 
 router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, requireSub, async (req, res) => {
-  const [co] = await db.update(changeOrdersTable).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+  const { rejectionReason } = req.body || {};
+  const [co] = await db.update(changeOrdersTable).set({
+    status: "REJECTED",
+    rejectionReason: rejectionReason ? String(rejectionReason).trim() : null,
+    updatedAt: new Date(),
+  }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
 
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]

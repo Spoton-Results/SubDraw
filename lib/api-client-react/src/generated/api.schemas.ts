@@ -73,6 +73,7 @@ export interface ProjectFinancialSummary {
   totalApprovedAmount: number;
   totalInvoiced: number;
   hasFlaggedInvoices: boolean;
+  totalCOApproved: number;
 }
 
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
@@ -210,9 +211,12 @@ export interface ChangeOrder {
   id: string;
   subcontractId: string;
   description: string;
+  scope?: string | null;
   amount: number;
   status: ChangeOrderStatus;
+  rejectionReason?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface SubcontractDetail {
@@ -230,7 +234,12 @@ export interface SubcontractDetail {
 
 export interface CreateChangeOrderRequest {
   description: string;
+  scope?: string;
   amount: number;
+}
+
+export interface RejectChangeOrderRequest {
+  rejectionReason?: string;
 }
 
 export interface SubmitInvoiceRequest {

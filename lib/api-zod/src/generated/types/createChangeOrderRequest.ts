@@ -8,5 +8,6 @@
 
 export interface CreateChangeOrderRequest {
   description: string;
+  scope?: string;
   amount: number;
 }

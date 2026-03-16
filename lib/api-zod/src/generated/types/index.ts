@@ -33,6 +33,7 @@ export * from "./projectMember";
 export * from "./projectStatus";
 export * from "./registerRequest";
 export * from "./registerRequestRole";
+export * from "./rejectChangeOrderRequest";
 export * from "./scoreboard";
 export * from "./subcontract";
 export * from "./subcontractDetail";

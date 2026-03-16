@@ -253,6 +253,39 @@ export default function ProjectDetail() {
         )}
       </div>
 
+      {/* GC FINANCIAL OVERVIEW */}
+      {isGC && project.subcontracts && project.subcontracts.length > 0 && (() => {
+        const subs = project.subcontracts!;
+        const totalBase = subs.reduce((s, c) => s + c.baseContractAmount, 0);
+        const totalApproved = subs.reduce((s, c) => s + (c.scoreboard?.currentApprovedTotal ?? c.baseContractAmount), 0);
+        const totalCO = subs.reduce((s, c) => s + (c.scoreboard?.coTotal ?? 0), 0);
+        const totalInvoiced = subs.reduce((s, c) => s + (c.scoreboard?.invoicedTotal ?? 0), 0);
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: "Base Contracts", value: totalBase, icon: "📋" },
+              { label: "Approved CO Exposure", value: totalCO, icon: "🔄", highlight: totalCO > 0 },
+              { label: "Total Approved", value: totalApproved, icon: "✅" },
+              { label: "Total Invoiced", value: totalInvoiced, icon: "🧾" },
+            ].map(stat => (
+              <div key={stat.label} className={cn(
+                "bg-card rounded-2xl border p-4 shadow-sm",
+                stat.highlight ? "border-amber-400/60 bg-amber-50/50 dark:bg-amber-950/20" : "border-border/50"
+              )}>
+                <p className={cn(
+                  "text-xs font-semibold uppercase tracking-wider mb-2",
+                  stat.highlight ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+                )}>{stat.label}</p>
+                <p className={cn(
+                  "text-xl font-bold font-mono",
+                  stat.highlight ? "text-amber-700 dark:text-amber-400" : "text-foreground"
+                )}>{formatCurrency(stat.value)}</p>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
 

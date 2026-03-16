@@ -36,7 +36,7 @@ async function computeSubcontractScoreboard(subcontractId: string, baseContractA
 async function getProjectFinancialSummary(projectId: string) {
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
   if (subcontracts.length === 0) {
-    return { subcontractCount: 0, totalApprovedAmount: 0, totalInvoiced: 0, hasFlaggedInvoices: false };
+    return { subcontractCount: 0, totalApprovedAmount: 0, totalInvoiced: 0, hasFlaggedInvoices: false, totalCOApproved: 0 };
   }
 
   const scoreboards = await Promise.all(
@@ -48,6 +48,7 @@ async function getProjectFinancialSummary(projectId: string) {
     totalApprovedAmount: scoreboards.reduce((s, sb) => s + sb.currentApprovedTotal, 0),
     totalInvoiced: scoreboards.reduce((s, sb) => s + sb.invoicedTotal, 0),
     hasFlaggedInvoices: scoreboards.some(sb => sb.hasFlaggedInvoices),
+    totalCOApproved: scoreboards.reduce((s, sb) => s + sb.coTotal, 0),
   };
 }
 

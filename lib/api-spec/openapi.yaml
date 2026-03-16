@@ -570,7 +570,7 @@ paths:
     post:
       operationId: rejectChangeOrder
       tags: [changeOrders]
-      summary: Reject a change order (GC only)
+      summary: Reject a change order (Sub only)
       parameters:
         - name: subcontractId
           in: path
@@ -582,6 +582,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectChangeOrderRequest"
       responses:
         "200":
           description: Rejected
@@ -856,7 +862,9 @@ components:
           type: number
         hasFlaggedInvoices:
           type: boolean
-      required: [subcontractCount, totalApprovedAmount, totalInvoiced, hasFlaggedInvoices]
+        totalCOApproved:
+          type: number
+      required: [subcontractCount, totalApprovedAmount, totalInvoiced, hasFlaggedInvoices, totalCOApproved]
 
     Project:
       type: object
@@ -1050,24 +1058,42 @@ components:
           type: string
         description:
           type: string
+        scope:
+          type: string
+          nullable: true
         amount:
           type: number
         status:
           type: string
           enum: [PENDING_SUB, PENDING_GC, APPROVED, REJECTED]
+        rejectionReason:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
-      required: [id, subcontractId, description, amount, status, createdAt]
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, subcontractId, description, amount, status, createdAt, updatedAt]
 
     CreateChangeOrderRequest:
       type: object
       properties:
         description:
           type: string
+        scope:
+          type: string
         amount:
           type: number
       required: [description, amount]
+
+    RejectChangeOrderRequest:
+      type: object
+      properties:
+        rejectionReason:
+          type: string
+      required: []
 
     Invoice:
       type: object

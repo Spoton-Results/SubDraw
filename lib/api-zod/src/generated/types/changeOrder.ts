@@ -11,7 +11,10 @@ export interface ChangeOrder {
   id: string;
   subcontractId: string;
   description: string;
+  scope?: string | null;
   amount: number;
   status: ChangeOrderStatus;
+  rejectionReason?: string | null;
   createdAt: Date;
+  updatedAt: Date;
 }

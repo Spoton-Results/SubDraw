@@ -97,6 +97,7 @@ export const GetProjectsResponseItem = zod.object({
       totalApprovedAmount: zod.number(),
       totalInvoiced: zod.number(),
       hasFlaggedInvoices: zod.boolean(),
+      totalCOApproved: zod.number(),
     })
     .optional(),
 });
@@ -191,6 +192,7 @@ export const GetProjectResponse = zod.object({
             totalApprovedAmount: zod.number(),
             totalInvoiced: zod.number(),
             hasFlaggedInvoices: zod.boolean(),
+            totalCOApproved: zod.number(),
           })
           .optional(),
       }),
@@ -378,6 +380,7 @@ export const GetSubcontractsResponseItem = zod.object({
         totalApprovedAmount: zod.number(),
         totalInvoiced: zod.number(),
         hasFlaggedInvoices: zod.boolean(),
+        totalCOApproved: zod.number(),
       })
       .optional(),
   }),
@@ -449,6 +452,7 @@ export const GetSubcontractResponse = zod.object({
         totalApprovedAmount: zod.number(),
         totalInvoiced: zod.number(),
         hasFlaggedInvoices: zod.boolean(),
+        totalCOApproved: zod.number(),
       })
       .optional(),
   }),
@@ -465,9 +469,12 @@ export const GetSubcontractResponse = zod.object({
       id: zod.string(),
       subcontractId: zod.string(),
       description: zod.string(),
+      scope: zod.string().nullish(),
       amount: zod.number(),
       status: zod.enum(["PENDING_SUB", "PENDING_GC", "APPROVED", "REJECTED"]),
+      rejectionReason: zod.string().nullish(),
       createdAt: zod.date(),
+      updatedAt: zod.date(),
     }),
   ),
   invoices: zod.array(
@@ -519,9 +526,12 @@ export const GetChangeOrdersResponseItem = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
   description: zod.string(),
+  scope: zod.string().nullish(),
   amount: zod.number(),
   status: zod.enum(["PENDING_SUB", "PENDING_GC", "APPROVED", "REJECTED"]),
+  rejectionReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 export const GetChangeOrdersResponse = zod.array(GetChangeOrdersResponseItem);
 
@@ -534,6 +544,7 @@ export const CreateChangeOrderParams = zod.object({
 
 export const CreateChangeOrderBody = zod.object({
   description: zod.string(),
+  scope: zod.string().optional(),
   amount: zod.number(),
 });
 
@@ -549,26 +560,36 @@ export const ApproveChangeOrderResponse = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
   description: zod.string(),
+  scope: zod.string().nullish(),
   amount: zod.number(),
   status: zod.enum(["PENDING_SUB", "PENDING_GC", "APPROVED", "REJECTED"]),
+  rejectionReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**
- * @summary Reject a change order (GC only)
+ * @summary Reject a change order (Sub only)
  */
 export const RejectChangeOrderParams = zod.object({
   subcontractId: zod.coerce.string(),
   changeOrderId: zod.coerce.string(),
 });
 
+export const RejectChangeOrderBody = zod.object({
+  rejectionReason: zod.string().optional(),
+});
+
 export const RejectChangeOrderResponse = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
   description: zod.string(),
+  scope: zod.string().nullish(),
   amount: zod.number(),
   status: zod.enum(["PENDING_SUB", "PENDING_GC", "APPROVED", "REJECTED"]),
+  rejectionReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**

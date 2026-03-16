@@ -17,8 +17,10 @@ export const changeOrdersTable = pgTable("change_orders", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
   description: text("description").notNull(),
+  scope: text("scope"),
   amount: doublePrecision("amount").notNull(),
   status: text("status").notNull().default("PENDING_SUB"), // PENDING_SUB | PENDING_GC | APPROVED | REJECTED
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

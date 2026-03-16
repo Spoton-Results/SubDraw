@@ -36,6 +36,7 @@ import type {
   Project,
   ProjectDetail,
   RegisterRequest,
+  RejectChangeOrderRequest,
   Subcontract,
   SubcontractDetail,
   SubmitBidRequest,
@@ -1992,7 +1993,7 @@ export const useApproveChangeOrder = <
 };
 
 /**
- * @summary Reject a change order (GC only)
+ * @summary Reject a change order (Sub only)
  */
 export const getRejectChangeOrderUrl = (
   subcontractId: string,
@@ -2004,6 +2005,7 @@ export const getRejectChangeOrderUrl = (
 export const rejectChangeOrder = async (
   subcontractId: string,
   changeOrderId: string,
+  rejectChangeOrderRequest?: RejectChangeOrderRequest,
   options?: RequestInit,
 ): Promise<ChangeOrder> => {
   return customFetch<ChangeOrder>(
@@ -2011,6 +2013,8 @@ export const rejectChangeOrder = async (
     {
       ...options,
       method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(rejectChangeOrderRequest),
     },
   );
 };
@@ -2022,14 +2026,22 @@ export const getRejectChangeOrderMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof rejectChangeOrder>>,
     TError,
-    { subcontractId: string; changeOrderId: string },
+    {
+      subcontractId: string;
+      changeOrderId: string;
+      data: BodyType<RejectChangeOrderRequest>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof rejectChangeOrder>>,
   TError,
-  { subcontractId: string; changeOrderId: string },
+  {
+    subcontractId: string;
+    changeOrderId: string;
+    data: BodyType<RejectChangeOrderRequest>;
+  },
   TContext
 > => {
   const mutationKey = ["rejectChangeOrder"];
@@ -2043,11 +2055,20 @@ export const getRejectChangeOrderMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof rejectChangeOrder>>,
-    { subcontractId: string; changeOrderId: string }
+    {
+      subcontractId: string;
+      changeOrderId: string;
+      data: BodyType<RejectChangeOrderRequest>;
+    }
   > = (props) => {
-    const { subcontractId, changeOrderId } = props ?? {};
+    const { subcontractId, changeOrderId, data } = props ?? {};
 
-    return rejectChangeOrder(subcontractId, changeOrderId, requestOptions);
+    return rejectChangeOrder(
+      subcontractId,
+      changeOrderId,
+      data,
+      requestOptions,
+    );
   };
 
   return { mutationFn, ...mutationOptions };
@@ -2056,11 +2077,11 @@ export const getRejectChangeOrderMutationOptions = <
 export type RejectChangeOrderMutationResult = NonNullable<
   Awaited<ReturnType<typeof rejectChangeOrder>>
 >;
-
+export type RejectChangeOrderMutationBody = BodyType<RejectChangeOrderRequest>;
 export type RejectChangeOrderMutationError = ErrorType<unknown>;
 
 /**
- * @summary Reject a change order (GC only)
+ * @summary Reject a change order (Sub only)
  */
 export const useRejectChangeOrder = <
   TError = ErrorType<unknown>,
@@ -2069,14 +2090,22 @@ export const useRejectChangeOrder = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof rejectChangeOrder>>,
     TError,
-    { subcontractId: string; changeOrderId: string },
+    {
+      subcontractId: string;
+      changeOrderId: string;
+      data: BodyType<RejectChangeOrderRequest>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof rejectChangeOrder>>,
   TError,
-  { subcontractId: string; changeOrderId: string },
+  {
+    subcontractId: string;
+    changeOrderId: string;
+    data: BodyType<RejectChangeOrderRequest>;
+  },
   TContext
 > => {
   return useMutation(getRejectChangeOrderMutationOptions(options));

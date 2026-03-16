@@ -19,8 +19,9 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
-  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList
+  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
 export default function SubcontractDetail() {
@@ -43,7 +44,11 @@ export default function SubcontractDetail() {
 
   const [coDialogOpen, setCoDialogOpen] = React.useState(false);
   const [coDesc, setCoDesc] = React.useState("");
+  const [coScope, setCoScope] = React.useState("");
   const [coAmount, setCoAmount] = React.useState("");
+
+  const [rejectCODialogOpen, setRejectCODialogOpen] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
+  const [coRejectReason, setCoRejectReason] = React.useState("");
 
   const [invDialogOpen, setInvDialogOpen] = React.useState(false);
   const [invNumber, setInvNumber] = React.useState("");
@@ -79,20 +84,34 @@ export default function SubcontractDetail() {
     const amount = parseFloat(coAmount);
     if (!coDesc || isNaN(amount)) return toast.error("Invalid input");
     try {
-      await createCO.mutateAsync({ subcontractId, data: { description: coDesc, amount } });
+      await createCO.mutateAsync({ subcontractId, data: { description: coDesc, scope: coScope.trim() || undefined, amount } });
       toast.success("Change order submitted");
       queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
       setCoDialogOpen(false);
-      setCoDesc(""); setCoAmount("");
+      setCoDesc(""); setCoScope(""); setCoAmount("");
     } catch { toast.error("Failed to submit"); }
   };
 
-  const handleActionCO = async (id: string, action: "approve" | "reject") => {
+  const handleApproveCO = async (id: string) => {
     try {
-      if (action === "approve") await approveCO.mutateAsync({ subcontractId, changeOrderId: id });
-      else await rejectCO.mutateAsync({ subcontractId, changeOrderId: id });
-      toast.success(`Change order ${action}d`);
+      await approveCO.mutateAsync({ subcontractId, changeOrderId: id });
+      toast.success("Change order approved");
       queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+    } catch { toast.error("Action failed"); }
+  };
+
+  const handleRejectCO = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await rejectCO.mutateAsync({
+        subcontractId,
+        changeOrderId: rejectCODialogOpen.id,
+        data: { rejectionReason: coRejectReason.trim() || undefined },
+      });
+      toast.success("Change order rejected");
+      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      setRejectCODialogOpen({ open: false, id: "" });
+      setCoRejectReason("");
     } catch { toast.error("Action failed"); }
   };
 
@@ -266,25 +285,44 @@ export default function SubcontractDetail() {
             ) : (
               <div className="divide-y divide-border">
                 {sub.changeOrders.map(co => (
-                  <div key={co.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/50 transition-colors">
-                    <div>
-                      <div className="font-semibold mb-1">{co.description}</div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="font-mono font-bold text-foreground">{formatCurrency(co.amount)}</span>
-                        <span className="text-muted-foreground">{format(new Date(co.createdAt), "MMM d, yyyy")}</span>
-                        {getCOStatusBadge(co.status)}
+                  <div key={co.id} className={cn(
+                    "p-4 hover:bg-muted/50 transition-colors",
+                    co.status === "PENDING_GC" && !isGC && "bg-amber-50/50 dark:bg-amber-950/10"
+                  )}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {getCOStatusBadge(co.status)}
+                          <span className="text-xs text-muted-foreground">{format(new Date(co.createdAt), "MMM d, yyyy")}</span>
+                        </div>
+                        <p className="font-semibold text-foreground">{co.description}</p>
+                        {co.scope && (
+                          <div className="mt-2 p-3 bg-muted/50 rounded-lg border-l-2 border-primary/40 text-sm text-muted-foreground whitespace-pre-wrap">
+                            {co.scope}
+                          </div>
+                        )}
+                        <p className="font-mono font-bold text-lg mt-2">{formatCurrency(co.amount)}</p>
+                        {co.status === "REJECTED" && co.rejectionReason && (
+                          <div className="mt-2 flex items-start gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                            <MessageSquare className="h-4 w-4 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-semibold block text-xs uppercase tracking-wide mb-0.5">Rejection Reason</span>
+                              {co.rejectionReason}
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      {!isGC && co.status === "PENDING_GC" && (
+                        <div className="flex flex-col gap-2 shrink-0">
+                          <Button size="sm" className="h-8 bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => handleApproveCO(co.id)}>
+                            <Check className="h-3.5 w-3.5" /> Approve
+                          </Button>
+                          <Button size="sm" variant="destructive" className="h-8 gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
+                            <X className="h-3.5 w-3.5" /> Reject
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    {!isGC && co.status === "PENDING_GC" && (
-                      <div className="flex gap-2">
-                        <Button size="icon" className="h-8 w-8 bg-green-500 hover:bg-green-600 text-white" onClick={() => handleActionCO(co.id, "approve")}>
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => handleActionCO(co.id, "reject")}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -425,16 +463,54 @@ export default function SubcontractDetail() {
       <Dialog open={coDialogOpen} onOpenChange={setCoDialogOpen} title="Create Change Order">
         <form onSubmit={handleCreateCO} className="space-y-4">
           <div>
-            <label className="text-sm font-semibold mb-1 block">Description</label>
-            <Input required placeholder="Added 3 extra outlets..." value={coDesc} onChange={e => setCoDesc(e.target.value)} />
+            <label className="text-sm font-semibold mb-1 block">
+              Change Summary <span className="text-red-500">*</span>
+            </label>
+            <Input required placeholder="e.g. Additional electrical outlets in conference room" value={coDesc} onChange={e => setCoDesc(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm font-semibold mb-1 block">Amount ($)</label>
+            <label className="text-sm font-semibold mb-1 block">
+              Full Scope of Work & Reason <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+            </label>
+            <Textarea
+              placeholder={"Describe why this change is needed and the full scope of work the sub must perform...\n\ne.g. Owner requested 6 additional duplex outlets in the main conference room due to AV equipment upgrade. Includes trenching through existing drywall, running 12/2 wire from panel 2B, installing outlets with USB ports."}
+              value={coScope}
+              onChange={e => setCoScope(e.target.value)}
+              rows={5}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
+              Amount ($) <span className="text-red-500">*</span>
+            </label>
             <Input required type="number" step="0.01" placeholder="1500.00" value={coAmount} onChange={e => setCoAmount(e.target.value)} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setCoDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={createCO.isPending}>Submit</Button>
+            <Button type="submit" isLoading={createCO.isPending}>Submit Change Order</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={rejectCODialogOpen.open} onOpenChange={(open) => !open && setRejectCODialogOpen({ open: false, id: "" })} title="Reject Change Order">
+        <form onSubmit={handleRejectCO} className="space-y-4">
+          <p className="text-sm text-muted-foreground">Optionally provide a reason for rejecting this change order. The GC will see your reason.</p>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
+              Rejection Reason <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+            </label>
+            <Textarea
+              placeholder="e.g. Scope of work is outside our agreed contract terms. Please revise and resubmit."
+              value={coRejectReason}
+              onChange={e => setCoRejectReason(e.target.value)}
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setRejectCODialogOpen({ open: false, id: "" })}>Back</Button>
+            <Button type="submit" variant="destructive" isLoading={rejectCO.isPending}>Confirm Rejection</Button>
           </div>
         </form>
       </Dialog>
