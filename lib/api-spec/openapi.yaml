@@ -640,10 +640,12 @@ components:
           enum: [GC, SUB]
         companyName:
           type: string
+        mustChangePassword:
+          type: boolean
         createdAt:
           type: string
           format: date-time
-      required: [id, email, role, companyName, createdAt]
+      required: [id, email, role, companyName, mustChangePassword, createdAt]
 
     RegisterRequest:
       type: object
