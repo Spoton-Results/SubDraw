@@ -24,9 +24,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
-  Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink,
+  Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
-  Pencil, MapPin, CalendarDays, StickyNote, Save,
+  Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -428,11 +428,10 @@ export default function ProjectDetail() {
                       <div className="flex items-center gap-2 shrink-0">
                         <a
                           href={getFileUrl(plan)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors"
+                          download={plan.fileName ?? true}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
                         >
-                          View <ExternalLink className="h-3 w-3" />
+                          <Download className="h-3.5 w-3.5" /> Download
                         </a>
                         {isGC && (
                           <Button
@@ -612,11 +611,11 @@ export default function ProjectDetail() {
                     </div>
                     <div>
                       <label className="text-sm font-semibold mb-1.5 block">
-                        Notes <span className="font-normal text-muted-foreground">(optional)</span>
+                        Scope of work notes <span className="font-normal text-muted-foreground">(optional)</span>
                       </label>
                       <textarea
                         className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none min-h-[90px]"
-                        placeholder="Describe your approach, timeline, qualifications, or any questions for the GC…"
+                        placeholder="Describe what your bid includes — scope of work, timeline, qualifications, exclusions…"
                         value={bidNotes}
                         onChange={e => setBidNotes(e.target.value)}
                       />
@@ -630,37 +629,48 @@ export default function ProjectDetail() {
                     </Button>
                   </form>
                 ) : (
-                  <div className="p-4 rounded-xl bg-secondary/50 border border-border">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Bid</p>
-                        <p className="text-3xl font-bold font-display text-primary">{formatCurrency(myBid.amount)}</p>
-                        {myBid.notes && (
-                          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{myBid.notes}</p>
-                        )}
-                      </div>
-                      <Badge
-                        variant={myBid.status === "AWARDED" ? "success" : myBid.status === "REJECTED" ? "destructive" : "warning"}
-                        className="text-sm px-3 py-1"
-                      >
-                        {myBid.status}
-                      </Badge>
-                    </div>
+                  <div className="space-y-3">
                     {myBid.status === "AWARDED" && (
-                      <p className="text-sm text-green-700 dark:text-green-400 mt-3 font-medium">
-                        Congratulations! Your bid was awarded. A subcontract has been created for this project.
-                      </p>
-                    )}
-                    {myBid.status === "PENDING" && (
-                      <p className="text-sm text-muted-foreground mt-3">
-                        Your bid is under review by the general contractor.
-                      </p>
+                      <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                        <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+                        <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                          Your bid was accepted — a subcontract has been created
+                        </p>
+                      </div>
                     )}
                     {myBid.status === "REJECTED" && (
-                      <p className="text-sm text-muted-foreground mt-3">
-                        Your bid was not selected for this project.
-                      </p>
+                      <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/60 border border-border">
+                        <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
+                        <p className="text-sm text-muted-foreground">
+                          Your bid was not selected for this project.
+                        </p>
+                      </div>
                     )}
+                    <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Submitted Bid</p>
+                          <p className="text-3xl font-bold font-display text-primary">{formatCurrency(myBid.amount)}</p>
+                          {myBid.notes && (
+                            <div className="mt-3">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Scope of Work Notes</p>
+                              <p className="text-sm text-foreground leading-relaxed">{myBid.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                        <Badge
+                          variant={myBid.status === "AWARDED" ? "success" : myBid.status === "REJECTED" ? "destructive" : "warning"}
+                          className="text-sm px-3 py-1 shrink-0"
+                        >
+                          {myBid.status === "AWARDED" ? "ACCEPTED" : myBid.status}
+                        </Badge>
+                      </div>
+                      {myBid.status === "PENDING" && (
+                        <p className="text-sm text-muted-foreground mt-3 pt-3 border-t border-border/60">
+                          Your bid is under review by the general contractor.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
