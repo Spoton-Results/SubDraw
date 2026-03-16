@@ -6,7 +6,9 @@ import { projectsTable } from "./projects";
 export const planFilesTable = pgTable("plan_files", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   projectId: text("project_id").notNull().references(() => projectsTable.id),
-  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  objectPath: text("object_path"),
+  fileUrl: text("file_url"),
   description: text("description").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

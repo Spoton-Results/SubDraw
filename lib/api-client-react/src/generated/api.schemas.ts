@@ -230,12 +230,29 @@ export interface OverrideInvoiceRequest {
 export interface PlanFile {
   id: string;
   projectId: string;
-  fileUrl: string;
+  fileName?: string | null;
+  objectPath?: string | null;
+  fileUrl?: string | null;
   description: string;
   createdAt: string;
 }
 
 export interface AddPlanFileRequest {
-  fileUrl: string;
+  objectPath: string;
+  fileName: string;
   description: string;
+}
+
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
 }

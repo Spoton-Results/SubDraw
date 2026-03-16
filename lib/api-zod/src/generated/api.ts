@@ -203,6 +203,28 @@ export const InviteSubcontractorBody = zod.object({
 });
 
 /**
+ * @summary Request a presigned URL for file upload
+ */
+
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string().min(1),
+  size: zod.number().min(1),
+  contentType: zod.string().min(1),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string().url(),
+  objectPath: zod.string(),
+});
+
+/**
+ * @summary Serve an object entity from PRIVATE_OBJECT_DIR
+ */
+export const GetStorageObjectParams = zod.object({
+  objectPath: zod.coerce.string(),
+});
+
+/**
  * @summary Get plan files for a project
  */
 export const GetProjectPlanFilesParams = zod.object({
@@ -212,7 +234,9 @@ export const GetProjectPlanFilesParams = zod.object({
 export const GetProjectPlanFilesResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
-  fileUrl: zod.string(),
+  fileName: zod.string().nullish(),
+  objectPath: zod.string().nullish(),
+  fileUrl: zod.string().nullish(),
   description: zod.string(),
   createdAt: zod.date(),
 });
@@ -228,8 +252,17 @@ export const AddPlanFileParams = zod.object({
 });
 
 export const AddPlanFileBody = zod.object({
-  fileUrl: zod.string(),
+  objectPath: zod.string(),
+  fileName: zod.string(),
   description: zod.string(),
+});
+
+/**
+ * @summary Delete a plan file (GC only)
+ */
+export const DeletePlanFileParams = zod.object({
+  projectId: zod.coerce.string(),
+  planFileId: zod.coerce.string(),
 });
 
 /**

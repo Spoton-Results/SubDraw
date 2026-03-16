@@ -9,7 +9,9 @@
 export interface PlanFile {
   id: string;
   projectId: string;
-  fileUrl: string;
+  fileName?: string | null;
+  objectPath?: string | null;
+  fileUrl?: string | null;
   description: string;
   createdAt: Date;
 }

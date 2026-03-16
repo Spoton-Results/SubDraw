@@ -1,22 +1,50 @@
 import * as React from "react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/layout";
-import { useGetProject, useGetMe, useInviteSubcontractor, useSubmitBid, useAwardBid, getGetProjectQueryKey, useGetProjectPlanFiles, useAddPlanFile } from "@workspace/api-client-react";
+import {
+  useGetProject,
+  useGetMe,
+  useInviteSubcontractor,
+  useSubmitBid,
+  useAwardBid,
+  getGetProjectQueryKey,
+  useGetProjectPlanFiles,
+  getGetProjectPlanFilesQueryKey,
+  useAddPlanFile,
+  useDeletePlanFile,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/utils";
-import { Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink, ChevronRight, Copy, Check, KeyRound } from "lucide-react";
+import {
+  Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink,
+  ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
+import { format } from "date-fns";
+import { useUpload } from "@workspace/object-storage-web";
+
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "application/octet-stream",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+];
+const ALLOWED_EXTENSIONS = /\.(pdf|png|jpg|jpeg|dwg|docx|doc)$/i;
+const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id || "";
-  
+
   const { data: user } = useGetMe();
   const { data: project, isLoading } = useGetProject(projectId);
   const queryClient = useQueryClient();
@@ -25,6 +53,7 @@ export default function ProjectDetail() {
   const submitBid = useSubmitBid();
   const awardBid = useAwardBid();
   const addPlanFile = useAddPlanFile();
+  const deletePlanFileMutation = useDeletePlanFile();
   const { data: planFiles = [], refetch: refetchPlans } = useGetProjectPlanFiles(projectId);
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
@@ -37,8 +66,18 @@ export default function ProjectDetail() {
   const [bidAmount, setBidAmount] = React.useState("");
 
   const [isPlanOpen, setIsPlanOpen] = React.useState(false);
-  const [planUrl, setPlanUrl] = React.useState("");
   const [planDescription, setPlanDescription] = React.useState("");
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [fileError, setFileError] = React.useState("");
+  const [uploadStep, setUploadStep] = React.useState<"idle" | "uploading" | "saving">("idle");
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const { uploadFile, progress, isUploading } = useUpload({
+    onError: (err) => {
+      toast.error(err.message || "Upload failed");
+      setUploadStep("idle");
+    },
+  });
 
   if (isLoading || !project || !user) {
     return <Layout><div className="animate-pulse h-64 bg-card rounded-2xl"></div></Layout>;
@@ -52,7 +91,6 @@ export default function ProjectDetail() {
     try {
       const result = await inviteSub.mutateAsync({ projectId, data: { email: inviteEmail, companyName: inviteCompanyName } });
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-
       if (result.isNewUser && result.temporaryPassword) {
         setInviteResult({ temporaryPassword: result.temporaryPassword, email: inviteEmail });
         toast.success("Account created and sub added to project!");
@@ -63,8 +101,7 @@ export default function ProjectDetail() {
         setInviteCompanyName("");
       }
     } catch (err: any) {
-      const msg = err?.data?.error || err?.message || "Failed to send invite";
-      toast.error(msg);
+      toast.error(err?.data?.error || err?.message || "Failed to send invite");
     }
   };
 
@@ -109,20 +146,82 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleAddPlan = async (e: React.FormEvent) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_EXTENSIONS.test(file.name)) {
+      setFileError("Unsupported file type. Please upload PDF, PNG, JPG, DWG, or DOCX.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setFileError("File is too large. Maximum size is 50 MB.");
+      e.target.value = "";
+      return;
+    }
+    setSelectedFile(file);
+  };
+
+  const handleUploadPlan = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFile) return toast.error("Please select a file");
+    if (!planDescription.trim()) return toast.error("Please add a description");
+
+    setUploadStep("uploading");
+    const result = await uploadFile(selectedFile);
+    if (!result) {
+      setUploadStep("idle");
+      return;
+    }
+
+    setUploadStep("saving");
     try {
-      await addPlanFile.mutateAsync({ projectId, data: { fileUrl: planUrl, description: planDescription } });
-      toast.success("Plan file added!");
-      refetchPlans();
-      setIsPlanOpen(false);
-      setPlanUrl("");
-      setPlanDescription("");
+      await addPlanFile.mutateAsync({
+        projectId,
+        data: {
+          objectPath: result.objectPath,
+          fileName: selectedFile.name,
+          description: planDescription.trim(),
+        },
+      });
+      toast.success("Plan file uploaded!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectPlanFilesQueryKey(projectId) });
+      handleClosePlanDialog();
     } catch (err: any) {
-      const msg = err?.data?.error || err?.message || "Failed to add plan file";
-      toast.error(msg);
+      toast.error(err?.data?.error || err?.message || "Failed to save plan file");
+      setUploadStep("idle");
     }
   };
+
+  const handleClosePlanDialog = () => {
+    setIsPlanOpen(false);
+    setPlanDescription("");
+    setSelectedFile(null);
+    setFileError("");
+    setUploadStep("idle");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDeletePlan = async (planFileId: string) => {
+    if (!confirm("Delete this plan file?")) return;
+    try {
+      await deletePlanFileMutation.mutateAsync({ projectId, planFileId });
+      toast.success("Plan file deleted");
+      queryClient.invalidateQueries({ queryKey: getGetProjectPlanFilesQueryKey(projectId) });
+    } catch {
+      toast.error("Failed to delete plan file");
+    }
+  };
+
+  const getFileUrl = (plan: { objectPath?: string | null; fileUrl?: string | null }) => {
+    if (plan.objectPath) return `/api/storage${plan.objectPath}`;
+    return plan.fileUrl ?? "#";
+  };
+
+  const uploadProgressDisplay = uploadStep === "uploading" ? progress : uploadStep === "saving" ? 100 : 0;
+  const uploadStatusText = uploadStep === "uploading" ? `Uploading… ${progress}%` : uploadStep === "saving" ? "Saving…" : "";
+  const isSubmitting = uploadStep !== "idle";
 
   return (
     <Layout>
@@ -130,7 +229,7 @@ export default function ProjectDetail() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold font-display">{project.name}</h1>
-            <Badge variant={project.status === 'ACTIVE' ? 'success' : project.status === 'BIDDING' ? 'default' : 'secondary'}>
+            <Badge variant={project.status === "ACTIVE" ? "success" : project.status === "BIDDING" ? "default" : "secondary"}>
               {project.status}
             </Badge>
           </div>
@@ -138,7 +237,7 @@ export default function ProjectDetail() {
             <Building className="h-4 w-4" /> {project.gc?.companyName}
           </p>
         </div>
-        
+
         {isGC && project.status === "BIDDING" && (
           <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
             <Mail className="h-5 w-5" />
@@ -166,7 +265,7 @@ export default function ProjectDetail() {
                 </CardTitle>
                 {isGC && project.status === "BIDDING" && (
                   <Button size="sm" variant="outline" onClick={() => setIsPlanOpen(true)} className="gap-1.5">
-                    <Plus className="h-4 w-4" /> Add Plan
+                    <Upload className="h-4 w-4" /> Upload Plan
                   </Button>
                 )}
               </div>
@@ -177,19 +276,41 @@ export default function ProjectDetail() {
               ) : (
                 <ul className="divide-y divide-border">
                   {planFiles.map((plan) => (
-                    <li key={plan.id} className="flex items-center justify-between py-3 gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm font-medium truncate">{plan.description}</span>
+                    <li key={plan.id} className="flex items-start justify-between py-4 gap-4">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                          <FileText className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{plan.fileName ?? "Unnamed file"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{plan.description}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <Calendar className="h-3 w-3" />
+                            {format(new Date(plan.createdAt), "MMM d, yyyy")}
+                          </div>
+                        </div>
                       </div>
-                      <a
-                        href={plan.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-primary hover:underline shrink-0"
-                      >
-                        View <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href={getFileUrl(plan)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors"
+                        >
+                          View <ExternalLink className="h-3 w-3" />
+                        </a>
+                        {isGC && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeletePlan(plan.id)}
+                            disabled={deletePlanFileMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -213,18 +334,18 @@ export default function ProjectDetail() {
                     {project.subcontracts
                       ?.filter(s => isGC || s.subId === user.id)
                       .map(sub => (
-                      <Link key={sub.id} href={`/subcontracts/${sub.id}`}>
-                        <div className="p-4 rounded-xl border border-border bg-background hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
-                          <div>
-                            <p className="font-bold group-hover:text-primary transition-colors">{sub.sub?.companyName}</p>
-                            <p className="text-sm text-muted-foreground mt-1">Base: {formatCurrency(sub.baseContractAmount)}</p>
+                        <Link key={sub.id} href={`/subcontracts/${sub.id}`}>
+                          <div className="p-4 rounded-xl border border-border bg-background hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
+                            <div>
+                              <p className="font-bold group-hover:text-primary transition-colors">{sub.sub?.companyName}</p>
+                              <p className="text-sm text-muted-foreground mt-1">Base: {formatCurrency(sub.baseContractAmount)}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="group-hover:bg-primary/10">
+                              <ChevronRight className="h-5 w-5" />
+                            </Button>
                           </div>
-                          <Button variant="ghost" size="icon" className="group-hover:bg-primary/10">
-                            <ChevronRight className="h-5 w-5" />
-                          </Button>
-                        </div>
-                      </Link>
-                    ))}
+                        </Link>
+                      ))}
                   </div>
                 )}
               </CardContent>
@@ -246,33 +367,33 @@ export default function ProjectDetail() {
                   {project.bids
                     ?.filter(b => isGC || b.subId === user.id)
                     .map(bid => (
-                    <div key={bid.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/50 border border-border gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-bold">{isGC ? bid.sub?.companyName : "Your Bid"}</p>
-                          <Badge variant={
-                            bid.status === "AWARDED" ? "success" : 
-                            bid.status === "REJECTED" ? "destructive" : "warning"
-                          }>{bid.status}</Badge>
+                      <div key={bid.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/50 border border-border gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-bold">{isGC ? bid.sub?.companyName : "Your Bid"}</p>
+                            <Badge variant={
+                              bid.status === "AWARDED" ? "success" :
+                              bid.status === "REJECTED" ? "destructive" : "warning"
+                            }>{bid.status}</Badge>
+                          </div>
+                          <p className="text-2xl font-bold font-display text-primary">{formatCurrency(bid.amount)}</p>
                         </div>
-                        <p className="text-2xl font-bold font-display text-primary">{formatCurrency(bid.amount)}</p>
+
+                        {isGC && bid.status === "PENDING" && project.status === "BIDDING" && (
+                          <Button
+                            onClick={() => handleAward(bid.id)}
+                            className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20"
+                          >
+                            <Award className="h-4 w-4 mr-2" /> Award
+                          </Button>
+                        )}
                       </div>
-                      
-                      {isGC && bid.status === "PENDING" && project.status === "BIDDING" && (
-                        <Button 
-                          onClick={() => handleAward(bid.id)} 
-                          className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20"
-                        >
-                          <Award className="h-4 w-4 mr-2" /> Award
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </CardContent>
           </Card>
-          
+
         </div>
 
         {/* MEMBERS SIDEBAR */}
@@ -331,13 +452,7 @@ export default function ProjectDetail() {
                     <code className="font-mono font-bold text-base bg-background border border-border px-2 py-0.5 rounded-md">
                       {inviteResult.temporaryPassword}
                     </code>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={handleCopyPassword}
-                    >
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopyPassword}>
                       {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
@@ -355,23 +470,11 @@ export default function ProjectDetail() {
           <form onSubmit={handleInvite} className="space-y-4 mt-4">
             <div>
               <label className="text-sm font-semibold mb-1 block">Email Address</label>
-              <Input 
-                type="email"
-                required
-                placeholder="sub@example.com" 
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-              />
+              <Input type="email" required placeholder="sub@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
             </div>
             <div>
               <label className="text-sm font-semibold mb-1 block">Company Name</label>
-              <Input 
-                type="text"
-                required
-                placeholder="ABC Electric LLC" 
-                value={inviteCompanyName}
-                onChange={e => setInviteCompanyName(e.target.value)}
-              />
+              <Input type="text" required placeholder="ABC Electric LLC" value={inviteCompanyName} onChange={e => setInviteCompanyName(e.target.value)} />
             </div>
             <p className="text-xs text-muted-foreground">
               If this subcontractor isn't in the system yet, an account will be created with a secure temporary password that you'll be able to share with them.
@@ -384,32 +487,71 @@ export default function ProjectDetail() {
         )}
       </Dialog>
 
-      {/* Add Plan File Dialog */}
-      <Dialog open={isPlanOpen} onOpenChange={setIsPlanOpen} title="Add Site Plan" description="Paste a URL to the plan document and add a brief description. Subcontractors will be able to view this before submitting their bid.">
-        <form onSubmit={handleAddPlan} className="space-y-4 mt-4">
+      {/* Upload Plan File Dialog */}
+      <Dialog
+        open={isPlanOpen}
+        onOpenChange={(open) => { if (!open && !isSubmitting) handleClosePlanDialog(); }}
+        title="Upload Site Plan"
+        description="Select a file from your device and add a brief description. PDF, PNG, JPG, DWG, and DOCX files up to 50 MB are supported."
+      >
+        <form onSubmit={handleUploadPlan} className="space-y-4 mt-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">Description</label>
             <Input
               type="text"
               required
-              placeholder="e.g. Architectural Floor Plan - Level 1"
+              placeholder="e.g. Architectural Floor Plan – Level 1"
               value={planDescription}
               onChange={e => setPlanDescription(e.target.value)}
+              disabled={isSubmitting}
             />
           </div>
+
           <div>
-            <label className="text-sm font-semibold mb-1 block">File URL</label>
-            <Input
-              type="url"
-              required
-              placeholder="https://example.com/plans/floor-plan.pdf"
-              value={planUrl}
-              onChange={e => setPlanUrl(e.target.value)}
-            />
+            <label className="text-sm font-semibold mb-1 block">File</label>
+            <div
+              className="relative border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
+              onClick={() => !isSubmitting && fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
+                onChange={handleFileSelect}
+                disabled={isSubmitting}
+              />
+              {selectedFile ? (
+                <div className="flex items-center justify-center gap-2 text-sm">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <span className="font-medium truncate max-w-xs">{selectedFile.name}</span>
+                  <span className="text-muted-foreground shrink-0">
+                    ({(selectedFile.size / 1024 / 1024).toFixed(1)} MB)
+                  </span>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">
+                  <Upload className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-medium">Click to browse files</p>
+                  <p className="text-xs mt-1">PDF, PNG, JPG, DWG, DOCX · max 50 MB</p>
+                </div>
+              )}
+            </div>
+            {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
           </div>
+
+          {isSubmitting && (
+            <div className="space-y-1.5">
+              <Progress value={uploadProgressDisplay} className="h-2" />
+              <p className="text-xs text-muted-foreground text-center">{uploadStatusText}</p>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setIsPlanOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={addPlanFile.isPending}>Add Plan</Button>
+            <Button type="button" variant="ghost" onClick={handleClosePlanDialog} disabled={isSubmitting}>Cancel</Button>
+            <Button type="submit" isLoading={isSubmitting} disabled={!selectedFile || isSubmitting} className="gap-2">
+              <Upload className="h-4 w-4" /> Upload
+            </Button>
           </div>
         </form>
       </Dialog>
@@ -419,14 +561,7 @@ export default function ProjectDetail() {
         <form onSubmit={handleBidSubmit} className="space-y-4 mt-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">Bid Amount ($)</label>
-            <Input 
-              type="number"
-              step="0.01"
-              required
-              placeholder="50000.00" 
-              value={bidAmount}
-              onChange={e => setBidAmount(e.target.value)}
-            />
+            <Input type="number" step="0.01" required placeholder="50000.00" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setIsBidOpen(false)}>Cancel</Button>

@@ -7,6 +7,7 @@
  */
 
 export interface AddPlanFileRequest {
-  fileUrl: string;
+  objectPath: string;
+  fileName: string;
   description: string;
 }
