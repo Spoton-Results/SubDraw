@@ -819,6 +819,19 @@ components:
           $ref: "#/components/schemas/User"
       required: [user]
 
+    ProjectFinancialSummary:
+      type: object
+      properties:
+        subcontractCount:
+          type: number
+        totalApprovedAmount:
+          type: number
+        totalInvoiced:
+          type: number
+        hasFlaggedInvoices:
+          type: boolean
+      required: [subcontractCount, totalApprovedAmount, totalInvoiced, hasFlaggedInvoices]
+
     Project:
       type: object
       properties:
@@ -836,6 +849,8 @@ components:
           format: date-time
         gc:
           $ref: "#/components/schemas/User"
+        financialSummary:
+          $ref: "#/components/schemas/ProjectFinancialSummary"
       required: [id, name, gcId, status, createdAt, gc]
 
     ProjectDetail:
@@ -946,6 +961,8 @@ components:
           $ref: "#/components/schemas/Project"
         sub:
           $ref: "#/components/schemas/User"
+        scoreboard:
+          $ref: "#/components/schemas/Scoreboard"
       required: [id, projectId, subId, baseContractAmount, createdAt, project, sub]
 
     Scoreboard:
@@ -961,7 +978,12 @@ components:
           type: number
         remaining:
           type: number
-      required: [base, coTotal, currentApprovedTotal, invoicedTotal, remaining]
+        hasFlaggedInvoices:
+          type: boolean
+        lastInvoice:
+          nullable: true
+          $ref: "#/components/schemas/Invoice"
+      required: [base, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices]
 
     SubcontractDetail:
       type: object

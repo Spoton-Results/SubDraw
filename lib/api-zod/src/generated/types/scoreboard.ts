@@ -5,6 +5,7 @@
  * SubTracker API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Invoice } from "./invoice";
 
 export interface Scoreboard {
   base: number;
@@ -12,4 +13,6 @@ export interface Scoreboard {
   currentApprovedTotal: number;
   invoicedTotal: number;
   remaining: number;
+  hasFlaggedInvoices: boolean;
+  lastInvoice?: Invoice | null;
 }

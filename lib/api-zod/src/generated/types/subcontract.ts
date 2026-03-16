@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Project } from "./project";
+import type { Scoreboard } from "./scoreboard";
 import type { User } from "./user";
 
 export interface Subcontract {
@@ -16,4 +17,5 @@ export interface Subcontract {
   createdAt: Date;
   project: Project;
   sub: User;
+  scoreboard?: Scoreboard;
 }

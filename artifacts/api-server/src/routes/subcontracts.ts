@@ -25,7 +25,10 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
   const currentApprovedTotal = baseContractAmount + coTotal;
   const invoicedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
   const remaining = currentApprovedTotal - invoicedTotal;
-  return { base: baseContractAmount, coTotal, currentApprovedTotal, invoicedTotal, remaining };
+  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED");
+  const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const lastInvoice = sortedInvs[0] ?? null;
+  return { base: baseContractAmount, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
 }
 
 async function getSubcontractWithRelations(sc: any) {

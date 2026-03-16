@@ -91,6 +91,14 @@ export const GetProjectsResponseItem = zod.object({
     mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
+  financialSummary: zod
+    .object({
+      subcontractCount: zod.number(),
+      totalApprovedAmount: zod.number(),
+      totalInvoiced: zod.number(),
+      hasFlaggedInvoices: zod.boolean(),
+    })
+    .optional(),
 });
 export const GetProjectsResponse = zod.array(GetProjectsResponseItem);
 
@@ -177,6 +185,14 @@ export const GetProjectResponse = zod.object({
           mustChangePassword: zod.boolean(),
           createdAt: zod.date(),
         }),
+        financialSummary: zod
+          .object({
+            subcontractCount: zod.number(),
+            totalApprovedAmount: zod.number(),
+            totalInvoiced: zod.number(),
+            hasFlaggedInvoices: zod.boolean(),
+          })
+          .optional(),
       }),
       sub: zod.object({
         id: zod.string(),
@@ -186,6 +202,27 @@ export const GetProjectResponse = zod.object({
         mustChangePassword: zod.boolean(),
         createdAt: zod.date(),
       }),
+      scoreboard: zod
+        .object({
+          base: zod.number(),
+          coTotal: zod.number(),
+          currentApprovedTotal: zod.number(),
+          invoicedTotal: zod.number(),
+          remaining: zod.number(),
+          hasFlaggedInvoices: zod.boolean(),
+          lastInvoice: zod
+            .object({
+              id: zod.string(),
+              subcontractId: zod.string(),
+              amount: zod.number(),
+              status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
+              flaggedOverAmount: zod.number(),
+              overrideReason: zod.string().nullish(),
+              createdAt: zod.date(),
+            })
+            .nullish(),
+        })
+        .optional(),
     }),
   ),
 });
@@ -332,6 +369,14 @@ export const GetSubcontractsResponseItem = zod.object({
       mustChangePassword: zod.boolean(),
       createdAt: zod.date(),
     }),
+    financialSummary: zod
+      .object({
+        subcontractCount: zod.number(),
+        totalApprovedAmount: zod.number(),
+        totalInvoiced: zod.number(),
+        hasFlaggedInvoices: zod.boolean(),
+      })
+      .optional(),
   }),
   sub: zod.object({
     id: zod.string(),
@@ -341,6 +386,27 @@ export const GetSubcontractsResponseItem = zod.object({
     mustChangePassword: zod.boolean(),
     createdAt: zod.date(),
   }),
+  scoreboard: zod
+    .object({
+      base: zod.number(),
+      coTotal: zod.number(),
+      currentApprovedTotal: zod.number(),
+      invoicedTotal: zod.number(),
+      remaining: zod.number(),
+      hasFlaggedInvoices: zod.boolean(),
+      lastInvoice: zod
+        .object({
+          id: zod.string(),
+          subcontractId: zod.string(),
+          amount: zod.number(),
+          status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
+          flaggedOverAmount: zod.number(),
+          overrideReason: zod.string().nullish(),
+          createdAt: zod.date(),
+        })
+        .nullish(),
+    })
+    .optional(),
 });
 export const GetSubcontractsResponse = zod.array(GetSubcontractsResponseItem);
 
@@ -371,6 +437,14 @@ export const GetSubcontractResponse = zod.object({
       mustChangePassword: zod.boolean(),
       createdAt: zod.date(),
     }),
+    financialSummary: zod
+      .object({
+        subcontractCount: zod.number(),
+        totalApprovedAmount: zod.number(),
+        totalInvoiced: zod.number(),
+        hasFlaggedInvoices: zod.boolean(),
+      })
+      .optional(),
   }),
   sub: zod.object({
     id: zod.string(),
@@ -407,6 +481,18 @@ export const GetSubcontractResponse = zod.object({
     currentApprovedTotal: zod.number(),
     invoicedTotal: zod.number(),
     remaining: zod.number(),
+    hasFlaggedInvoices: zod.boolean(),
+    lastInvoice: zod
+      .object({
+        id: zod.string(),
+        subcontractId: zod.string(),
+        amount: zod.number(),
+        status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
+        flaggedOverAmount: zod.number(),
+        overrideReason: zod.string().nullish(),
+        createdAt: zod.date(),
+      })
+      .nullish(),
   }),
 });
 

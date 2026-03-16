@@ -20,10 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import {
   Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink,
-  ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar,
+  ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -326,28 +326,93 @@ export default function ProjectDetail() {
                   <FileSignature className="h-5 w-5 text-primary" /> Active Subcontracts
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 {(project.subcontracts?.length ?? 0) === 0 ? (
-                  <p className="text-muted-foreground py-4">No subcontracts awarded yet.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {project.subcontracts
-                      ?.filter(s => isGC || s.subId === user.id)
-                      .map(sub => (
-                        <Link key={sub.id} href={`/subcontracts/${sub.id}`}>
-                          <div className="p-4 rounded-xl border border-border bg-background hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group">
-                            <div>
-                              <p className="font-bold group-hover:text-primary transition-colors">{sub.sub?.companyName}</p>
-                              <p className="text-sm text-muted-foreground mt-1">Base: {formatCurrency(sub.baseContractAmount)}</p>
-                            </div>
-                            <Button variant="ghost" size="icon" className="group-hover:bg-primary/10">
-                              <ChevronRight className="h-5 w-5" />
-                            </Button>
-                          </div>
-                        </Link>
-                      ))}
-                  </div>
-                )}
+                  <p className="text-muted-foreground py-6 px-6">No subcontracts awarded yet.</p>
+                ) : (() => {
+                  const visible = project.subcontracts?.filter(s => isGC || s.subId === user.id) ?? [];
+                  const totals = visible.reduce(
+                    (acc, s) => {
+                      const sb = s.scoreboard;
+                      return {
+                        base: acc.base + (sb?.base ?? s.baseContractAmount),
+                        coTotal: acc.coTotal + (sb?.coTotal ?? 0),
+                        approved: acc.approved + (sb?.currentApprovedTotal ?? s.baseContractAmount),
+                        invoiced: acc.invoiced + (sb?.invoicedTotal ?? 0),
+                        remaining: acc.remaining + (sb?.remaining ?? s.baseContractAmount),
+                      };
+                    },
+                    { base: 0, coTotal: 0, approved: 0, invoiced: 0, remaining: 0 }
+                  );
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Invoiced</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Remaining</th>
+                            <th className="px-4 py-3"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {visible.map(sub => {
+                            const sb = sub.scoreboard;
+                            const remaining = sb?.remaining ?? sub.baseContractAmount;
+                            const hasFlagged = (sb as any)?.hasFlaggedInvoices as boolean | undefined;
+                            const isNeg = remaining < 0 || hasFlagged;
+                            return (
+                              <tr key={sub.id} className="hover:bg-muted/30 transition-colors group">
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold group-hover:text-primary transition-colors">{sub.sub?.companyName}</span>
+                                    {hasFlagged && (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
+                                        <AlertTriangle className="h-2.5 w-2.5" /> Flagged
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
+                                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
+                                <td className="px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
+                                <td className="px-4 py-3 text-right font-mono">{formatCurrency(sb?.invoicedTotal ?? 0)}</td>
+                                <td className={cn("px-4 py-3 text-right font-mono font-semibold", isNeg ? "text-red-600" : "text-green-600")}>
+                                  {formatCurrency(remaining)}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <Link href={`/subcontracts/${sub.id}`}>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 group-hover:bg-primary/10">
+                                      <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        {visible.length > 1 && (
+                          <tfoot>
+                            <tr className="border-t-2 border-border bg-muted/50 font-bold">
+                              <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
+                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
+                              <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
+                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>
+                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.invoiced)}</td>
+                              <td className={cn("px-4 py-3 text-right font-mono", totals.remaining < 0 ? "text-red-600" : "text-green-600")}>
+                                {formatCurrency(totals.remaining)}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           )}

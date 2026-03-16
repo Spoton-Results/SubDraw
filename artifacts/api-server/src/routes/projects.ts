@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable } from "@workspace/db/schema";
 import { eq, or, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
@@ -15,6 +15,40 @@ function generateTempPassword(length = 10): string {
     password += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return password;
+}
+
+async function computeSubcontractScoreboard(subcontractId: string, baseContractAmount: number) {
+  const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
+  const invs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, subcontractId));
+
+  const coTotal = cos.filter(c => c.status === "APPROVED").reduce((s, c) => s + c.amount, 0);
+  const currentApprovedTotal = baseContractAmount + coTotal;
+  const invoicedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
+  const remaining = currentApprovedTotal - invoicedTotal;
+  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED");
+
+  const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const lastInvoice = sortedInvs[0] ?? null;
+
+  return { base: baseContractAmount, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
+}
+
+async function getProjectFinancialSummary(projectId: string) {
+  const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
+  if (subcontracts.length === 0) {
+    return { subcontractCount: 0, totalApprovedAmount: 0, totalInvoiced: 0, hasFlaggedInvoices: false };
+  }
+
+  const scoreboards = await Promise.all(
+    subcontracts.map(sc => computeSubcontractScoreboard(sc.id, sc.baseContractAmount))
+  );
+
+  return {
+    subcontractCount: subcontracts.length,
+    totalApprovedAmount: scoreboards.reduce((s, sb) => s + sb.currentApprovedTotal, 0),
+    totalInvoiced: scoreboards.reduce((s, sb) => s + sb.invoicedTotal, 0),
+    hasFlaggedInvoices: scoreboards.some(sb => sb.hasFlaggedInvoices),
+  };
 }
 
 async function getProjectWithDetails(projectId: string) {
@@ -38,7 +72,8 @@ async function getProjectWithDetails(projectId: string) {
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
   const subcontractsWithDetails = await Promise.all(subcontracts.map(async (sc) => {
     const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
-    return { ...sc, project: { ...project, gc }, sub };
+    const scoreboard = await computeSubcontractScoreboard(sc.id, sc.baseContractAmount);
+    return { ...sc, project: { ...project, gc }, sub, scoreboard };
   }));
 
   return { ...project, gc, members: membersWithUsers, bids: bidsWithSubs, subcontracts: subcontractsWithDetails };
@@ -52,7 +87,8 @@ router.get("/", requireAuth, async (req, res) => {
     const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, user.id));
     projects = await Promise.all(gcProjects.map(async (p) => {
       const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
-      return { ...p, gc };
+      const financialSummary = await getProjectFinancialSummary(p.id);
+      return { ...p, gc, financialSummary };
     }));
   } else {
     const memberships = await db.select({ projectId: projectMembersTable.projectId }).from(projectMembersTable).where(eq(projectMembersTable.userId, user.id));
@@ -142,7 +178,6 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
 
   await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
 
-  // Send invite email (best-effort — don't fail the request if email fails)
   if (isNewUser && temporaryPassword) {
     const appUrl = process.env.APP_URL || `https://${req.hostname}`;
     sendInviteEmail({

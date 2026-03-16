@@ -28,6 +28,7 @@ export * from "./planFile";
 export * from "./project";
 export * from "./projectDetail";
 export * from "./projectDetailStatus";
+export * from "./projectFinancialSummary";
 export * from "./projectMember";
 export * from "./projectStatus";
 export * from "./registerRequest";

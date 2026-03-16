@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, Receipt } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
 export default function Dashboard() {
@@ -17,14 +18,13 @@ export default function Dashboard() {
   const { data: projects, isLoading } = useGetProjects();
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
-  
+
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [newProjectName, setNewProjectName] = React.useState("");
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
-    
     try {
       await createProject.mutateAsync({ data: { name: newProjectName } });
       toast.success("Project created!");
@@ -37,13 +37,15 @@ export default function Dashboard() {
   };
 
   const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'BIDDING': return 'default';
-      case 'ACTIVE': return 'success';
-      case 'CLOSED': return 'secondary';
-      default: return 'outline';
+    switch (status) {
+      case "BIDDING": return "default";
+      case "ACTIVE": return "success";
+      case "CLOSED": return "secondary";
+      default: return "outline";
     }
   };
+
+  const isGC = user?.role === "GC";
 
   return (
     <Layout>
@@ -52,7 +54,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
           <p className="text-muted-foreground mt-1">Manage your active bids and subcontracts</p>
         </div>
-        {user?.role === "GC" && (
+        {isGC && (
           <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
             <Plus className="h-5 w-5" />
             New Project
@@ -62,7 +64,7 @@ export default function Dashboard() {
 
       {isLoading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1,2,3].map(i => (
+          {[1, 2, 3].map(i => (
             <Card key={i} className="animate-pulse h-48 bg-card/50" />
           ))}
         </div>
@@ -71,43 +73,93 @@ export default function Dashboard() {
           <Briefcase className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
           <h3 className="text-xl font-bold mb-2">No projects yet</h3>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            {user?.role === "GC" 
+            {isGC
               ? "Create your first project to start inviting subcontractors."
               : "You haven't been invited to any projects yet."}
           </p>
-          {user?.role === "GC" && (
+          {isGC && (
             <Button onClick={() => setIsCreateOpen(true)}>Create Project</Button>
           )}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects?.map(project => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <Card className="h-full hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 transition-all duration-300 cursor-pointer group">
-                <CardContent className="p-6 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="bg-primary/10 p-3 rounded-xl text-primary">
-                      <Briefcase className="h-6 w-6" />
+          {projects?.map(project => {
+            const fs = (project as any).financialSummary as {
+              subcontractCount: number;
+              totalApprovedAmount: number;
+              totalInvoiced: number;
+              hasFlaggedInvoices: boolean;
+            } | undefined;
+
+            return (
+              <Link key={project.id} href={`/projects/${project.id}`}>
+                <Card className="h-full hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 transition-all duration-300 cursor-pointer group">
+                  <CardContent className="p-6 flex flex-col h-full">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="bg-primary/10 p-3 rounded-xl text-primary">
+                        <Briefcase className="h-6 w-6" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isGC && fs?.hasFlaggedInvoices && (
+                          <Badge variant="destructive" className="gap-1 text-xs">
+                            <AlertTriangle className="h-3 w-3" /> Flagged
+                          </Badge>
+                        )}
+                        <Badge variant={getStatusColor(project.status) as any}>
+                          {project.status}
+                        </Badge>
+                      </div>
                     </div>
-                    <Badge variant={getStatusColor(project.status) as any}>
-                      {project.status}
-                    </Badge>
-                  </div>
-                  <h3 className="text-xl font-bold font-display mb-2 group-hover:text-primary transition-colors line-clamp-1">{project.name}</h3>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                    <Building2 className="h-4 w-4" />
-                    <span className="truncate">{project.gc.companyName}</span>
-                  </div>
-                  <div className="mt-auto pt-4 border-t border-border flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {format(new Date(project.createdAt), 'MMM d, yyyy')}
-                    </span>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+
+                    <h3 className="text-xl font-bold font-display mb-1 group-hover:text-primary transition-colors line-clamp-1">
+                      {project.name}
+                    </h3>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                      <Building2 className="h-4 w-4" />
+                      <span className="truncate">{project.gc.companyName}</span>
+                    </div>
+
+                    {isGC && fs && (
+                      <div className="grid grid-cols-3 gap-2 mb-4 p-3 bg-muted/40 rounded-xl border border-border/50">
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                            <FileSignature className="h-3 w-3" />
+                            <span className="text-xs">Subs</span>
+                          </div>
+                          <p className="text-lg font-bold font-mono">{fs.subcontractCount}</p>
+                        </div>
+                        <div className="text-center border-x border-border/50">
+                          <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                            <DollarSign className="h-3 w-3" />
+                            <span className="text-xs">Approved</span>
+                          </div>
+                          <p className="text-sm font-bold font-mono text-foreground leading-tight">
+                            {formatCurrency(fs.totalApprovedAmount)}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                            <Receipt className="h-3 w-3" />
+                            <span className="text-xs">Invoiced</span>
+                          </div>
+                          <p className="text-sm font-bold font-mono text-foreground leading-tight">
+                            {formatCurrency(fs.totalInvoiced)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-auto pt-4 border-t border-border flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {format(new Date(project.createdAt), "MMM d, yyyy")}
+                      </span>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
 
@@ -115,9 +167,9 @@ export default function Dashboard() {
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">Project Name</label>
-            <Input 
+            <Input
               autoFocus
-              placeholder="e.g. Downtown Office Renovation" 
+              placeholder="e.g. Downtown Office Renovation"
               value={newProjectName}
               onChange={e => setNewProjectName(e.target.value)}
             />

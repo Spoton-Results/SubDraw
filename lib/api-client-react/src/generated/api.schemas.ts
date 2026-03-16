@@ -68,6 +68,13 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface ProjectFinancialSummary {
+  subcontractCount: number;
+  totalApprovedAmount: number;
+  totalInvoiced: number;
+  hasFlaggedInvoices: boolean;
+}
+
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
 
 export const ProjectStatus = {
@@ -83,6 +90,7 @@ export interface Project {
   status: ProjectStatus;
   createdAt: string;
   gc: User;
+  financialSummary?: ProjectFinancialSummary;
 }
 
 export type ProjectDetailStatus =
@@ -120,6 +128,35 @@ export interface Bid {
   sub: User;
 }
 
+export type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
+
+export const InvoiceStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  FLAGGED: "FLAGGED",
+} as const;
+
+export interface Invoice {
+  id: string;
+  subcontractId: string;
+  amount: number;
+  status: InvoiceStatus;
+  flaggedOverAmount: number;
+  overrideReason?: string | null;
+  createdAt: string;
+}
+
+export interface Scoreboard {
+  base: number;
+  coTotal: number;
+  currentApprovedTotal: number;
+  invoicedTotal: number;
+  remaining: number;
+  hasFlaggedInvoices: boolean;
+  lastInvoice?: Invoice | null;
+}
+
 export interface Subcontract {
   id: string;
   projectId: string;
@@ -128,6 +165,7 @@ export interface Subcontract {
   createdAt: string;
   project: Project;
   sub: User;
+  scoreboard?: Scoreboard;
 }
 
 export interface ProjectDetail {
@@ -155,14 +193,6 @@ export interface SubmitBidRequest {
   amount: number;
 }
 
-export interface Scoreboard {
-  base: number;
-  coTotal: number;
-  currentApprovedTotal: number;
-  invoicedTotal: number;
-  remaining: number;
-}
-
 export type ChangeOrderStatus =
   (typeof ChangeOrderStatus)[keyof typeof ChangeOrderStatus];
 
@@ -179,25 +209,6 @@ export interface ChangeOrder {
   description: string;
   amount: number;
   status: ChangeOrderStatus;
-  createdAt: string;
-}
-
-export type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
-
-export const InvoiceStatus = {
-  PENDING: "PENDING",
-  APPROVED: "APPROVED",
-  REJECTED: "REJECTED",
-  FLAGGED: "FLAGGED",
-} as const;
-
-export interface Invoice {
-  id: string;
-  subcontractId: string;
-  amount: number;
-  status: InvoiceStatus;
-  flaggedOverAmount: number;
-  overrideReason?: string | null;
   createdAt: string;
 }
 
