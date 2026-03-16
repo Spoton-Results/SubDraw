@@ -5,6 +5,7 @@ import {
   useGetSubcontract, useGetMe,
   useCreateChangeOrder, useApproveChangeOrder, useRejectChangeOrder,
   useSubmitInvoice, useApproveInvoice, useRejectInvoice, useOverrideInvoice,
+  useDeleteInvoice,
   getGetSubcontractQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,7 +17,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrency, cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle, Activity, Receipt, TrendingUp } from "lucide-react";
+import {
+  ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
+  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function SubcontractDetail() {
@@ -35,16 +39,21 @@ export default function SubcontractDetail() {
   const approveInv = useApproveInvoice();
   const rejectInv = useRejectInvoice();
   const overrideInv = useOverrideInvoice();
+  const deleteInv = useDeleteInvoice();
 
   const [coDialogOpen, setCoDialogOpen] = React.useState(false);
   const [coDesc, setCoDesc] = React.useState("");
   const [coAmount, setCoAmount] = React.useState("");
 
   const [invDialogOpen, setInvDialogOpen] = React.useState(false);
+  const [invNumber, setInvNumber] = React.useState("");
   const [invAmount, setInvAmount] = React.useState("");
+  const [invDescription, setInvDescription] = React.useState("");
 
   const [overrideDialogOpen, setOverrideDialogOpen] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [overrideReason, setOverrideReason] = React.useState("");
+
+  const [cancelConfirm, setCancelConfirm] = React.useState<string | null>(null);
 
   if (isLoading || !sub || !user) {
     return <Layout><div className="animate-pulse h-64 bg-card rounded-2xl"></div></Layout>;
@@ -59,6 +68,11 @@ export default function SubcontractDetail() {
     ? Math.min(100, Math.round((sb.invoicedTotal / sb.currentApprovedTotal) * 100))
     : 0;
   const isOverBudget = sb.remaining < 0 || hasFlagged;
+
+  const flaggedInvoices = sub.invoices.filter(i => i.status === "FLAGGED");
+  const sortedInvoices = [...sub.invoices].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   const handleCreateCO = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,12 +100,16 @@ export default function SubcontractDetail() {
     e.preventDefault();
     const amount = parseFloat(invAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Invalid amount");
+    if (!invNumber.trim()) return toast.error("Invoice number is required");
     try {
-      await submitInv.mutateAsync({ subcontractId, data: { amount } });
+      await submitInv.mutateAsync({
+        subcontractId,
+        data: { invoiceNumber: invNumber.trim(), amount, description: invDescription.trim() || undefined },
+      });
       toast.success("Invoice submitted");
       queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
       setInvDialogOpen(false);
-      setInvAmount("");
+      setInvNumber(""); setInvAmount(""); setInvDescription("");
     } catch { toast.error("Failed to submit invoice"); }
   };
 
@@ -116,6 +134,15 @@ export default function SubcontractDetail() {
     } catch { toast.error("Override failed"); }
   };
 
+  const handleCancelInvoice = async (id: string) => {
+    try {
+      await deleteInv.mutateAsync({ subcontractId, invoiceId: id });
+      toast.success("Invoice cancelled");
+      queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
+      setCancelConfirm(null);
+    } catch { toast.error("Failed to cancel invoice"); }
+  };
+
   const getCOStatusBadge = (s: string) => {
     if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
@@ -125,7 +152,7 @@ export default function SubcontractDetail() {
   const getInvStatusBadge = (s: string) => {
     if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
-    if (s === "FLAGGED") return <Badge variant="warning" className="bg-orange-500">Flagged</Badge>;
+    if (s === "FLAGGED") return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Flagged</Badge>;
     return <Badge variant="warning">Pending</Badge>;
   };
 
@@ -157,17 +184,12 @@ export default function SubcontractDetail() {
         />
       </div>
 
-      {/* PROGRESS BAR + LAST INVOICE */}
-      <div className="bg-card border border-border/50 rounded-2xl p-5 mb-10 space-y-4 shadow-sm">
+      {/* PROGRESS BAR */}
+      <div className="bg-card border border-border/50 rounded-2xl p-5 mb-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold text-muted-foreground">Invoice Progress</span>
-            {hasFlagged && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-2 py-0.5 rounded-full">
-                <AlertTriangle className="h-3 w-3" /> Flagged Invoice
-              </span>
-            )}
           </div>
           <span className={cn(
             "text-sm font-bold tabular-nums",
@@ -184,7 +206,6 @@ export default function SubcontractDetail() {
           <span>{formatCurrency(sb.invoicedTotal)} invoiced</span>
           <span>{formatCurrency(sb.currentApprovedTotal)} approved total</span>
         </div>
-
         {lastInvoice && (
           <div className="flex items-center gap-3 pt-2 border-t border-border">
             <Receipt className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -196,10 +217,39 @@ export default function SubcontractDetail() {
         )}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-8">
+      {/* FLAGGED INVOICES BANNER */}
+      {flaggedInvoices.length > 0 && (
+        <div className="rounded-2xl border-2 border-red-500 bg-red-50 dark:bg-red-950/30 p-5 mb-8 flex items-start gap-4">
+          <div className="bg-red-100 dark:bg-red-900/40 rounded-xl p-2 shrink-0">
+            <AlertTriangle className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-red-700 dark:text-red-400 text-lg mb-2">
+              {flaggedInvoices.length === 1 ? "Invoice Flagged for Review" : `${flaggedInvoices.length} Invoices Flagged for Review`}
+            </h3>
+            <div className="space-y-2">
+              {flaggedInvoices.map(inv => (
+                <div key={inv.id} className="text-sm text-red-700 dark:text-red-300 bg-red-100/60 dark:bg-red-900/30 rounded-lg px-4 py-2 border border-red-200 dark:border-red-800">
+                  <span className="font-semibold">Invoice #{inv.invoiceNumber}</span>
+                  {" — "}
+                  <span className="font-mono font-bold">{formatCurrency(inv.amount)}</span>
+                  {" exceeds the approved contract balance by "}
+                  <span className="font-mono font-bold text-red-800 dark:text-red-200">{formatCurrency(inv.flaggedOverAmount)}</span>
+                  {". "}
+                  {isGC
+                    ? "You can override and approve this invoice with a reason, or reject it."
+                    : "The GC must review this invoice before it can be approved."}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-8 mb-10">
         {/* CHANGE ORDERS */}
         <Card className="flex flex-col h-[600px]">
-          <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+          <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
             <CardTitle>Change Orders</CardTitle>
             {isGC && (
               <Button size="sm" onClick={() => setCoDialogOpen(true)} className="gap-1 h-9">
@@ -244,7 +294,7 @@ export default function SubcontractDetail() {
 
         {/* INVOICES */}
         <Card className="flex flex-col h-[600px]">
-          <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+          <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
             <CardTitle>Invoices</CardTitle>
             {!isGC && (
               <Button size="sm" onClick={() => setInvDialogOpen(true)} className="gap-1 h-9">
@@ -261,40 +311,64 @@ export default function SubcontractDetail() {
             ) : (
               <div className="divide-y divide-border">
                 {sub.invoices.map(inv => (
-                  <div key={inv.id} className={cn("p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/50 transition-colors", inv.status === "FLAGGED" && "bg-orange-50/50 dark:bg-orange-950/20")}>
-                    <div>
-                      <div className="font-mono text-xl font-bold text-foreground mb-1">{formatCurrency(inv.amount)}</div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</span>
-                        {getInvStatusBadge(inv.status)}
-                      </div>
-                      {inv.flaggedOverAmount > 0 && (
-                        <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 flex items-center gap-1 font-semibold">
-                          <AlertTriangle className="h-3 w-3" /> Exceeds remaining balance by {formatCurrency(inv.flaggedOverAmount)}
-                        </p>
-                      )}
-                      {inv.overrideReason && (
-                        <p className="text-xs text-muted-foreground mt-1 italic border-l-2 border-primary pl-2">
-                          Override: {inv.overrideReason}
-                        </p>
-                      )}
-                    </div>
-                    {isGC && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
-                      <div className="flex flex-wrap gap-2 justify-end">
-                        {inv.status === "FLAGGED" ? (
-                          <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white h-8" onClick={() => setOverrideDialogOpen({ open: true, id: inv.id })}>
-                            Override & Approve
-                          </Button>
-                        ) : (
-                          <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "approve")}>
-                            <Check className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "reject")}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+                  <div
+                    key={inv.id}
+                    className={cn(
+                      "p-4 hover:bg-muted/50 transition-colors",
+                      inv.status === "FLAGGED" && "bg-orange-50/60 dark:bg-orange-950/20"
                     )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="flex items-center gap-1 text-xs font-bold text-muted-foreground bg-muted rounded px-1.5 py-0.5">
+                            <Hash className="h-3 w-3" />{inv.invoiceNumber}
+                          </span>
+                          {getInvStatusBadge(inv.status)}
+                        </div>
+                        <div className="font-mono text-xl font-bold text-foreground">{formatCurrency(inv.amount)}</div>
+                        {inv.description && (
+                          <p className="text-sm text-muted-foreground mt-1 truncate">{inv.description}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">{format(new Date(inv.createdAt), "MMM d, yyyy")}</p>
+                        {inv.overrideReason && (
+                          <p className="text-xs text-muted-foreground mt-2 italic border-l-2 border-primary pl-2">
+                            Override: {inv.overrideReason}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-2 items-end shrink-0">
+                        {isGC && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
+                          <>
+                            {inv.status === "FLAGGED" ? (
+                              <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white h-8 text-xs" onClick={() => setOverrideDialogOpen({ open: true, id: inv.id })}>
+                                Override &amp; Approve
+                              </Button>
+                            ) : (
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "approve")}>
+                                <Check className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => handleActionInv(inv.id, "reject")}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {!isGC && inv.status === "PENDING" && (
+                          cancelConfirm === inv.id ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-red-600 font-semibold">Cancel?</span>
+                              <Button size="sm" variant="destructive" className="h-7 text-xs px-2" isLoading={deleteInv.isPending} onClick={() => handleCancelInvoice(inv.id)}>Yes</Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setCancelConfirm(null)}>No</Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600" title="Cancel invoice" onClick={() => setCancelConfirm(inv.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -303,8 +377,53 @@ export default function SubcontractDetail() {
         </Card>
       </div>
 
+      {/* INVOICE HISTORY */}
+      {sub.invoices.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader className="border-b pb-4">
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" /> Invoice History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Invoice No.</th>
+                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Amount</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {sortedInvoices.map((inv, idx) => (
+                    <tr key={inv.id} className={cn(
+                      "hover:bg-muted/30 transition-colors",
+                      inv.status === "FLAGGED" && "bg-orange-50/40 dark:bg-orange-950/10"
+                    )}>
+                      <td className="px-4 py-3 text-muted-foreground">{sortedInvoices.length - idx}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-semibold">#{inv.invoiceNumber}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(inv.amount)}</td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
+                      <td className="px-4 py-3">{getInvStatusBadge(inv.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* DIALOGS */}
       <Dialog open={coDialogOpen} onOpenChange={setCoDialogOpen} title="Create Change Order">
-        <form onSubmit={handleCreateCO} className="space-y-4 mt-4">
+        <form onSubmit={handleCreateCO} className="space-y-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">Description</label>
             <Input required placeholder="Added 3 extra outlets..." value={coDesc} onChange={e => setCoDesc(e.target.value)} />
@@ -321,10 +440,40 @@ export default function SubcontractDetail() {
       </Dialog>
 
       <Dialog open={invDialogOpen} onOpenChange={setInvDialogOpen} title="Submit Invoice">
-        <form onSubmit={handleSubmitInv} className="space-y-4 mt-4">
+        <form onSubmit={handleSubmitInv} className="space-y-4">
           <div>
-            <label className="text-sm font-semibold mb-1 block">Invoice Amount ($)</label>
-            <Input required type="number" step="0.01" placeholder="5000.00" value={invAmount} onChange={e => setInvAmount(e.target.value)} />
+            <label className="text-sm font-semibold mb-1 block">
+              Invoice Number <span className="text-red-500">*</span>
+            </label>
+            <Input
+              required
+              placeholder="e.g. INV-2024-001"
+              value={invNumber}
+              onChange={e => setInvNumber(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
+              Amount ($) <span className="text-red-500">*</span>
+            </label>
+            <Input
+              required
+              type="number"
+              step="0.01"
+              placeholder="5000.00"
+              value={invAmount}
+              onChange={e => setInvAmount(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
+              Description / Notes <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+            </label>
+            <Input
+              placeholder="e.g. Rough-in electrical work, weeks 3–4"
+              value={invDescription}
+              onChange={e => setInvDescription(e.target.value)}
+            />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setInvDialogOpen(false)}>Cancel</Button>
@@ -334,7 +483,7 @@ export default function SubcontractDetail() {
       </Dialog>
 
       <Dialog open={overrideDialogOpen.open} onOpenChange={(open) => !open && setOverrideDialogOpen({ open: false, id: "" })} title="Override Flagged Invoice">
-        <form onSubmit={handleOverride} className="space-y-4 mt-4">
+        <form onSubmit={handleOverride} className="space-y-4">
           <p className="text-sm text-muted-foreground">This invoice exceeds the remaining contract balance. Please provide a reason to override and approve it.</p>
           <div>
             <label className="text-sm font-semibold mb-1 block">Override Reason</label>
@@ -342,7 +491,7 @@ export default function SubcontractDetail() {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setOverrideDialogOpen({ open: false, id: "" })}>Cancel</Button>
-            <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white" isLoading={overrideInv.isPending}>Override & Approve</Button>
+            <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white" isLoading={overrideInv.isPending}>Override &amp; Approve</Button>
           </div>
         </form>
       </Dialog>
@@ -368,7 +517,7 @@ function ScoreCard({
         )}>{title}</p>
         <p className={cn(
           "text-xl md:text-2xl font-bold font-mono tracking-tight truncate",
-          danger ? "text-red-600" : highlight ? "text-foreground" : "text-foreground"
+          danger ? "text-red-600" : "text-foreground"
         )}>{formatCurrency(amount)}</p>
       </CardContent>
     </Card>

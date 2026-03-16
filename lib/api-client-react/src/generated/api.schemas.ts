@@ -140,11 +140,14 @@ export const InvoiceStatus = {
 export interface Invoice {
   id: string;
   subcontractId: string;
+  invoiceNumber: string;
   amount: number;
+  description?: string | null;
   status: InvoiceStatus;
   flaggedOverAmount: number;
   overrideReason?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Scoreboard {
@@ -231,7 +234,9 @@ export interface CreateChangeOrderRequest {
 }
 
 export interface SubmitInvoiceRequest {
+  invoiceNumber: string;
   amount: number;
+  description?: string;
 }
 
 export interface OverrideInvoiceRequest {

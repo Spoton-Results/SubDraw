@@ -150,9 +150,13 @@ router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
 
 router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const { subcontractId } = req.params;
-  const { amount } = req.body;
+  const { amount, invoiceNumber, description } = req.body;
   if (!amount || isNaN(Number(amount))) {
     res.status(400).json({ error: "amount is required" });
+    return;
+  }
+  if (!invoiceNumber || !String(invoiceNumber).trim()) {
+    res.status(400).json({ error: "invoiceNumber is required" });
     return;
   }
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
@@ -170,7 +174,9 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   }
   const [invoice] = await db.insert(invoicesTable).values({
     subcontractId,
+    invoiceNumber: String(invoiceNumber).trim(),
     amount: invoiceAmount,
+    description: description ? String(description).trim() : null,
     status,
     flaggedOverAmount,
   }).returning();
@@ -199,6 +205,21 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   }
 
   res.status(201).json(invoice);
+});
+
+router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, async (req, res) => {
+  const { invoiceId } = req.params;
+  const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
+  if (!invoice) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+  if (invoice.status !== "PENDING") {
+    res.status(400).json({ error: "Only PENDING invoices can be cancelled" });
+    return;
+  }
+  await db.delete(invoicesTable).where(eq(invoicesTable.id, invoiceId));
+  res.status(204).send();
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireGC, async (req, res) => {

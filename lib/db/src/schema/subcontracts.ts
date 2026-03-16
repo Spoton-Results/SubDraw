@@ -26,7 +26,9 @@ export const changeOrdersTable = pgTable("change_orders", {
 export const invoicesTable = pgTable("invoices", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  invoiceNumber: text("invoice_number").notNull(),
   amount: doublePrecision("amount").notNull(),
+  description: text("description"),
   status: text("status").notNull().default("PENDING"), // PENDING | APPROVED | REJECTED | FLAGGED
   flaggedOverAmount: doublePrecision("flagged_over_amount").notNull().default(0),
   overrideReason: text("override_reason"),

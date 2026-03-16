@@ -2258,6 +2258,94 @@ export const useSubmitInvoice = <
 };
 
 /**
+ * @summary Cancel and delete a PENDING invoice (Sub only)
+ */
+export const getDeleteInvoiceUrl = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return `/api/subcontracts/${subcontractId}/invoices/${invoiceId}`;
+};
+
+export const deleteInvoice = async (
+  subcontractId: string,
+  invoiceId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteInvoiceUrl(subcontractId, invoiceId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteInvoiceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInvoice>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteInvoice>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteInvoice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteInvoice>>,
+    { subcontractId: string; invoiceId: string }
+  > = (props) => {
+    const { subcontractId, invoiceId } = props ?? {};
+
+    return deleteInvoice(subcontractId, invoiceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteInvoiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteInvoice>>
+>;
+
+export type DeleteInvoiceMutationError = ErrorType<void>;
+
+/**
+ * @summary Cancel and delete a PENDING invoice (Sub only)
+ */
+export const useDeleteInvoice = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInvoice>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteInvoice>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  return useMutation(getDeleteInvoiceMutationOptions(options));
+};
+
+/**
  * @summary Approve an invoice (GC only)
  */
 export const getApproveInvoiceUrl = (

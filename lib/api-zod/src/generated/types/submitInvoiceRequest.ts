@@ -7,5 +7,7 @@
  */
 
 export interface SubmitInvoiceRequest {
+  invoiceNumber: string;
   amount: number;
+  description?: string;
 }

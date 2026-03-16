@@ -10,9 +10,12 @@ import type { InvoiceStatus } from "./invoiceStatus";
 export interface Invoice {
   id: string;
   subcontractId: string;
+  invoiceNumber: string;
   amount: number;
+  description?: string | null;
   status: InvoiceStatus;
   flaggedOverAmount: number;
   overrideReason?: string | null;
   createdAt: Date;
+  updatedAt: Date;
 }

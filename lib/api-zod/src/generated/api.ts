@@ -214,11 +214,14 @@ export const GetProjectResponse = zod.object({
             .object({
               id: zod.string(),
               subcontractId: zod.string(),
+              invoiceNumber: zod.string(),
               amount: zod.number(),
+              description: zod.string().nullish(),
               status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
               flaggedOverAmount: zod.number(),
               overrideReason: zod.string().nullish(),
               createdAt: zod.date(),
+              updatedAt: zod.date(),
             })
             .nullish(),
         })
@@ -398,11 +401,14 @@ export const GetSubcontractsResponseItem = zod.object({
         .object({
           id: zod.string(),
           subcontractId: zod.string(),
+          invoiceNumber: zod.string(),
           amount: zod.number(),
+          description: zod.string().nullish(),
           status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
           flaggedOverAmount: zod.number(),
           overrideReason: zod.string().nullish(),
           createdAt: zod.date(),
+          updatedAt: zod.date(),
         })
         .nullish(),
     })
@@ -468,11 +474,14 @@ export const GetSubcontractResponse = zod.object({
     zod.object({
       id: zod.string(),
       subcontractId: zod.string(),
+      invoiceNumber: zod.string(),
       amount: zod.number(),
+      description: zod.string().nullish(),
       status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
       flaggedOverAmount: zod.number(),
       overrideReason: zod.string().nullish(),
       createdAt: zod.date(),
+      updatedAt: zod.date(),
     }),
   ),
   scoreboard: zod.object({
@@ -486,11 +495,14 @@ export const GetSubcontractResponse = zod.object({
       .object({
         id: zod.string(),
         subcontractId: zod.string(),
+        invoiceNumber: zod.string(),
         amount: zod.number(),
+        description: zod.string().nullish(),
         status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
         flaggedOverAmount: zod.number(),
         overrideReason: zod.string().nullish(),
         createdAt: zod.date(),
+        updatedAt: zod.date(),
       })
       .nullish(),
   }),
@@ -569,11 +581,14 @@ export const GetInvoicesParams = zod.object({
 export const GetInvoicesResponseItem = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
+  invoiceNumber: zod.string(),
   amount: zod.number(),
+  description: zod.string().nullish(),
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
   flaggedOverAmount: zod.number(),
   overrideReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 export const GetInvoicesResponse = zod.array(GetInvoicesResponseItem);
 
@@ -585,7 +600,17 @@ export const SubmitInvoiceParams = zod.object({
 });
 
 export const SubmitInvoiceBody = zod.object({
+  invoiceNumber: zod.string(),
   amount: zod.number(),
+  description: zod.string().optional(),
+});
+
+/**
+ * @summary Cancel and delete a PENDING invoice (Sub only)
+ */
+export const DeleteInvoiceParams = zod.object({
+  subcontractId: zod.coerce.string(),
+  invoiceId: zod.coerce.string(),
 });
 
 /**
@@ -599,11 +624,14 @@ export const ApproveInvoiceParams = zod.object({
 export const ApproveInvoiceResponse = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
+  invoiceNumber: zod.string(),
   amount: zod.number(),
+  description: zod.string().nullish(),
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
   flaggedOverAmount: zod.number(),
   overrideReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**
@@ -617,11 +645,14 @@ export const RejectInvoiceParams = zod.object({
 export const RejectInvoiceResponse = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
+  invoiceNumber: zod.string(),
   amount: zod.number(),
+  description: zod.string().nullish(),
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
   flaggedOverAmount: zod.number(),
   overrideReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**
@@ -639,11 +670,14 @@ export const OverrideInvoiceBody = zod.object({
 export const OverrideInvoiceResponse = zod.object({
   id: zod.string(),
   subcontractId: zod.string(),
+  invoiceNumber: zod.string(),
   amount: zod.number(),
+  description: zod.string().nullish(),
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "FLAGGED"]),
   flaggedOverAmount: zod.number(),
   overrideReason: zod.string().nullish(),
   createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**

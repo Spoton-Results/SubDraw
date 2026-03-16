@@ -634,6 +634,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/Invoice"
 
+  /subcontracts/{subcontractId}/invoices/{invoiceId}:
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Cancel and delete a PENDING invoice (Sub only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invoice is not in PENDING status
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
   /subcontracts/{subcontractId}/invoices/{invoiceId}/approve:
     post:
       operationId: approveInvoice
@@ -1050,8 +1076,13 @@ components:
           type: string
         subcontractId:
           type: string
+        invoiceNumber:
+          type: string
         amount:
           type: number
+        description:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [PENDING, APPROVED, REJECTED, FLAGGED]
@@ -1063,14 +1094,21 @@ components:
         createdAt:
           type: string
           format: date-time
-      required: [id, subcontractId, amount, status, flaggedOverAmount, createdAt]
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, subcontractId, invoiceNumber, amount, status, flaggedOverAmount, createdAt, updatedAt]
 
     SubmitInvoiceRequest:
       type: object
       properties:
+        invoiceNumber:
+          type: string
         amount:
           type: number
-      required: [amount]
+        description:
+          type: string
+      required: [invoiceNumber, amount]
 
     OverrideInvoiceRequest:
       type: object
