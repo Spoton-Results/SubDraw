@@ -246,7 +246,28 @@ export async function sendInvoiceDecisionEmail(opts: {
   await send(opts.toEmail, `Invoice ${verb} on ${opts.projectName}`, html);
 }
 
-// ─── 8. Password reset email ───────────────────────────────────────────────────
+// ─── 8. Sub removed from project ──────────────────────────────────────────────
+export async function sendSubRemovedEmail(opts: {
+  toEmail: string;
+  subCompanyName: string;
+  gcCompanyName: string;
+  projectName: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("You have been removed from a project")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has removed <strong>${opts.subCompanyName}</strong> from the project <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "General Contractor", value: opts.gcCompanyName },
+    ])}
+    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">Any pending bids you had on this project have been cancelled. If you believe this was a mistake, please contact the GC directly.</p>
+    ${ctaButton("Log in to SubTracker", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `You've been removed from ${opts.projectName} on SubTracker`, html);
+}
+
+// ─── 9. Password reset email ───────────────────────────────────────────────────
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   companyName: string;

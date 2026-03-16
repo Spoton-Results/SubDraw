@@ -434,6 +434,14 @@ export const InviteSubcontractorBody = zod.object({
 });
 
 /**
+ * @summary Remove a subcontractor from a project (GC only, BIDDING status)
+ */
+export const RemoveProjectMemberParams = zod.object({
+  projectId: zod.coerce.string(),
+  userId: zod.coerce.string(),
+});
+
+/**
  * @summary Request a presigned URL for file upload
  */
 

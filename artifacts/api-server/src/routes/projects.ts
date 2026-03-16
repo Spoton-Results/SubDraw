@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable } from "@workspace/db/schema";
-import { eq, or, inArray } from "drizzle-orm";
+import { eq, or, inArray, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
-import { sendInviteEmail } from "../lib/email.js";
+import { sendInviteEmail, sendSubRemovedEmail } from "../lib/email.js";
 
 const router = Router();
 
@@ -231,6 +231,109 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
     isNewUser,
     ...(temporaryPassword ? { temporaryPassword } : {}),
   });
+});
+
+router.delete("/:projectId/members/:userId", requireAuth, requireGC, async (req, res) => {
+  const { projectId, userId } = req.params;
+  const gcUser = (req as any).user;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+  if (project.gcId !== gcUser.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (project.status !== "BIDDING") {
+    res.status(400).json({ error: "Subcontractors can only be removed while the project is in BIDDING status" });
+    return;
+  }
+
+  // Check if sub has an awarded bid on this project
+  const awardedBids = await db
+    .select()
+    .from(bidsTable)
+    .where(and(
+      eq(bidsTable.projectId, projectId),
+      eq(bidsTable.subId, userId),
+      eq(bidsTable.status, "AWARDED")
+    ));
+  if (awardedBids.length > 0) {
+    res.status(400).json({ error: "This subcontractor has an awarded bid on this project and cannot be removed. Cancel the subcontract first." });
+    return;
+  }
+
+  // Check if sub has an active subcontract on this project
+  const activeSubcontracts = await db
+    .select()
+    .from(subcontractsTable)
+    .where(and(
+      eq(subcontractsTable.projectId, projectId),
+      eq(subcontractsTable.subId, userId)
+    ));
+  if (activeSubcontracts.length > 0) {
+    res.status(400).json({ error: "This subcontractor has an active subcontract on this project and cannot be removed." });
+    return;
+  }
+
+  // Check membership exists
+  const [membership] = await db
+    .select()
+    .from(projectMembersTable)
+    .where(and(
+      eq(projectMembersTable.projectId, projectId),
+      eq(projectMembersTable.userId, userId)
+    ))
+    .limit(1);
+  if (!membership) {
+    res.status(404).json({ error: "Subcontractor is not a member of this project" });
+    return;
+  }
+
+  // Cancel any pending bids
+  await db
+    .update(bidsTable)
+    .set({ status: "REJECTED" })
+    .where(and(
+      eq(bidsTable.projectId, projectId),
+      eq(bidsTable.subId, userId),
+      eq(bidsTable.status, "PENDING")
+    ));
+
+  // Remove from project
+  await db
+    .delete(projectMembersTable)
+    .where(and(
+      eq(projectMembersTable.projectId, projectId),
+      eq(projectMembersTable.userId, userId)
+    ));
+
+  // Look up sub info for email
+  const [sub] = await db
+    .select({ email: usersTable.email, companyName: usersTable.companyName })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  const [gc] = await db
+    .select({ companyName: usersTable.companyName })
+    .from(usersTable)
+    .where(eq(usersTable.id, gcUser.id))
+    .limit(1);
+
+  if (sub) {
+    const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+    sendSubRemovedEmail({
+      toEmail: sub.email,
+      subCompanyName: sub.companyName,
+      gcCompanyName: gc?.companyName ?? "the GC",
+      projectName: project.name,
+      appUrl,
+    }).catch(err => console.error("[email] sendSubRemovedEmail failed:", err));
+  }
+
+  res.status(204).send();
 });
 
 export default router;

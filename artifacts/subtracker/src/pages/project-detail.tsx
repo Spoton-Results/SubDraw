@@ -13,6 +13,7 @@ import {
   useAddPlanFile,
   useDeletePlanFile,
   useUpdateProject,
+  useRemoveProjectMember,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -57,6 +58,7 @@ export default function ProjectDetail() {
   const addPlanFile = useAddPlanFile();
   const deletePlanFileMutation = useDeletePlanFile();
   const updateProject = useUpdateProject();
+  const removeMember = useRemoveProjectMember();
   const { data: planFiles = [], refetch: refetchPlans } = useGetProjectPlanFiles(projectId);
 
   const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -87,6 +89,7 @@ export default function ProjectDetail() {
 
   const [deletePlanConfirm, setDeletePlanConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
   const [awardBidConfirm, setAwardBidConfirm] = React.useState<{ open: boolean; id: string; company: string; amount: number }>({ open: false, id: "", company: "", amount: 0 });
+  const [removeMemberConfirm, setRemoveMemberConfirm] = React.useState<{ open: boolean; userId: string; companyName: string }>({ open: false, userId: "", companyName: "" });
 
   const { uploadFile, progress, isUploading } = useUpload({
     onError: (err) => {
@@ -255,6 +258,18 @@ export default function ProjectDetail() {
     setFileError("");
     setUploadStep("idle");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveMember = async () => {
+    try {
+      await removeMember.mutateAsync({ projectId, userId: removeMemberConfirm.userId });
+      toast.success(`${removeMemberConfirm.companyName} removed from project`);
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setRemoveMemberConfirm({ open: false, userId: "", companyName: "" });
+    } catch (err: any) {
+      toast.error(err?.data?.error || "Failed to remove subcontractor");
+      setRemoveMemberConfirm({ open: false, userId: "", companyName: "" });
+    }
   };
 
   const handleDeletePlan = async () => {
@@ -595,18 +610,32 @@ export default function ProjectDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {project.members?.map(member => (
-                  <div key={member.id} className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm">
-                      {member.user?.companyName?.charAt(0) ?? "?"}
+              <div className="space-y-3">
+                {project.members?.map(member => {
+                  const canRemove = isGC && project.status === "BIDDING" && member.roleOnProject === "SUB";
+                  return (
+                    <div key={member.id} className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm shrink-0">
+                        {member.user?.companyName?.charAt(0) ?? "?"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm truncate">{member.user?.companyName}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{member.roleOnProject}</p>
+                      </div>
+                      {canRemove && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="min-h-[36px] min-w-[36px] p-0 text-muted-foreground hover:text-destructive shrink-0"
+                          title={`Remove ${member.user?.companyName}`}
+                          onClick={() => setRemoveMemberConfirm({ open: true, userId: member.userId, companyName: member.user?.companyName ?? "this subcontractor" })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
-                    <div>
-                      <p className="font-bold text-sm">{member.user?.companyName}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{member.roleOnProject}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -865,6 +894,43 @@ export default function ProjectDetail() {
               onClick={handleAward}
             >
               <Award className="h-4 w-4 mr-2" /> Confirm Award
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Remove Subcontractor Confirmation */}
+      <Dialog
+        open={removeMemberConfirm.open}
+        onOpenChange={(open) => !open && setRemoveMemberConfirm({ open: false, userId: "", companyName: "" })}
+        title="Remove Subcontractor"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to remove{" "}
+              <span className="font-semibold">{removeMemberConfirm.companyName}</span>{" "}
+              from this project?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will also cancel any pending bids they have submitted. They will be notified by email.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setRemoveMemberConfirm({ open: false, userId: "", companyName: "" })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="min-h-[44px]"
+              isLoading={removeMember.isPending}
+              onClick={handleRemoveMember}
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Remove Subcontractor
             </Button>
           </div>
         </div>
