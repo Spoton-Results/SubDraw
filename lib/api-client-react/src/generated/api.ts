@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddPlanFileRequest,
   AuthResponse,
   Bid,
   ChangeOrder,
@@ -29,6 +30,7 @@ import type {
   LoginRequest,
   MessageResponse,
   OverrideInvoiceRequest,
+  PlanFile,
   Project,
   ProjectDetail,
   RegisterRequest,
@@ -772,6 +774,182 @@ export const useInviteSubcontractor = <
   TContext
 > => {
   return useMutation(getInviteSubcontractorMutationOptions(options));
+};
+
+/**
+ * @summary Get plan files for a project
+ */
+export const getGetProjectPlanFilesUrl = (projectId: string) => {
+  return `/api/projects/${projectId}/plan-files`;
+};
+
+export const getProjectPlanFiles = async (
+  projectId: string,
+  options?: RequestInit,
+): Promise<PlanFile[]> => {
+  return customFetch<PlanFile[]>(getGetProjectPlanFilesUrl(projectId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetProjectPlanFilesQueryKey = (projectId: string) => {
+  return [`/api/projects/${projectId}/plan-files`] as const;
+};
+
+export const getGetProjectPlanFilesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProjectPlanFiles>>,
+  TError = ErrorType<unknown>,
+>(
+  projectId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectPlanFiles>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetProjectPlanFilesQueryKey(projectId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getProjectPlanFiles>>
+  > = ({ signal }) =>
+    getProjectPlanFiles(projectId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!projectId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProjectPlanFiles>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProjectPlanFilesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProjectPlanFiles>>
+>;
+export type GetProjectPlanFilesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get plan files for a project
+ */
+
+export function useGetProjectPlanFiles<
+  TData = Awaited<ReturnType<typeof getProjectPlanFiles>>,
+  TError = ErrorType<unknown>,
+>(
+  projectId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectPlanFiles>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProjectPlanFilesQueryOptions(projectId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a plan file to a project (GC only)
+ */
+export const getAddPlanFileUrl = (projectId: string) => {
+  return `/api/projects/${projectId}/plan-files`;
+};
+
+export const addPlanFile = async (
+  projectId: string,
+  addPlanFileRequest: AddPlanFileRequest,
+  options?: RequestInit,
+): Promise<PlanFile> => {
+  return customFetch<PlanFile>(getAddPlanFileUrl(projectId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addPlanFileRequest),
+  });
+};
+
+export const getAddPlanFileMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addPlanFile>>,
+    TError,
+    { projectId: string; data: BodyType<AddPlanFileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addPlanFile>>,
+  TError,
+  { projectId: string; data: BodyType<AddPlanFileRequest> },
+  TContext
+> => {
+  const mutationKey = ["addPlanFile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addPlanFile>>,
+    { projectId: string; data: BodyType<AddPlanFileRequest> }
+  > = (props) => {
+    const { projectId, data } = props ?? {};
+
+    return addPlanFile(projectId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddPlanFileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addPlanFile>>
+>;
+export type AddPlanFileMutationBody = BodyType<AddPlanFileRequest>;
+export type AddPlanFileMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add a plan file to a project (GC only)
+ */
+export const useAddPlanFile = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addPlanFile>>,
+    TError,
+    { projectId: string; data: BodyType<AddPlanFileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addPlanFile>>,
+  TError,
+  { projectId: string; data: BodyType<AddPlanFileRequest> },
+  TContext
+> => {
+  return useMutation(getAddPlanFileMutationOptions(options));
 };
 
 /**

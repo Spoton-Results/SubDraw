@@ -183,6 +183,36 @@ export const InviteSubcontractorBody = zod.object({
 });
 
 /**
+ * @summary Get plan files for a project
+ */
+export const GetProjectPlanFilesParams = zod.object({
+  projectId: zod.coerce.string(),
+});
+
+export const GetProjectPlanFilesResponseItem = zod.object({
+  id: zod.string(),
+  projectId: zod.string(),
+  fileUrl: zod.string(),
+  description: zod.string(),
+  createdAt: zod.date(),
+});
+export const GetProjectPlanFilesResponse = zod.array(
+  GetProjectPlanFilesResponseItem,
+);
+
+/**
+ * @summary Add a plan file to a project (GC only)
+ */
+export const AddPlanFileParams = zod.object({
+  projectId: zod.coerce.string(),
+});
+
+export const AddPlanFileBody = zod.object({
+  fileUrl: zod.string(),
+  description: zod.string(),
+});
+
+/**
  * @summary Get bids for a project
  */
 export const GetProjectBidsParams = zod.object({

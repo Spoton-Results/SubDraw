@@ -212,6 +212,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/plan-files:
+    get:
+      operationId: getProjectPlanFiles
+      tags: [projects]
+      summary: Get plan files for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plan files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PlanFile"
+    post:
+      operationId: addPlanFile
+      tags: [projects]
+      summary: Add a plan file to a project (GC only)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPlanFileRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanFile"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/bids:
     get:
       operationId: getProjectBids
@@ -862,3 +912,28 @@ components:
         overrideReason:
           type: string
       required: [overrideReason]
+
+    PlanFile:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        fileUrl:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, fileUrl, description, createdAt]
+
+    AddPlanFileRequest:
+      type: object
+      properties:
+        fileUrl:
+          type: string
+        description:
+          type: string
+      required: [fileUrl, description]

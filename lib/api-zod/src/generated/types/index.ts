@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./addPlanFileRequest";
 export * from "./authResponse";
 export * from "./bid";
 export * from "./bidStatus";
@@ -21,6 +22,7 @@ export * from "./invoiceStatus";
 export * from "./loginRequest";
 export * from "./messageResponse";
 export * from "./overrideInvoiceRequest";
+export * from "./planFile";
 export * from "./project";
 export * from "./projectDetail";
 export * from "./projectDetailStatus";

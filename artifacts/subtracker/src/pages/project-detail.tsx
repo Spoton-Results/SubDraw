@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/layout";
-import { useGetProject, useGetMe, useInviteSubcontractor, useSubmitBid, useAwardBid, getGetProjectQueryKey } from "@workspace/api-client-react";
+import { useGetProject, useGetMe, useInviteSubcontractor, useSubmitBid, useAwardBid, getGetProjectQueryKey, useGetProjectPlanFiles, useAddPlanFile } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
-import { Mail, DollarSign, Building, Award, Plus, FileSignature } from "lucide-react";
+import { Mail, DollarSign, Building, Award, Plus, FileSignature, FileText, ExternalLink, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
 
@@ -24,6 +24,8 @@ export default function ProjectDetail() {
   const inviteSub = useInviteSubcontractor();
   const submitBid = useSubmitBid();
   const awardBid = useAwardBid();
+  const addPlanFile = useAddPlanFile();
+  const { data: planFiles = [], refetch: refetchPlans } = useGetProjectPlanFiles(projectId);
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
@@ -31,6 +33,10 @@ export default function ProjectDetail() {
 
   const [isBidOpen, setIsBidOpen] = React.useState(false);
   const [bidAmount, setBidAmount] = React.useState("");
+
+  const [isPlanOpen, setIsPlanOpen] = React.useState(false);
+  const [planUrl, setPlanUrl] = React.useState("");
+  const [planDescription, setPlanDescription] = React.useState("");
 
   if (isLoading || !project || !user) {
     return <Layout><div className="animate-pulse h-64 bg-card rounded-2xl"></div></Layout>;
@@ -79,6 +85,21 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleAddPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addPlanFile.mutateAsync({ projectId, data: { fileUrl: planUrl, description: planDescription } });
+      toast.success("Plan file added!");
+      refetchPlans();
+      setIsPlanOpen(false);
+      setPlanUrl("");
+      setPlanDescription("");
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.message || "Failed to add plan file";
+      toast.error(msg);
+    }
+  };
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-card p-6 rounded-2xl border border-border/50 shadow-sm">
@@ -111,7 +132,47 @@ export default function ProjectDetail() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          
+
+          {/* PLAN FILES SECTION */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" /> Site Plans
+                </CardTitle>
+                {isGC && project.status === "BIDDING" && (
+                  <Button size="sm" variant="outline" onClick={() => setIsPlanOpen(true)} className="gap-1.5">
+                    <Plus className="h-4 w-4" /> Add Plan
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {planFiles.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-2">No plan files uploaded yet.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {planFiles.map((plan) => (
+                    <li key={plan.id} className="flex items-center justify-between py-3 gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium truncate">{plan.description}</span>
+                      </div>
+                      <a
+                        href={plan.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-primary hover:underline shrink-0"
+                      >
+                        View <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           {/* SUBCONTRACTS SECTION */}
           {(isGC || project.subcontracts.some(s => s.subId === user.id)) && (
             <Card>
@@ -244,6 +305,36 @@ export default function ProjectDetail() {
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setIsInviteOpen(false)}>Cancel</Button>
             <Button type="submit" isLoading={inviteSub.isPending}>Add Subcontractor</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Add Plan File Dialog */}
+      <Dialog open={isPlanOpen} onOpenChange={setIsPlanOpen} title="Add Site Plan" description="Paste a URL to the plan document and add a brief description. Subcontractors will be able to view this before submitting their bid.">
+        <form onSubmit={handleAddPlan} className="space-y-4 mt-4">
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Description</label>
+            <Input
+              type="text"
+              required
+              placeholder="e.g. Architectural Floor Plan - Level 1"
+              value={planDescription}
+              onChange={e => setPlanDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">File URL</label>
+            <Input
+              type="url"
+              required
+              placeholder="https://example.com/plans/floor-plan.pdf"
+              value={planUrl}
+              onChange={e => setPlanUrl(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setIsPlanOpen(false)}>Cancel</Button>
+            <Button type="submit" isLoading={addPlanFile.isPending}>Add Plan</Button>
           </div>
         </form>
       </Dialog>

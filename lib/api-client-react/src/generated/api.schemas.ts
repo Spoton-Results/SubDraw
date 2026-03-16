@@ -214,3 +214,16 @@ export interface SubmitInvoiceRequest {
 export interface OverrideInvoiceRequest {
   overrideReason: string;
 }
+
+export interface PlanFile {
+  id: string;
+  projectId: string;
+  fileUrl: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface AddPlanFileRequest {
+  fileUrl: string;
+  description: string;
+}
