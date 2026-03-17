@@ -15,8 +15,6 @@ function buildFromEmail(raw: string): string {
 
 const FROM_EMAIL = buildFromEmail(RAW_FROM);
 
-console.log(`[email] FROM_EMAIL format: ${FROM_EMAIL.includes("@") ? "ok" : "INVALID — missing @"}`);
-
 const resend = API_KEY ? new Resend(API_KEY) : null;
 if (!API_KEY) console.log("[email] RESEND_API_KEY not set — emails will be skipped");
 
