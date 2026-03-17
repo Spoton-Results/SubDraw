@@ -42,9 +42,9 @@ artifacts-monorepo/
 - `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED; optional fields: address, description, estimatedStartDate (text), notes (GC-only, stripped from API response for non-GC users)
 - `project_members` — Which subs are invited to a project
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
-- `subcontracts` — Awarded contract with baseContractAmount
+- `subcontracts` — Awarded contract with baseContractAmount, `retentionPercentage` (0–15%, default 10%)
 - `change_orders` — Proposed/approved scope changes; status: PENDING_GC | APPROVED | REJECTED
-- `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED. Professional PDF generated on every invoice action, attached to all email notifications and downloadable via GET /api/subcontracts/:id/invoices/:id/pdf
+- `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED. Fields: `retentionAmount` (calculated on approval, null for retention-release invoices), `isRetentionRelease` (boolean). Professional PDF generated on every invoice action, attached to all email notifications and downloadable via GET /api/subcontracts/:id/invoices/:id/pdf; PDFs show retention line items (Retention Held, Net Payable Now)
 - `activity_logs` — Immutable audit trail per subcontract; fields: id, subcontractId, type, description, actorName, actorRole, createdAt. Written on every major action (subcontract created, CO created/approved/rejected, invoice submitted/flagged/approved/rejected/overridden/cancelled)
 - `gc_contacts` — GC's contact book; auto-populated when a GC invites a sub to any project; unique on (gcId, subId); supports private notes
 - `sub_profiles` — Sub's trade profile (trade, phone, businessAddress, licenseNumber); subs are forced to complete on first login via ProtectedRoute redirect
@@ -63,6 +63,7 @@ artifacts-monorepo/
 - **Scoreboard**: Live financial summary per subcontract (base + approved COs vs. invoiced)
 - **Invoice auto-flagging**: Invoices over remaining contract amount are auto-flagged
 - **Invoice override**: GC can override a flagged invoice with a reason
+- **Retention tracking**: GC sets a retention rate (0–15%, default 10%) when awarding a bid. `retentionAmount` is computed and stored on each invoice approval. Scoreboard shows Gross Invoiced, Total Retention Held, Net Paid, Retention Balance. On CLOSED projects, GC can click "Release Retention" to create a final retention-release invoice (`isRetentionRelease: true`). PDF invoices show retention line items and net payable. Activity log records `RETENTION_RELEASED` events.
 
 ## Email Notifications
 
@@ -112,6 +113,7 @@ All prefixed with `/api`
 - `POST /subcontracts/:id/change-orders/:coId/approve|reject`
 - `GET/POST /subcontracts/:id/invoices`
 - `POST /subcontracts/:id/invoices/:invId/approve|reject|override`
+- `POST /subcontracts/:id/release-retention` — GC only; project must be CLOSED; retentionBalance > 0; creates a retention-release invoice for the full retentionBalance
 - `GET /contacts` — GC contact book (GC-only)
 - `PATCH /contacts/:subId` — Update note on a contact
 - `DELETE /contacts/:subId` — Remove contact

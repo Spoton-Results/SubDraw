@@ -24,7 +24,7 @@ import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
   HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
-  CreditCard, DollarSign, CheckCircle2, ShieldAlert,
+  CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
@@ -98,6 +98,8 @@ export default function SubcontractDetail() {
   const [payNotes, setPayNotes] = React.useState("");
   const [disputeDialog, setDisputeDialog] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [disputeReasonText, setDisputeReasonText] = React.useState("");
+  const [releaseRetentionLoading, setReleaseRetentionLoading] = React.useState(false);
+  const [releaseRetentionConfirm, setReleaseRetentionConfirm] = React.useState(false);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
@@ -153,14 +155,24 @@ export default function SubcontractDetail() {
   }
 
   const isGC = user.role === "GC";
-  const sb = sub.scoreboard;
-  const hasFlagged = (sb as any).hasFlaggedInvoices as boolean || sub.invoices.some(i => i.status === "PAYMENT_DISPUTED");
-  const lastInvoice = (sb as any).lastInvoice as { amount: number; createdAt: string; status: string } | null;
+  const sb = sub.scoreboard as any;
+  const hasFlagged = sb.hasFlaggedInvoices as boolean || sub.invoices.some((i: any) => i.status === "PAYMENT_DISPUTED");
+  const lastInvoice = sb.lastInvoice as { amount: number; createdAt: string; status: string } | null;
 
   const invoicePercent = sb.currentApprovedTotal > 0
     ? Math.min(100, Math.round((sb.invoicedTotal / sb.currentApprovedTotal) * 100))
     : 0;
   const isOverBudget = sb.remaining < 0 || hasFlagged;
+
+  const retPct: number = (sub as any).retentionPercentage ?? 0;
+  const retentionBalance: number = sb.retentionBalance ?? 0;
+  const grossInvoiced: number = sb.grossInvoiced ?? 0;
+  const totalRetentionHeld: number = sb.totalRetentionHeld ?? 0;
+  const netPaid: number = sb.netPaid ?? 0;
+  const projectStatus: string = (sub as any).project?.status ?? "";
+
+  const canReleaseRetention = isGC && projectStatus === "CLOSED" && retentionBalance > 0;
+  const alreadyReleasedInvoice = (sub.invoices as any[]).find((i: any) => i.isRetentionRelease && i.status !== "REJECTED");
 
   const flaggedInvoices = sub.invoices.filter(i => i.status === "FLAGGED");
   const sortedInvoices = [...sub.invoices].sort(
@@ -259,6 +271,23 @@ export default function SubcontractDetail() {
     } catch (err: any) { toast.error(err?.data?.error || "Failed to cancel invoice"); }
   };
 
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  const handleReleaseRetention = async () => {
+    setReleaseRetentionLoading(true);
+    try {
+      const resp = await fetch(`${BASE}/api/subcontracts/${subcontractId}/release-retention`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include" });
+      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error ?? "Failed"); }
+      toast.success("Retention release invoice created");
+      invalidate();
+      setReleaseRetentionConfirm(false);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to release retention");
+    } finally {
+      setReleaseRetentionLoading(false);
+    }
+  };
+
   const getCOStatusBadge = (s: string) => {
     if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
@@ -286,6 +315,7 @@ export default function SubcontractDetail() {
     if (type === "INVOICE_REJECTED") return <X className="h-4 w-4 text-red-500" />;
     if (type === "INVOICE_OVERRIDDEN") return <BadgeCheck className="h-4 w-4 text-orange-500" />;
     if (type === "INVOICE_CANCELLED") return <Trash2 className="h-4 w-4 text-muted-foreground" />;
+    if (type === "RETENTION_RELEASED") return <Unlock className="h-4 w-4 text-green-600" />;
     return <Activity className="h-4 w-4 text-muted-foreground" />;
   };
 
@@ -309,11 +339,18 @@ export default function SubcontractDetail() {
       </div>
 
       {/* SCOREBOARD */}
-      <h2 className="text-xl font-bold font-display mb-4 flex items-center gap-2">
-        <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-xl font-bold font-display flex items-center gap-2">
+          <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
+        </h2>
+        {retPct > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">
+            <Percent className="h-3.5 w-3.5" /> {retPct}% Retention Rate
+          </span>
+        )}
+      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
         <ScoreCard
           title="Base Contract"
           amount={sb.base}
@@ -331,24 +368,92 @@ export default function SubcontractDetail() {
           tooltip="Base contract plus all approved change orders — the current maximum the sub can invoice."
         />
         <ScoreCard
-          title="Approved (Unpaid)"
-          amount={(sb as any).approvedTotal ?? 0}
-          tooltip="Invoices the GC has approved but payment has not yet been confirmed."
+          title="Gross Invoiced"
+          amount={grossInvoiced}
+          tooltip="Total billed by the sub before retention is withheld."
         />
         <ScoreCard
-          title="Paid (Confirmed)"
-          amount={(sb as any).paidTotal ?? 0}
+          title="Net Paid to Sub"
+          amount={netPaid}
           className="border-green-500/50 bg-green-50/50 dark:bg-green-950/10"
-          tooltip="Invoices where sub has confirmed receiving payment."
+          tooltip="Gross invoiced minus all retention held — the actual economic value transferred to the sub."
         />
         <ScoreCard
           title="Remaining Balance"
           amount={sb.remaining}
           danger={isOverBudget}
           className={isOverBudget ? "border-red-500 bg-red-50 dark:bg-red-950/20" : "border-green-500/50 bg-green-50/50 dark:bg-green-950/10"}
-          tooltip="Current contract total minus all confirmed-paid invoices."
+          tooltip="Current contract total minus net paid — amount still to be invoiced."
         />
       </div>
+
+      {/* RETENTION SCOREBOARD — only if retention is active */}
+      {retPct > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-2xl border border-orange-200 dark:border-orange-800 bg-orange-50/60 dark:bg-orange-950/20 p-4">
+            <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wide mb-1">Total Retention Held</p>
+            <p className="text-2xl font-bold font-mono text-orange-700 dark:text-orange-300">{formatCurrency(totalRetentionHeld)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Withheld across all approved invoices</p>
+          </div>
+          <div className={cn(
+            "rounded-2xl border p-4",
+            retentionBalance > 0
+              ? "border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20"
+              : "border-green-300 dark:border-green-700 bg-green-50/60 dark:bg-green-950/10"
+          )}>
+            <p className={cn("text-xs font-semibold uppercase tracking-wide mb-1", retentionBalance > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400")}>Retention Balance</p>
+            <p className={cn("text-2xl font-bold font-mono", retentionBalance > 0 ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-300")}>{formatCurrency(retentionBalance)}</p>
+            <p className="text-xs text-muted-foreground mt-1">{retentionBalance > 0 ? "Still owed to sub upon project close" : "All retention released"}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 flex flex-col justify-center gap-2">
+            {canReleaseRetention && !alreadyReleasedInvoice ? (
+              <>
+                <p className="text-xs text-muted-foreground">Project is CLOSED — release remaining retention to the sub.</p>
+                {releaseRetentionConfirm ? (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-1.5"
+                      isLoading={releaseRetentionLoading}
+                      onClick={handleReleaseRetention}
+                    >
+                      <Unlock className="h-4 w-4" /> Confirm Release
+                    </Button>
+                    <Button size="sm" variant="ghost" className="min-h-[44px]" onClick={() => setReleaseRetentionConfirm(false)}>Cancel</Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-1.5"
+                    onClick={() => setReleaseRetentionConfirm(true)}
+                  >
+                    <Unlock className="h-4 w-4" /> Release Retention ({formatCurrency(retentionBalance)})
+                  </Button>
+                )}
+              </>
+            ) : alreadyReleasedInvoice ? (
+              <div className="text-center">
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5 justify-center">
+                  <Unlock className="h-4 w-4" /> Retention Release Pending
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Invoice #{alreadyReleasedInvoice.invoiceNumber} created</p>
+              </div>
+            ) : !isGC && retentionBalance > 0 ? (
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Retention will be released by the GC when this project closes.</p>
+              </div>
+            ) : retentionBalance === 0 && totalRetentionHeld > 0 ? (
+              <div className="text-center">
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400">All retention released</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Retention release available when project closes.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* PROGRESS BAR */}
       <div className="bg-card border border-border/50 rounded-2xl p-5 mb-6 space-y-4 shadow-sm">
@@ -523,8 +628,23 @@ export default function SubcontractDetail() {
                             <Hash className="h-3 w-3" />{inv.invoiceNumber}
                           </span>
                           {getInvStatusBadge(inv.status)}
+                          {(inv as any).isRetentionRelease && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                              <Unlock className="h-3 w-3" /> Retention Release
+                            </span>
+                          )}
                         </div>
                         <div className="font-mono text-xl font-bold text-foreground">{formatCurrency(inv.amount)}</div>
+                        {!(inv as any).isRetentionRelease && retPct > 0 && (inv as any).retentionAmount != null && (
+                          <div className="flex items-center gap-3 mt-1 text-xs">
+                            <span className="text-orange-600 dark:text-orange-400 font-semibold">
+                              −{formatCurrency((inv as any).retentionAmount)} retention ({retPct}%)
+                            </span>
+                            <span className="text-green-700 dark:text-green-400 font-semibold">
+                              = {formatCurrency(inv.amount - (inv as any).retentionAmount)} net
+                            </span>
+                          </div>
+                        )}
                         {inv.description && (
                           <p className="text-sm text-muted-foreground mt-1 truncate">{inv.description}</p>
                         )}

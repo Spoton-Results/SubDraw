@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -10,6 +10,7 @@ export const subcontractsTable = pgTable("subcontracts", {
   subId: text("sub_id").notNull().references(() => usersTable.id),
   baseContractAmount: doublePrecision("base_contract_amount").notNull(),
   tradeCategory: text("trade_category"),
+  retentionPercentage: doublePrecision("retention_percentage").default(10).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -41,6 +42,8 @@ export const invoicesTable = pgTable("invoices", {
   paymentNotes: text("payment_notes"),
   paymentConfirmedAt: text("payment_confirmed_at"),
   disputeReason: text("dispute_reason"),
+  retentionAmount: doublePrecision("retention_amount"),
+  isRetentionRelease: boolean("is_retention_release").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

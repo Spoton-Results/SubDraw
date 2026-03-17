@@ -135,6 +135,7 @@ export default function ProjectDetail() {
   const [deletePlanConfirm, setDeletePlanConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
   const [awardBidConfirm, setAwardBidConfirm] = React.useState<{ open: boolean; id: string; company: string; amount: number }>({ open: false, id: "", company: "", amount: 0 });
   const [awardTradeCategory, setAwardTradeCategory] = React.useState("");
+  const [awardRetentionPct, setAwardRetentionPct] = React.useState("10");
   const [tradeFilter, setTradeFilter] = React.useState("");
   const [removeMemberConfirm, setRemoveMemberConfirm] = React.useState<{ open: boolean; userId: string; companyName: string }>({ open: false, userId: "", companyName: "" });
 
@@ -370,12 +371,14 @@ export default function ProjectDetail() {
   };
 
   const handleAward = async () => {
+    const retPct = Math.min(15, Math.max(0, parseFloat(awardRetentionPct) || 10));
     try {
-      await awardBid.mutateAsync({ projectId, bidId: awardBidConfirm.id, data: { tradeCategory: awardTradeCategory || null } });
+      await awardBid.mutateAsync({ projectId, bidId: awardBidConfirm.id, data: { tradeCategory: awardTradeCategory || null, retentionPercentage: retPct } });
       toast.success("Bid awarded and subcontract created!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 });
       setAwardTradeCategory("");
+      setAwardRetentionPct("10");
     } catch {
       toast.error("Failed to award bid");
     }
@@ -1363,9 +1366,9 @@ export default function ProjectDetail() {
       {/* Award Bid Confirmation */}
       <Dialog
         open={awardBidConfirm.open}
-        onOpenChange={(open) => { if (!open) { setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 }); setAwardTradeCategory(""); } }}
+        onOpenChange={(open) => { if (!open) { setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 }); setAwardTradeCategory(""); setAwardRetentionPct("10"); } }}
         title="Award Bid"
-        description="Assign a trade category for this subcontract, then confirm."
+        description="Assign a trade category and retention rate for this subcontract, then confirm."
       >
         <div className="space-y-4 mt-2">
           <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
@@ -1391,6 +1394,37 @@ export default function ProjectDetail() {
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">
+              Retention Rate (0–15%)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={15}
+                step={0.5}
+                value={awardRetentionPct}
+                onChange={(e) => setAwardRetentionPct(e.target.value)}
+                className="flex-1 accent-primary"
+              />
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  value={awardRetentionPct}
+                  onChange={(e) => setAwardRetentionPct(e.target.value)}
+                  className="w-16 rounded-lg border border-border bg-background px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Percentage withheld from each invoice until project close. Default is 10%.
+            </p>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <Button

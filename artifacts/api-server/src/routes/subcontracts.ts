@@ -28,26 +28,65 @@ async function logActivity(subcontractId: string, type: string, description: str
   );
 }
 
-async function computeScoreboard(subcontractId: string, baseContractAmount: number) {
+async function computeScoreboard(subcontractId: string, baseContractAmount: number, retentionPercentage: number = 0) {
   const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
   const invs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, subcontractId));
 
   const coTotal = cos.filter(c => c.status === "APPROVED").reduce((s, c) => s + c.amount, 0);
   const currentApprovedTotal = baseContractAmount + coTotal;
-  // approvedTotal: invoices GC has verified (APPROVED) but payment not yet confirmed
+
+  // Approved non-retention invoices (GC approved, not released retention)
   const approvedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
-  // paidTotal: only invoices the sub has confirmed receiving payment
+  // Confirmed paid by sub
   const paidTotal = invs.filter(i => i.status === "PAYMENT_CONFIRMED").reduce((s, i) => s + i.amount, 0);
-  // invoicedTotal: all invoices in any approved/payment state
-  const invoicedTotal = invs.filter(i =>
+  // Gross invoiced: all approved/payment-state invoices (total billed by sub before retention)
+  const grossInvoiced = invs.filter(i =>
     ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status)
   ).reduce((s, i) => s + i.amount, 0);
-  // remaining: current total minus only confirmed-paid invoices
-  const remaining = currentApprovedTotal - paidTotal;
+  // invoicedTotal is the same as grossInvoiced (kept for compat)
+  const invoicedTotal = grossInvoiced;
+
+  // Retention calculations (only for non-retention-release invoices that have been approved/paid)
+  const totalRetentionHeld = invs
+    .filter(i =>
+      !i.isRetentionRelease &&
+      ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status) &&
+      i.retentionAmount != null
+    )
+    .reduce((s, i) => s + (i.retentionAmount ?? 0), 0);
+
+  // Net paid = gross invoiced minus retention held (actual economic value paid to sub)
+  const netPaid = grossInvoiced - totalRetentionHeld;
+
+  // Retention released = any approved/payment retention-release invoices
+  const retentionReleased = invs
+    .filter(i => i.isRetentionRelease && ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status))
+    .reduce((s, i) => s + i.amount, 0);
+  const retentionBalance = Math.max(0, totalRetentionHeld - retentionReleased);
+
+  // remaining: approved total minus net paid (requirement: approved total minus net paid, not gross invoiced)
+  const remaining = currentApprovedTotal - netPaid;
+
   const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED" || i.status === "PAYMENT_DISPUTED");
   const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastInvoice = sortedInvs[0] ?? null;
-  return { base: baseContractAmount, coTotal, currentApprovedTotal, approvedTotal, paidTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
+
+  return {
+    base: baseContractAmount,
+    coTotal,
+    currentApprovedTotal,
+    approvedTotal,
+    paidTotal,
+    invoicedTotal,
+    grossInvoiced,
+    totalRetentionHeld,
+    netPaid,
+    retentionBalance,
+    remaining,
+    hasFlaggedInvoices,
+    lastInvoice,
+    retentionPercentage,
+  };
 }
 
 async function canAccessSubcontract(userId: string, userRole: string, subcontractId: string): Promise<boolean> {
@@ -91,8 +130,10 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       paymentNotes: invoice.paymentNotes ?? null,
       paymentConfirmedAt: invoice.paymentConfirmedAt ?? null,
       disputeReason: invoice.disputeReason ?? null,
+      retentionAmount: invoice.retentionAmount ?? null,
+      isRetentionRelease: invoice.isRetentionRelease ?? false,
     },
-    subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null },
+    subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null, retentionPercentage: sc.retentionPercentage ?? 0 },
     project: {
       name: scWithRelations.project.name,
       address: (scWithRelations.project as any).address ?? null,
@@ -135,7 +176,7 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
   const base = await getSubcontractWithRelations(sc);
   const changeOrders = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
   const invoices = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, subcontractId));
-  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount);
+  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
   res.json({ ...base, changeOrders, invoices, scoreboard });
 });
 
@@ -300,7 +341,7 @@ router.get("/:subcontractId/invoices/:invoiceId/pdf", requireAuth, async (req, r
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
   const scWithRelations = await getSubcontractWithRelations(sc);
-  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount);
+  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
   const pdfData = await buildPdfData(invoice, sc, scWithRelations, scoreboard);
   const pdfBuffer = await generateInvoicePDF(pdfData);
   res.setHeader("Content-Type", "application/pdf");
@@ -332,7 +373,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Subcontract not found" });
     return;
   }
-  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount);
+  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
   const invoiceAmount = Number(amount);
   let status = "PENDING";
   let flaggedOverAmount = 0;
@@ -428,11 +469,24 @@ router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, as
 
 router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireGC, async (req, res) => {
   const { subcontractId, invoiceId } = req.params;
-  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(invoicesTable.id, invoiceId)).returning();
 
+  // Load invoice and subcontract first to compute retention
+  const [existingInv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
   const rawSc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0];
+
+  // Compute retention amount for this invoice (skip for retention-release invoices)
+  const retPct = rawSc?.retentionPercentage ?? 0;
+  const retentionAmt = (existingInv && !existingInv.isRetentionRelease && retPct > 0)
+    ? Math.round(existingInv.amount * (retPct / 100) * 100) / 100
+    : null;
+
+  const [invoice] = await db.update(invoicesTable)
+    .set({ status: "APPROVED", retentionAmount: retentionAmt, updatedAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
   const sc = await getSubcontractWithRelations(rawSc);
-  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount);
+  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount, rawSc.retentionPercentage ?? 0);
 
   await logActivity(
     subcontractId,
@@ -499,11 +553,21 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
     res.status(400).json({ error: "overrideReason is required" });
     return;
   }
-  const [invoice] = await db.update(invoicesTable).set({ status: "APPROVED", overrideReason, updatedAt: new Date() }).where(eq(invoicesTable.id, invoiceId)).returning();
 
+  const [existingInv2] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
   const rawSc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0];
+  const retPct2 = rawSc?.retentionPercentage ?? 0;
+  const retentionAmt2 = (existingInv2 && !existingInv2.isRetentionRelease && retPct2 > 0)
+    ? Math.round(existingInv2.amount * (retPct2 / 100) * 100) / 100
+    : null;
+
+  const [invoice] = await db.update(invoicesTable)
+    .set({ status: "APPROVED", overrideReason, retentionAmount: retentionAmt2, updatedAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
   const sc = await getSubcontractWithRelations(rawSc);
-  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount);
+  const scoreboard = await computeScoreboard(subcontractId, rawSc.baseContractAmount, rawSc.retentionPercentage ?? 0);
 
   await logActivity(
     subcontractId,
@@ -648,6 +712,64 @@ router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, 
   }).catch((err) => console.error("[email] sendPaymentDisputedEmail failed:", err));
 
   res.json(invoice);
+});
+
+// GC releases retention — creates a final retention-release invoice (GC only, project must be CLOSED)
+router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  // Verify GC owns the project
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  if (project.status !== "CLOSED") {
+    res.status(400).json({ error: "Retention can only be released when the project is CLOSED." });
+    return;
+  }
+
+  const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
+
+  if (scoreboard.retentionBalance <= 0) {
+    res.status(400).json({ error: "No retention balance remaining to release." });
+    return;
+  }
+
+  // Check if a retention release invoice already exists and is not rejected
+  const existingInvs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, subcontractId));
+  const alreadyReleased = existingInvs.some(i => i.isRetentionRelease && i.status !== "REJECTED");
+  if (alreadyReleased) {
+    res.status(400).json({ error: "A retention release invoice has already been created for this subcontract." });
+    return;
+  }
+
+  // Generate a unique invoice number
+  const invCount = existingInvs.length + 1;
+  const invoiceNumber = `RET-${String(invCount).padStart(3, "0")}`;
+
+  const [invoice] = await db.insert(invoicesTable).values({
+    subcontractId,
+    invoiceNumber,
+    amount: scoreboard.retentionBalance,
+    description: `Retention release — ${sc.retentionPercentage ?? 0}% held balance for project ${project.name}`,
+    status: "PENDING",
+    flaggedOverAmount: 0,
+    isRetentionRelease: true,
+  }).returning();
+
+  const scWithRelations = await getSubcontractWithRelations(sc);
+  await logActivity(
+    subcontractId,
+    "RETENTION_RELEASED",
+    `Retention balance of $${scoreboard.retentionBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })} released — Invoice #${invoiceNumber} created`,
+    scWithRelations.project.gc.companyName,
+    "GC"
+  );
+
+  res.status(201).json(invoice);
 });
 
 export default router;

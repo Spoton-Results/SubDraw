@@ -47,11 +47,14 @@ export interface InvoicePDFData {
     paymentNotes?: string | null;
     paymentConfirmedAt?: string | null;
     disputeReason?: string | null;
+    retentionAmount?: number | null;
+    isRetentionRelease?: boolean;
   };
   subcontract: {
     id: string;
     baseContractAmount: number;
     tradeCategory?: string | null;
+    retentionPercentage?: number;
   };
   project: {
     name: string;
@@ -264,10 +267,33 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     const thisInvRowH = 32;
     doc.rect(MARGIN, y, CONTENT_W, thisInvRowH).fill(PRIMARY);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#ffffff")
-      .text("This Invoice", labelPad, y + 10);
+      .text(invoice.isRetentionRelease ? "Retention Release" : "This Invoice", labelPad, y + 10);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#ffffff")
       .text(formatCurrency(invoice.amount), valX - 120, y + 10, { width: 120, align: "right" });
     y += thisInvRowH;
+
+    // ── Retention line (only for non-retention-release invoices with retention held) ───
+    const retPct = subcontract.retentionPercentage ?? 0;
+    const retAmt = invoice.retentionAmount ?? 0;
+    const netPayable = invoice.amount - retAmt;
+
+    if (!invoice.isRetentionRelease && retPct > 0) {
+      // Retention held back row
+      doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill("#fff7ed");
+      doc.fontSize(10).font("Helvetica").fillColor(ORANGE_TEXT)
+        .text(`Retention Held (${retPct}%)`, labelPad, y + 8);
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(ORANGE_TEXT)
+        .text(`(${formatCurrency(retAmt)})`, valX - 100, y + 8, { width: 100, align: "right" });
+      y += ROW_H;
+
+      // Net payable now row
+      doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill("#f0fdf4");
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(SUCCESS_TEXT)
+        .text("Net Payable Now", labelPad, y + 8);
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(SUCCESS_TEXT)
+        .text(formatCurrency(netPayable), valX - 100, y + 8, { width: 100, align: "right" });
+      y += ROW_H;
+    }
 
     const isNegBal = balanceAfter < 0;
     const balBg = isNegBal ? "#fef2f2" : "#f0fdf4";
@@ -287,11 +313,17 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     // ── Amount Due box ────────────────────────────────────────────────────────────
     const amtBoxH = 54;
+    const netAmountDue = (!invoice.isRetentionRelease && retPct > 0) ? netPayable : invoice.amount;
     doc.roundedRect(MARGIN, y, CONTENT_W, amtBoxH, 8).fill(PRIMARY);
     doc.fontSize(10).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.8)")
-      .text("TOTAL AMOUNT DUE", MARGIN + 20, y + 10);
+      .text("NET AMOUNT DUE NOW", MARGIN + 20, y + 10);
     doc.fontSize(24).font("Helvetica-Bold").fillColor("#ffffff")
-      .text(formatCurrency(invoice.amount), MARGIN + 20, y + 23);
+      .text(formatCurrency(netAmountDue), MARGIN + 20, y + 23);
+
+    if (!invoice.isRetentionRelease && retPct > 0) {
+      doc.fontSize(8).font("Helvetica").fillColor("rgba(200,220,255,0.7)")
+        .text(`Gross: ${formatCurrency(invoice.amount)} · ${retPct}% retention: ${formatCurrency(retAmt)}`, MARGIN + 20, y + 46, { width: 260 });
+    }
 
     doc.fontSize(9).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.7)")
       .text("Payment Terms", PAGE_W - MARGIN - 130, y + 12, { width: 120, align: "right" });

@@ -51,13 +51,15 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
   const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, bid.subId)).limit(1);
 
-  const { tradeCategory } = req.body ?? {};
+  const { tradeCategory, retentionPercentage } = req.body ?? {};
+  const retPct = Math.min(15, Math.max(0, Number(retentionPercentage ?? 10)));
 
   const [subcontract] = await db.insert(subcontractsTable).values({
     projectId: bid.projectId,
     subId: bid.subId,
     baseContractAmount: bid.amount,
     tradeCategory: tradeCategory ?? null,
+    retentionPercentage: retPct,
   }).returning();
 
   await db.insert(activityLogsTable).values({
