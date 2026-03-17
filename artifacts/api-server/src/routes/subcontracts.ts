@@ -56,7 +56,7 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       overrideReason: invoice.overrideReason ?? null,
       createdAt: invoice.createdAt,
     },
-    subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount },
+    subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null },
     project: {
       name: scWithRelations.project.name,
       address: (scWithRelations.project as any).address ?? null,

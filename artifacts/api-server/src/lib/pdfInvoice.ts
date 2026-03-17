@@ -36,6 +36,7 @@ export interface InvoicePDFData {
   subcontract: {
     id: string;
     baseContractAmount: number;
+    tradeCategory?: string | null;
   };
   project: {
     name: string;
@@ -183,9 +184,15 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     if (project.address) {
       doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(project.address, midX, y);
+      y += 14;
     }
 
-    y += 24;
+    if (subcontract.tradeCategory) {
+      doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(`Trade: ${subcontract.tradeCategory}`, midX, y);
+      y += 14;
+    }
+
+    y += 10;
 
     // ── Divider ──────────────────────────────────────────────────────────────────
     doc.moveTo(MARGIN, y).lineTo(PAGE_W - MARGIN, y).lineWidth(0.5).strokeColor(BORDER).stroke();

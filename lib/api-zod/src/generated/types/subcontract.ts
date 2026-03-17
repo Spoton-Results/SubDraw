@@ -14,6 +14,7 @@ export interface Subcontract {
   projectId: string;
   subId: string;
   baseContractAmount: number;
+  tradeCategory?: string | null;
   createdAt: Date;
   project: Project;
   sub: User;

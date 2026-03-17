@@ -20,6 +20,7 @@ import type {
   ActivityLogEntry,
   AddPlanFileRequest,
   AuthResponse,
+  AwardBidBody,
   Bid,
   ChangeOrder,
   ChangePasswordRequest,
@@ -1931,11 +1932,14 @@ export const getAwardBidUrl = (projectId: string, bidId: string) => {
 export const awardBid = async (
   projectId: string,
   bidId: string,
+  awardBidBody?: AwardBidBody,
   options?: RequestInit,
 ): Promise<Subcontract> => {
   return customFetch<Subcontract>(getAwardBidUrl(projectId, bidId), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(awardBidBody),
   });
 };
 
@@ -1946,14 +1950,14 @@ export const getAwardBidMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof awardBid>>,
     TError,
-    { projectId: string; bidId: string },
+    { projectId: string; bidId: string; data: BodyType<AwardBidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof awardBid>>,
   TError,
-  { projectId: string; bidId: string },
+  { projectId: string; bidId: string; data: BodyType<AwardBidBody> },
   TContext
 > => {
   const mutationKey = ["awardBid"];
@@ -1967,11 +1971,11 @@ export const getAwardBidMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof awardBid>>,
-    { projectId: string; bidId: string }
+    { projectId: string; bidId: string; data: BodyType<AwardBidBody> }
   > = (props) => {
-    const { projectId, bidId } = props ?? {};
+    const { projectId, bidId, data } = props ?? {};
 
-    return awardBid(projectId, bidId, requestOptions);
+    return awardBid(projectId, bidId, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -1980,7 +1984,7 @@ export const getAwardBidMutationOptions = <
 export type AwardBidMutationResult = NonNullable<
   Awaited<ReturnType<typeof awardBid>>
 >;
-
+export type AwardBidMutationBody = BodyType<AwardBidBody>;
 export type AwardBidMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -1993,14 +1997,14 @@ export const useAwardBid = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof awardBid>>,
     TError,
-    { projectId: string; bidId: string },
+    { projectId: string; bidId: string; data: BodyType<AwardBidBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof awardBid>>,
   TError,
-  { projectId: string; bidId: string },
+  { projectId: string; bidId: string; data: BodyType<AwardBidBody> },
   TContext
 > => {
   return useMutation(getAwardBidMutationOptions(options));

@@ -26,6 +26,24 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
+const TRADE_BADGE_COLORS: Record<string, string> = {
+  General: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300",
+  Electrical: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400",
+  Plumbing: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400",
+  HVAC: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-400",
+  Framing: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400",
+  Drywall: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300",
+  Roofing: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400",
+  Flooring: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400",
+  Painting: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400",
+  Concrete: "bg-stone-100 text-stone-700 border-stone-200 dark:bg-stone-800 dark:text-stone-300",
+  Masonry: "bg-stone-100 text-stone-700 border-stone-200 dark:bg-stone-800 dark:text-stone-300",
+  Insulation: "bg-lime-50 text-lime-700 border-lime-200 dark:bg-lime-950/30 dark:text-lime-400",
+  "Windows and Doors": "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400",
+  Landscaping: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400",
+  Other: "bg-muted text-muted-foreground border-border",
+};
+
 export default function SubcontractDetail() {
   const [, params] = useRoute("/subcontracts/:id");
   const subcontractId = params?.id || "";
@@ -221,8 +239,17 @@ export default function SubcontractDetail() {
         <Link href={`/projects/${sub.projectId}`} className="text-primary hover:underline flex items-center gap-1 text-sm font-semibold mb-4 w-fit">
           <ArrowLeft className="h-4 w-4" /> Back to Project
         </Link>
-        <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">Subcontract: {sub.sub.companyName}</h1>
-        <p className="text-muted-foreground mt-1 md:text-lg">{sub.project.name}</p>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">Subcontract: {sub.sub.companyName}</h1>
+            <p className="text-muted-foreground mt-1 md:text-lg">{sub.project.name}</p>
+          </div>
+          {sub.tradeCategory && (
+            <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border mt-1 ${TRADE_BADGE_COLORS[sub.tradeCategory] ?? TRADE_BADGE_COLORS.Other}`}>
+              {sub.tradeCategory}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* SCOREBOARD */}

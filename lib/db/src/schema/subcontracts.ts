@@ -9,6 +9,7 @@ export const subcontractsTable = pgTable("subcontracts", {
   projectId: text("project_id").notNull().references(() => projectsTable.id),
   subId: text("sub_id").notNull().references(() => usersTable.id),
   baseContractAmount: doublePrecision("base_contract_amount").notNull(),
+  tradeCategory: text("trade_category"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

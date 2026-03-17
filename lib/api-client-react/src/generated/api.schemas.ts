@@ -222,6 +222,7 @@ export interface Subcontract {
   projectId: string;
   subId: string;
   baseContractAmount: number;
+  tradeCategory?: string | null;
   createdAt: string;
   project: Project;
   sub: User;
@@ -296,6 +297,7 @@ export interface SubcontractDetail {
   projectId: string;
   subId: string;
   baseContractAmount: number;
+  tradeCategory?: string | null;
   createdAt: string;
   project: Project;
   sub: User;
@@ -363,6 +365,10 @@ export interface ActivityLogEntry {
   actorRole: string;
   createdAt: string;
 }
+
+export type AwardBidBody = {
+  tradeCategory?: string | null;
+};
 
 export type InviteContactToProject200 = {
   message: string;

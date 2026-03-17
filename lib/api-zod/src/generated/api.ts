@@ -305,6 +305,7 @@ export const GetProjectResponse = zod.object({
       projectId: zod.string(),
       subId: zod.string(),
       baseContractAmount: zod.number(),
+      tradeCategory: zod.string().nullish(),
       createdAt: zod.date(),
       project: zod.object({
         id: zod.string(),
@@ -503,6 +504,7 @@ export const UpdateProjectResponse = zod.object({
       projectId: zod.string(),
       subId: zod.string(),
       baseContractAmount: zod.number(),
+      tradeCategory: zod.string().nullish(),
       createdAt: zod.date(),
       project: zod.object({
         id: zod.string(),
@@ -732,6 +734,10 @@ export const AwardBidParams = zod.object({
   bidId: zod.coerce.string(),
 });
 
+export const AwardBidBody = zod.object({
+  tradeCategory: zod.string().nullish(),
+});
+
 /**
  * @summary List subcontracts for current user
  */
@@ -740,6 +746,7 @@ export const GetSubcontractsResponseItem = zod.object({
   projectId: zod.string(),
   subId: zod.string(),
   baseContractAmount: zod.number(),
+  tradeCategory: zod.string().nullish(),
   createdAt: zod.date(),
   project: zod.object({
     id: zod.string(),
@@ -839,6 +846,7 @@ export const GetSubcontractResponse = zod.object({
   projectId: zod.string(),
   subId: zod.string(),
   baseContractAmount: zod.number(),
+  tradeCategory: zod.string().nullish(),
   createdAt: zod.date(),
   project: zod.object({
     id: zod.string(),

@@ -9,6 +9,7 @@
 export * from "./activityLogEntry";
 export * from "./addPlanFileRequest";
 export * from "./authResponse";
+export * from "./awardBidBody";
 export * from "./bid";
 export * from "./bidStatus";
 export * from "./changeOrder";
