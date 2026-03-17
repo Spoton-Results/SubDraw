@@ -10,13 +10,15 @@ import {
   cancelSubscription,
   reactivateSubscription,
   startCheckout,
+  upgradePlan,
   formatSubscriptionStatus,
+  formatPlanPrice,
 } from "@/lib/stripe";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
   CreditCard, Calendar, CheckCircle2, AlertCircle, Loader2,
-  Receipt, Zap, RefreshCw, XCircle, ArrowUpRight,
+  Receipt, Zap, RefreshCw, XCircle, ArrowUpRight, TrendingUp, Rocket, BarChart3,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -33,6 +35,24 @@ function formatDate(ts: number) {
   }).format(new Date(ts * 1000));
 }
 
+const PLAN_ICONS: Record<string, React.ElementType> = {
+  "SubTracker Starter": Zap,
+  "SubTracker Growth": TrendingUp,
+  "SubTracker Scale": Rocket,
+};
+
+const PLAN_COLORS: Record<string, string> = {
+  "SubTracker Starter": "text-blue-600",
+  "SubTracker Growth": "text-primary",
+  "SubTracker Scale": "text-violet-600",
+};
+
+const UNSUBSCRIBED_PLANS = [
+  { name: "SubTracker Starter", label: "Starter", monthlyUsd: 39900, limit: 5, icon: Zap, color: "border-blue-200", headerColor: "text-blue-700" },
+  { name: "SubTracker Growth",  label: "Growth",  monthlyUsd: 79900, limit: 15, icon: TrendingUp, color: "border-primary ring-2 ring-primary", headerColor: "text-primary", popular: true },
+  { name: "SubTracker Scale",   label: "Scale",   monthlyUsd: 149900, limit: 40, icon: Rocket, color: "border-violet-200", headerColor: "text-violet-700" },
+];
+
 export default function Billing() {
   usePageTitle("Billing");
   const { data: user } = useGetMe();
@@ -44,7 +64,7 @@ export default function Billing() {
 
   React.useEffect(() => {
     if (checkoutSuccess) {
-      toast.success("Subscription activated! Welcome to SubTracker Pro.");
+      toast.success("Subscription activated! Welcome to SubTracker.");
       window.history.replaceState({}, "", window.location.pathname);
       queryClient.invalidateQueries({ queryKey: ["billing"] });
     }
@@ -61,6 +81,7 @@ export default function Billing() {
   });
 
   const [upgradeLoading, setUpgradeLoading] = React.useState(false);
+  const [checkoutLoadingPlan, setCheckoutLoadingPlan] = React.useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = React.useState(false);
 
   const cancelMutation = useMutation({
@@ -82,14 +103,27 @@ export default function Billing() {
     onError: (err: any) => toast.error(err.message || "Failed to reactivate"),
   });
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (nextPlanName: string) => {
     setUpgradeLoading(true);
     try {
-      const url = await startCheckout();
+      await upgradePlan(nextPlanName);
+      toast.success(`Upgraded to ${nextPlanName.replace("SubTracker ", "")}! Your card has been charged the prorated difference.`);
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+    } catch (err: any) {
+      toast.error(err.message || "Upgrade failed");
+    } finally {
+      setUpgradeLoading(false);
+    }
+  };
+
+  const handleNewCheckout = async (planName: string) => {
+    setCheckoutLoadingPlan(planName);
+    try {
+      const url = await startCheckout(planName);
       window.location.href = url;
     } catch (err: any) {
       toast.error(err.message || "Checkout failed");
-      setUpgradeLoading(false);
+      setCheckoutLoadingPlan(null);
     }
   };
 
@@ -107,17 +141,23 @@ export default function Billing() {
   const invoices = billing?.invoices ?? [];
   const isActive = sub && (sub.status === "active" || sub.status === "trialing");
   const isCancelAtPeriodEnd = sub?.cancel_at_period_end;
-  const isPastDue = sub?.status === "past_due";
+  const isPastDue = billing?.isPastDue ?? false;
   const isCanceled = !sub || sub.status === "canceled";
-
+  const activeCount = billing?.activeCount ?? 0;
+  const limit = billing?.limit ?? null;
+  const planName = billing?.planName ?? null;
+  const planLabel = billing?.planLabel ?? null;
+  const nextPlan = billing?.nextPlan ?? null;
   const statusInfo = sub ? formatSubscriptionStatus(sub.status) : null;
+  const PlanIcon = planName ? (PLAN_ICONS[planName] ?? Zap) : Zap;
+  const planColor = planName ? (PLAN_COLORS[planName] ?? "text-primary") : "text-muted-foreground";
 
   return (
     <Layout>
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Billing</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Manage your SubTracker Pro subscription</p>
+          <p className="text-muted-foreground mt-1 text-sm">Manage your SubTracker subscription</p>
         </div>
 
         {isLoading ? (
@@ -126,6 +166,7 @@ export default function Billing() {
           </div>
         ) : (
           <div className="space-y-6">
+
             {/* Current Plan Card */}
             <Card>
               <CardHeader className="border-b pb-4">
@@ -136,6 +177,7 @@ export default function Billing() {
               </CardHeader>
               <CardContent className="pt-5">
                 {isCanceled ? (
+                  /* ── No subscription — show plan selector ── */
                   <div className="space-y-5">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center">
@@ -143,7 +185,7 @@ export default function Billing() {
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">Free Plan</div>
-                        <div className="text-sm text-muted-foreground">1 project included</div>
+                        <div className="text-sm text-muted-foreground">1 project included — no credit card required</div>
                       </div>
                       <Badge variant="secondary" className="ml-auto">Free</Badge>
                     </div>
@@ -154,47 +196,59 @@ export default function Billing() {
                         <div>
                           <div className="font-semibold text-orange-800 text-sm">Payment Past Due</div>
                           <div className="text-xs text-orange-700 mt-0.5">
-                            Your payment failed. You have a 3-day grace period before new project creation is locked.
-                            Please update your payment method.
+                            Your payment failed. You have a 3-day grace period before new project creation is locked. Please update your payment method.
                           </div>
                         </div>
                       </div>
                     )}
 
-                    <div className="rounded-2xl border-2 border-primary bg-primary/5 p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <div className="font-bold text-foreground">SubTracker Pro</div>
-                          <div className="text-sm text-muted-foreground">Unlimited everything</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-primary">$49</div>
-                          <div className="text-xs text-muted-foreground">/month</div>
-                        </div>
-                      </div>
-                      <ul className="space-y-1.5 mb-4">
-                        {["Unlimited projects", "Unlimited subcontractors", "Invoice PDF generation",
-                          "Payment tracking and confirmation", "Priority support"].map(b => (
-                          <li key={b} className="flex items-center gap-2 text-sm">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                            <span>{b}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <Button className="w-full" onClick={handleUpgrade} disabled={upgradeLoading}>
-                        {upgradeLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Redirecting...</> : <><Zap className="h-4 w-4 mr-2" /> Upgrade to Pro — $49/month</>}
-                      </Button>
+                    <p className="text-sm text-muted-foreground">Choose a plan to manage more projects:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {UNSUBSCRIBED_PLANS.map(plan => {
+                        const Icon = plan.icon;
+                        const isLoadingThis = checkoutLoadingPlan === plan.name;
+                        return (
+                          <div key={plan.name} className={`relative rounded-2xl border-2 p-4 flex flex-col gap-3 ${plan.color}`}>
+                            {(plan as any).popular && (
+                              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                <span className="bg-primary text-primary-foreground text-xs font-bold px-2.5 py-0.5 rounded-full">Popular</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${plan.headerColor}`} />
+                              <span className={`font-bold text-sm ${plan.headerColor}`}>{plan.label}</span>
+                            </div>
+                            <div>
+                              <div className="text-2xl font-bold">{formatPlanPrice(plan.monthlyUsd)}</div>
+                              <div className="text-xs text-muted-foreground">/month</div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">Up to {plan.limit} active projects</div>
+                            <Button
+                              size="sm"
+                              variant={(plan as any).popular ? "default" : "outline"}
+                              className="w-full"
+                              onClick={() => handleNewCheckout(plan.name)}
+                              disabled={checkoutLoadingPlan !== null}
+                            >
+                              {isLoadingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : "Select"}
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
+                  /* ── Active subscription ── */
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                        <Zap className="h-5 w-5 text-primary" />
+                      <div className={`h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center`}>
+                        <PlanIcon className={`h-5 w-5 ${planColor}`} />
                       </div>
                       <div>
-                        <div className="font-semibold text-foreground">SubTracker Pro</div>
-                        <div className="text-sm text-muted-foreground">Unlimited projects & subcontractors</div>
+                        <div className="font-semibold text-foreground">{planLabel ?? "SubTracker"} Plan</div>
+                        <div className="text-sm text-muted-foreground">
+                          {formatPlanPrice(billing?.subscription ? (billing.subscription.items?.data?.[0]?.price?.unit_amount ?? 0) : 0)}/month
+                        </div>
                       </div>
                       <Badge
                         className={`ml-auto ${isActive && !isCancelAtPeriodEnd ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}
@@ -203,6 +257,32 @@ export default function Billing() {
                         {isCancelAtPeriodEnd ? "Cancelling" : statusInfo?.label ?? sub?.status}
                       </Badge>
                     </div>
+
+                    {/* Project usage bar */}
+                    {limit !== null && (
+                      <div className="rounded-xl bg-secondary/50 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <BarChart3 className="h-3 w-3" />
+                            Active projects
+                          </div>
+                          <span className={`text-xs font-bold ${activeCount >= limit ? "text-red-600" : "text-foreground"}`}>
+                            {activeCount} of {limit}
+                          </span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${activeCount >= limit ? "bg-red-500" : activeCount >= limit * 0.8 ? "bg-orange-500" : "bg-primary"}`}
+                            style={{ width: `${Math.min(100, (activeCount / limit) * 100)}%` }}
+                          />
+                        </div>
+                        {activeCount >= limit && (
+                          <p className="text-xs text-red-600 mt-1.5 font-medium">
+                            Plan limit reached — upgrade or mark a project Complete to free a slot.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {isCancelAtPeriodEnd && (
                       <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 flex items-start gap-3">
@@ -248,18 +328,39 @@ export default function Billing() {
                       </div>
                       <div className="rounded-xl bg-secondary/50 p-3">
                         <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                          <CreditCard className="h-3 w-3" /> Amount
+                          <CreditCard className="h-3 w-3" /> Plan
                         </div>
-                        <div className="font-semibold text-sm">$49.00 / month</div>
+                        <div className="font-semibold text-sm">{planLabel ?? "—"}</div>
                       </div>
                     </div>
+
+                    {/* Upgrade to next tier */}
+                    {nextPlan && isActive && !isCancelAtPeriodEnd && (
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="font-semibold text-sm text-foreground">Upgrade to {nextPlan.label}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Up to {nextPlan.limit} active projects — {formatPlanPrice(nextPlan.monthlyUsd)}/month. Prorated difference charged immediately.
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpgrade(nextPlan.name)}
+                          disabled={upgradeLoading}
+                          className="shrink-0"
+                        >
+                          {upgradeLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <TrendingUp className="h-3 w-3 mr-1" />}
+                          Upgrade
+                        </Button>
+                      </div>
+                    )}
 
                     {isActive && !isCancelAtPeriodEnd && (
                       <div className="border-t pt-4">
                         {cancelConfirm ? (
                           <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
                             <p className="text-sm text-red-800 font-medium">
-                              Are you sure? Your subscription will remain active until {formatDate(sub.current_period_end)}, then revert to the free plan.
+                              Are you sure? Your subscription will remain active until {formatDate(sub.current_period_end)}, then revert to the free plan (1 project max).
                             </p>
                             <div className="flex gap-2">
                               <Button
@@ -306,7 +407,7 @@ export default function Billing() {
                       <div key={inv.id} className="py-3 flex items-center gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-foreground">
-                            {inv.description || "SubTracker Pro"}
+                            {inv.description || planLabel ? `SubTracker ${planLabel}` : "SubTracker"}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {formatDate(inv.created)}

@@ -5,7 +5,7 @@ import { eq, or, inArray, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
 import { sendInviteEmail, sendSubRemovedEmail } from "../lib/email.js";
-import { isGCSubscribed, getGCProjectCount } from "../lib/stripeStorage.js";
+import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 
 const router = Router();
 
@@ -123,14 +123,25 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
     return;
   }
 
-  const projectCount = await getGCProjectCount(user.id);
-  if (projectCount >= 1) {
-    const subscribed = await isGCSubscribed(user.id);
-    if (!subscribed) {
+  const planInfo = await getGCPlanInfo(user.id);
+  // First project is always free
+  if (planInfo.activeCount >= 1) {
+    if (!planInfo.subscribed) {
       res.status(402).json({
         error: "SUBSCRIPTION_REQUIRED",
-        message: "Upgrade to SubTracker Pro to manage unlimited projects.",
-        projectCount,
+        message: "Choose a plan to manage more than one project.",
+        activeCount: planInfo.activeCount,
+      });
+      return;
+    }
+    if (planInfo.limit !== null && planInfo.activeCount >= planInfo.limit) {
+      res.status(402).json({
+        error: "PLAN_LIMIT_REACHED",
+        message: `You have reached your plan limit of ${planInfo.limit} active projects. Upgrade your plan to add more projects or mark an existing project as Complete to free up a slot.`,
+        activeCount: planInfo.activeCount,
+        limit: planInfo.limit,
+        planName: planInfo.planName,
+        nextPlan: planInfo.nextPlan,
       });
       return;
     }

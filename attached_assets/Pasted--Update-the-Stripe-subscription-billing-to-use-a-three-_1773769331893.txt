@@ -1,0 +1,45 @@
+"Update the Stripe subscription billing to use a three tier pricing model based on number of active projects. Requirements:
+
+Remove the previous single $49/month plan and replace with these three plans:
+
+STARTER PLAN — $399/month
+
+Up to 5 active projects at one time
+Unlimited GC users on the account
+Unlimited subcontractor invites
+All features included
+
+GROWTH PLAN — $799/month
+
+Up to 15 active projects at one time
+Unlimited GC users on the account
+Unlimited subcontractor invites
+All features included
+
+SCALE PLAN — $1,499/month
+
+Up to 40 active projects at one time
+Unlimited GC users on the account
+Unlimited subcontractor invites
+All features included
+
+
+GCs get their first project completely free to test the app with no credit card required
+When a GC tries to create a second project show a plan selection screen with all three plans displayed side by side showing the price, project limit, and features included
+When a GC reaches their active project limit show a clear message saying 'You have reached your plan limit of X active projects. Upgrade your plan to add more projects or mark an existing project as Complete to free up a slot'
+A project counts as active when its status is BIDDING or CONSTRUCTION — projects marked COMPLETE do not count against the limit
+Add a Billing page in GC account settings showing:
+
+
+Current plan name and price
+Number of active projects used vs limit (for example 3 of 5 active projects)
+Next billing date
+Upgrade plan button showing the next tier
+Cancel subscription button
+Billing history showing all past charges
+
+
+If a GC's payment fails give them 3 days grace period before restricting new project creation — show a red banner on their dashboard saying 'Your payment failed — please update your billing info to continue'
+When a GC upgrades from Starter to Growth or Growth to Scale, charge the prorated difference immediately and confirm the upgrade
+Subs are always 100% free — never show them any pricing or payment screens ever
+Set up these exact plans in Stripe with monthly billing and make sure webhooks are connected so the app updates automatically when a payment succeeds or fails"

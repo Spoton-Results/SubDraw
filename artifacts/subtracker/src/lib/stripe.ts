@@ -6,7 +6,12 @@ export async function getSubscriptionStatus() {
   if (!res.ok) throw new Error("Failed to fetch subscription status");
   return res.json() as Promise<{
     subscribed: boolean;
-    plan: string | null;
+    planName: string | null;
+    planLabel: string | null;
+    limit: number | null;
+    activeCount: number;
+    nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+    isPastDue: boolean;
     subscription: any | null;
   }>;
 }
@@ -18,14 +23,22 @@ export async function getBilling() {
     subscription: any | null;
     invoices: any[];
     stripeCustomerId: string | null;
+    planName: string | null;
+    planLabel: string | null;
+    limit: number | null;
+    activeCount: number;
+    nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+    isPastDue: boolean;
+    isInGrace: boolean;
   }>;
 }
 
-export async function startCheckout(): Promise<string> {
+export async function startCheckout(planName: string): Promise<string> {
   const res = await fetch(`${API}/stripe/checkout`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ planName }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -33,6 +46,19 @@ export async function startCheckout(): Promise<string> {
   }
   const data = await res.json();
   return data.url;
+}
+
+export async function upgradePlan(planName: string): Promise<void> {
+  const res = await fetch(`${API}/stripe/upgrade`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ planName }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || "Failed to upgrade plan");
+  }
 }
 
 export async function cancelSubscription() {
@@ -70,4 +96,8 @@ export function formatSubscriptionStatus(status: string): { label: string; color
     case "unpaid": return { label: "Unpaid", color: "text-red-600" };
     default: return { label: status, color: "text-muted-foreground" };
   }
+}
+
+export function formatPlanPrice(monthlyUsd: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(monthlyUsd / 100);
 }

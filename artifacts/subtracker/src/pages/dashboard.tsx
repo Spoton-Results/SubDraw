@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getSubscriptionStatus } from "@/lib/stripe";
+import { useQuery } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 
 export default function Dashboard() {
@@ -40,8 +42,16 @@ export default function Dashboard() {
     setShowOnboarding(false);
   };
 
+  const { data: subStatus } = useQuery({
+    queryKey: ["subscription-status"],
+    queryFn: getSubscriptionStatus,
+    enabled: isGC,
+  });
+
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = React.useState(false);
+  const [paywallMessage, setPaywallMessage] = React.useState<string | undefined>();
+  const [paywallSuggestedPlan, setPaywallSuggestedPlan] = React.useState<string | undefined>();
   const [newName, setNewName] = React.useState("");
   const [newAddress, setNewAddress] = React.useState("");
   const [newDescription, setNewDescription] = React.useState("");
@@ -65,8 +75,16 @@ export default function Dashboard() {
       setNewDescription("");
       setNewStartDate("");
     } catch (err: any) {
-      if (err?.status === 402 || err?.data?.error === "SUBSCRIPTION_REQUIRED") {
+      const errCode = err?.data?.error;
+      if (err?.status === 402 || errCode === "SUBSCRIPTION_REQUIRED" || errCode === "PLAN_LIMIT_REACHED") {
         setIsCreateOpen(false);
+        if (errCode === "PLAN_LIMIT_REACHED") {
+          setPaywallMessage(err?.data?.message);
+          setPaywallSuggestedPlan(err?.data?.nextPlan?.name);
+        } else {
+          setPaywallMessage(undefined);
+          setPaywallSuggestedPlan(undefined);
+        }
         setIsPaywallOpen(true);
       } else {
         toast.error("Failed to create project");
@@ -106,6 +124,20 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Payment failure banner */}
+      {isGC && subStatus?.isPastDue && (
+        <div className="mb-4 rounded-xl border-2 border-red-400 bg-red-50 dark:bg-red-950/20 p-4 flex items-start gap-3">
+          <CreditCard className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-red-800 dark:text-red-300 text-sm">Payment failed — please update your billing info to continue</div>
+            <div className="text-xs text-red-700 dark:text-red-400 mt-0.5">
+              You have a 3-day grace period before new project creation is locked.
+            </div>
+          </div>
+          <a href="/billing" className="text-xs font-semibold text-red-700 hover:underline shrink-0">Update billing →</a>
+        </div>
+      )}
 
       {showOnboarding && user && (
         <OnboardingBanner role={user.role as "GC" | "SUB"} onDismiss={dismissOnboarding} />
@@ -268,7 +300,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      <PaywallModal open={isPaywallOpen} onOpenChange={setIsPaywallOpen} />
+      <PaywallModal
+        open={isPaywallOpen}
+        onOpenChange={setIsPaywallOpen}
+        limitMessage={paywallMessage}
+        suggestedPlanName={paywallSuggestedPlan}
+      />
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project" description="Add details about your project. Only the name is required.">
         <form onSubmit={handleCreate} className="space-y-4 mt-2">

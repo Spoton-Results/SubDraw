@@ -1,6 +1,75 @@
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
+import { projectsTable } from "@workspace/db/schema";
+import { getUncachableStripeClient } from "./stripeClient.js";
+
+// ── Plan definitions ──────────────────────────────────────────────────────────
+
+export const PLANS = [
+  { name: "SubTracker Starter", limit: 5,  monthlyUsd: 39900, label: "Starter" },
+  { name: "SubTracker Growth",  limit: 15, monthlyUsd: 79900, label: "Growth"  },
+  { name: "SubTracker Scale",   limit: 40, monthlyUsd: 149900, label: "Scale"  },
+] as const;
+
+export type PlanName = (typeof PLANS)[number]["name"];
+
+export function getPlanByName(name: string) {
+  return PLANS.find(p => p.name === name) ?? null;
+}
+
+export function getNextPlan(currentName: string) {
+  const idx = PLANS.findIndex(p => p.name === currentName);
+  if (idx === -1 || idx === PLANS.length - 1) return null;
+  return PLANS[idx + 1];
+}
+
+// ── Stripe product/price helpers ──────────────────────────────────────────────
+
+export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> {
+  // Try to find from synced Stripe DB first
+  const result = await db.execute(
+    sql`
+      SELECT pr.id as price_id
+      FROM stripe.prices pr
+      JOIN stripe.products p ON p.id = pr.product
+      WHERE p.name = ${planName} AND pr.active = true AND p.active = true
+      LIMIT 1
+    `
+  );
+  if (result.rows[0]) return (result.rows[0] as any).price_id as string;
+
+  // Create product + price in Stripe
+  const plan = getPlanByName(planName)!;
+  const stripe = await getUncachableStripeClient();
+  const product = await stripe.products.create({ name: planName });
+  const price = await stripe.prices.create({
+    product: product.id,
+    unit_amount: plan.monthlyUsd,
+    currency: "usd",
+    recurring: { interval: "month" },
+  });
+  return price.id;
+}
+
+export async function getAllPlanPrices(): Promise<Array<{ planName: string; priceId: string; unitAmount: number }>> {
+  const result = await db.execute(
+    sql`
+      SELECT pr.id as price_id, pr.unit_amount, p.name as product_name
+      FROM stripe.prices pr
+      JOIN stripe.products p ON p.id = pr.product
+      WHERE p.name IN ('SubTracker Starter', 'SubTracker Growth', 'SubTracker Scale')
+        AND pr.active = true AND p.active = true
+    `
+  );
+  return (result.rows as any[]).map(r => ({
+    planName: r.product_name,
+    priceId: r.price_id,
+    unitAmount: r.unit_amount ?? 0,
+  }));
+}
+
+// ── Subscription helpers ──────────────────────────────────────────────────────
 
 export async function getSubscriptionForUser(userId: string) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
@@ -29,18 +98,19 @@ export async function getInvoicesForCustomer(customerId: string, limit = 12) {
   return result.rows as any[];
 }
 
-export async function getProPlanPrice() {
+/** Returns the product name for a subscription, or null if not found. */
+export async function getSubscriptionPlanName(subscriptionId: string): Promise<string | null> {
   const result = await db.execute(
     sql`
-      SELECT pr.id as price_id, pr.unit_amount, pr.currency, pr.recurring,
-             p.id as product_id, p.name as product_name
-      FROM stripe.prices pr
+      SELECT p.name as product_name
+      FROM stripe.subscription_items si
+      JOIN stripe.prices pr ON pr.id = si.price
       JOIN stripe.products p ON p.id = pr.product
-      WHERE p.name = 'SubTracker Pro' AND pr.active = true AND p.active = true
+      WHERE si.subscription = ${subscriptionId}
       LIMIT 1
     `
   );
-  return (result.rows[0] as any) ?? null;
+  return (result.rows[0] as any)?.product_name ?? null;
 }
 
 export async function updateUserStripeInfo(userId: string, info: {
@@ -55,29 +125,90 @@ export async function updateUserStripeInfo(userId: string, info: {
   return user;
 }
 
-export async function isGCSubscribed(userId: string): Promise<boolean> {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user || user.role !== "GC") return false;
-  if (!user.stripeSubscriptionId) return false;
+// ── Plan limit helpers ────────────────────────────────────────────────────────
 
-  const sub = await getSubscriptionById(user.stripeSubscriptionId);
-  if (!sub) return false;
-
-  const status = sub.status;
-  if (status === "active" || status === "trialing") return true;
-
-  if (status === "past_due") {
-    const now = Math.floor(Date.now() / 1000);
-    const gracePeriodEnd = (sub.current_period_end ?? 0) + 3 * 24 * 60 * 60;
-    if (now <= gracePeriodEnd) return true;
-  }
-
-  return false;
+/** Count BIDDING or ACTIVE projects for a GC (these consume a plan slot). */
+export async function getActiveProjectCount(gcId: string): Promise<number> {
+  const result = await db.execute(
+    sql`SELECT COUNT(*) as count FROM projects WHERE gc_id = ${gcId} AND status IN ('BIDDING', 'ACTIVE')`
+  );
+  return parseInt((result.rows[0] as any)?.count ?? "0", 10);
 }
 
+/** Total project count regardless of status (kept for backward compat). */
 export async function getGCProjectCount(gcId: string): Promise<number> {
   const result = await db.execute(
     sql`SELECT COUNT(*) as count FROM projects WHERE gc_id = ${gcId}`
   );
   return parseInt((result.rows[0] as any)?.count ?? "0", 10);
+}
+
+export interface GCPlanInfo {
+  subscribed: boolean;
+  planName: string | null;
+  planLabel: string | null;
+  limit: number | null;
+  activeCount: number;
+  nextPlan: (typeof PLANS)[number] | null;
+  isPastDue: boolean;
+  isInGrace: boolean;
+}
+
+export async function getGCPlanInfo(userId: string): Promise<GCPlanInfo> {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const activeCount = await getActiveProjectCount(userId);
+
+  if (!user?.stripeSubscriptionId) {
+    return { subscribed: false, planName: null, planLabel: null, limit: null, activeCount, nextPlan: PLANS[0], isPastDue: false, isInGrace: false };
+  }
+
+  const sub = await getSubscriptionById(user.stripeSubscriptionId);
+  if (!sub) {
+    return { subscribed: false, planName: null, planLabel: null, limit: null, activeCount, nextPlan: PLANS[0], isPastDue: false, isInGrace: false };
+  }
+
+  const isPastDue = sub.status === "past_due";
+  let isInGrace = false;
+  if (isPastDue) {
+    const now = Math.floor(Date.now() / 1000);
+    const gracePeriodEnd = (sub.current_period_end ?? 0) + 3 * 24 * 60 * 60;
+    isInGrace = now <= gracePeriodEnd;
+  }
+
+  const subscribed = sub.status === "active" || sub.status === "trialing" || (isPastDue && isInGrace);
+
+  const planName = await getSubscriptionPlanName(user.stripeSubscriptionId);
+  const plan = planName ? getPlanByName(planName) : null;
+  const nextPlan = planName ? getNextPlan(planName) : PLANS[0];
+
+  return {
+    subscribed,
+    planName: planName ?? null,
+    planLabel: plan?.label ?? null,
+    limit: plan?.limit ?? null,
+    activeCount,
+    nextPlan: nextPlan ?? null,
+    isPastDue,
+    isInGrace,
+  };
+}
+
+export async function isGCSubscribed(userId: string): Promise<boolean> {
+  const info = await getGCPlanInfo(userId);
+  return info.subscribed;
+}
+
+// Kept for backward compat — prefer getOrCreatePlanPrice
+export async function getProPlanPrice() {
+  const result = await db.execute(
+    sql`
+      SELECT pr.id as price_id, pr.unit_amount, pr.currency, pr.recurring,
+             p.id as product_id, p.name as product_name
+      FROM stripe.prices pr
+      JOIN stripe.products p ON p.id = pr.product
+      WHERE p.name = 'SubTracker Pro' AND pr.active = true AND p.active = true
+      LIMIT 1
+    `
+  );
+  return (result.rows[0] as any) ?? null;
 }
