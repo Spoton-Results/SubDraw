@@ -5,6 +5,7 @@ import { eq, or, inArray, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
 import { sendInviteEmail, sendSubRemovedEmail } from "../lib/email.js";
+import { isGCSubscribed, getGCProjectCount } from "../lib/stripeStorage.js";
 
 const router = Router();
 
@@ -121,6 +122,20 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
     res.status(400).json({ error: "name is required" });
     return;
   }
+
+  const projectCount = await getGCProjectCount(user.id);
+  if (projectCount >= 1) {
+    const subscribed = await isGCSubscribed(user.id);
+    if (!subscribed) {
+      res.status(402).json({
+        error: "SUBSCRIPTION_REQUIRED",
+        message: "Upgrade to SubTracker Pro to manage unlimited projects.",
+        projectCount,
+      });
+      return;
+    }
+  }
+
   const [project] = await db.insert(projectsTable).values({
     name,
     gcId: user.id,
