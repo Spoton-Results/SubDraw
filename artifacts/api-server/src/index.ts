@@ -44,12 +44,14 @@ async function initStripe() {
   }
 }
 
-await initStripe();
+(async () => {
+  await initStripe();
 
-const appBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
-startInsuranceNotifier(appBaseUrl);
-startDemoSeeder();
+  const appBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+  startInsuranceNotifier(appBaseUrl);
+  startDemoSeeder();
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+})();
