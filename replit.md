@@ -103,6 +103,10 @@ All prefixed with `/api`
 - `GET /projects/:id`, `POST /projects/:id/invite` (auto-saves sub to GC contact book)
 - `GET /projects/:id/bids`, `POST /projects/:id/bids`
 - `POST /projects/:id/bids/:bidId/award` — Award bid, creates subcontract
+- `GET /projects/:id/change-orders` — All COs across all subcontracts for a project (GC only, with sub company name)
+- `POST /projects/:id/change-orders/bulk` — Create COs for multiple subcontracts at once; body: `{description, scope?, entries:[{subcontractId, amount}]}`
+- `GET /projects/archived` — Archived projects list (GC only) — NOTE: must be declared before `/:projectId` in Express router
+- `POST /projects/:id/archive`, `POST /projects/:id/unarchive`
 - `GET /subcontracts`, `GET /subcontracts/:id`
 - `GET/POST /subcontracts/:id/change-orders`
 - `POST /subcontracts/:id/change-orders/:coId/approve|reject`

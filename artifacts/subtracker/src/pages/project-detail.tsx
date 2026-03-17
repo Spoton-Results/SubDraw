@@ -18,7 +18,7 @@ import {
   useGetContacts,
   useInviteContactToProject,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import {
   Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
-  Archive, ArchiveRestore, Lock,
+  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -137,6 +137,31 @@ export default function ProjectDetail() {
   const [awardTradeCategory, setAwardTradeCategory] = React.useState("");
   const [tradeFilter, setTradeFilter] = React.useState("");
   const [removeMemberConfirm, setRemoveMemberConfirm] = React.useState<{ open: boolean; userId: string; companyName: string }>({ open: false, userId: "", companyName: "" });
+
+  // Archive hooks — must be above early return
+  const [archiveConfirm, setArchiveConfirm] = React.useState(false);
+  const [unarchiveConfirm, setUnarchiveConfirm] = React.useState(false);
+  const [archiveLoading, setArchiveLoading] = React.useState(false);
+
+  // ── Bulk Change Order state (hooks must be before early returns) ───────────
+  const [isBulkCOOpen, setIsBulkCOOpen] = React.useState(false);
+  const [bulkCODescription, setBulkCODescription] = React.useState("");
+  const [bulkCOScope, setBulkCOScope] = React.useState("");
+  const [selectedSubIds, setSelectedSubIds] = React.useState<Set<string>>(new Set());
+  const [subAmounts, setSubAmounts] = React.useState<Record<string, string>>({});
+  const [bulkCOLoading, setBulkCOLoading] = React.useState(false);
+
+  // Fetch all COs for this project (GC only) — must be before early return
+  const { data: projectCOs = [] } = useQuery<any[]>({
+    queryKey: ["project-cos", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/change-orders`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+    refetchOnWindowFocus: false,
+  });
 
   const { uploadFile, progress, isUploading } = useUpload({
     onError: (err) => {
@@ -356,10 +381,6 @@ export default function ProjectDetail() {
     }
   };
 
-  const [archiveConfirm, setArchiveConfirm] = React.useState(false);
-  const [unarchiveConfirm, setUnarchiveConfirm] = React.useState(false);
-  const [archiveLoading, setArchiveLoading] = React.useState(false);
-
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
   const handleArchive = async () => {
@@ -399,6 +420,62 @@ export default function ProjectDetail() {
   };
 
   const isArchived = !!(project as any).archivedAt;
+
+  // ── Bulk Change Order helpers (non-hook, safe after early return) ──────────
+  const toggleSubSelection = (scId: string) => {
+    setSelectedSubIds(prev => {
+      const next = new Set(prev);
+      if (next.has(scId)) next.delete(scId);
+      else next.add(scId);
+      return next;
+    });
+  };
+
+  const bulkCOTotal = Array.from(selectedSubIds).reduce((sum, scId) => {
+    const val = parseFloat(subAmounts[scId] ?? "0");
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
+
+  const handleBulkCOSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkCODescription.trim()) return toast.error("Description is required");
+    if (selectedSubIds.size === 0) return toast.error("Select at least one subcontractor");
+    const entries = Array.from(selectedSubIds).map(scId => ({
+      subcontractId: scId,
+      amount: parseFloat(subAmounts[scId] ?? "0"),
+    }));
+    if (entries.some(e => !e.amount || e.amount <= 0)) {
+      return toast.error("Enter a valid amount for each selected subcontractor");
+    }
+    setBulkCOLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/change-orders/bulk`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: bulkCODescription.trim(), scope: bulkCOScope.trim() || undefined, entries }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to create change orders");
+      }
+      const created = await res.json();
+      toast.success(`${created.length} change order${created.length !== 1 ? "s" : ""} sent!`);
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      queryClient.invalidateQueries({ queryKey: ["project-cos", projectId] });
+      setIsBulkCOOpen(false);
+      setBulkCODescription("");
+      setBulkCOScope("");
+      setSelectedSubIds(new Set());
+      setSubAmounts({});
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create change orders");
+    } finally {
+      setBulkCOLoading(false);
+    }
+  };
+
+  const pendingCOs = projectCOs.filter(co => co.status === "PENDING_GC" || co.status === "PENDING_SUB");
 
   const getFileUrl = (plan: { objectPath?: string | null; fileUrl?: string | null }) => {
     if (plan.objectPath) return `/api/storage${plan.objectPath}`;
@@ -609,18 +686,30 @@ export default function ProjectDetail() {
                   <CardTitle className="flex items-center gap-2">
                     <FileSignature className="h-5 w-5 text-primary" /> Active Subcontracts
                   </CardTitle>
-                  {isGC && (project.subcontracts?.length ?? 0) > 0 && (
-                    <select
-                      className="text-sm rounded-xl border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[160px]"
-                      value={tradeFilter}
-                      onChange={(e) => setTradeFilter(e.target.value)}
-                    >
-                      <option value="">All Trades</option>
-                      {TRADE_CATEGORIES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isGC && (project.subcontracts?.length ?? 0) > 0 && (
+                      <select
+                        className="text-sm rounded-xl border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[160px]"
+                        value={tradeFilter}
+                        onChange={(e) => setTradeFilter(e.target.value)}
+                      >
+                        <option value="">All Trades</option>
+                        {TRADE_CATEGORIES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    )}
+                    {isGC && !isArchived && (project.subcontracts?.length ?? 0) > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setIsBulkCOOpen(true); setSelectedSubIds(new Set()); setSubAmounts({}); setBulkCODescription(""); setBulkCOScope(""); }}
+                        className="gap-1.5"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Create Change Order
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -723,6 +812,106 @@ export default function ProjectDetail() {
                 })()}
               </CardContent>
             </Card>
+          )}
+
+          {/* CHANGE ORDER LOG SECTION (GC only) */}
+          {isGC && projectCOs.length > 0 && (
+            <>
+              {/* Pending COs alert card */}
+              {pendingCOs.length > 0 && (
+                <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                      <Clock className="h-5 w-5" />
+                      Pending Change Orders ({pendingCOs.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-amber-200 dark:divide-amber-800">
+                      {pendingCOs.map(co => (
+                        <div key={co.id} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">{co.subCompanyName}</p>
+                            <p className="text-sm text-muted-foreground truncate">{co.description}</p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="font-mono font-semibold text-amber-800 dark:text-amber-300">{formatCurrency(co.amount)}</span>
+                            <Badge variant="warning" className="text-xs">{co.status === "PENDING_GC" ? "Awaiting GC" : "Awaiting Sub"}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Full CO Log table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-primary" />
+                    Change Order Log ({projectCOs.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40">
+                          <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground text-xs uppercase tracking-wider">Sub</th>
+                          <th className="hidden sm:table-cell px-4 py-2.5 text-left font-semibold text-muted-foreground text-xs uppercase tracking-wider">Description</th>
+                          <th className="px-4 py-2.5 text-right font-semibold text-muted-foreground text-xs uppercase tracking-wider">Amount</th>
+                          <th className="hidden md:table-cell px-4 py-2.5 text-center font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                          <th className="hidden lg:table-cell px-4 py-2.5 text-right font-semibold text-muted-foreground text-xs uppercase tracking-wider">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {projectCOs.map(co => (
+                          <tr key={co.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold">{co.subCompanyName}</p>
+                              {co.tradeCategory && <p className="text-xs text-muted-foreground">{co.tradeCategory}</p>}
+                              <p className="sm:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-[180px]">{co.description}</p>
+                            </td>
+                            <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground max-w-[220px]">
+                              <p className="truncate">{co.description}</p>
+                              {co.scope && <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{co.scope}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatCurrency(co.amount)}</td>
+                            <td className="hidden md:table-cell px-4 py-3 text-center">
+                              <Badge variant={
+                                co.status === "APPROVED" ? "success" :
+                                co.status === "REJECTED" ? "destructive" :
+                                co.status === "PENDING_GC" || co.status === "PENDING_SUB" ? "warning" : "secondary"
+                              } className="text-xs whitespace-nowrap">
+                                {co.status === "PENDING_GC" ? "Awaiting GC" :
+                                 co.status === "PENDING_SUB" ? "Awaiting Sub" :
+                                 co.status}
+                              </Badge>
+                            </td>
+                            <td className="hidden lg:table-cell px-4 py-3 text-right text-muted-foreground text-xs">
+                              {format(new Date(co.createdAt), "MMM d, yyyy")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {projectCOs.length > 1 && (
+                        <tfoot>
+                          <tr className="border-t-2 border-border bg-muted/50 font-bold">
+                            <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground" colSpan={2}>Total ({projectCOs.length} COs)</td>
+                            <td className="px-4 py-3 text-right font-mono">
+                              {formatCurrency(projectCOs.reduce((s, co) => s + (co.amount ?? 0), 0))}
+                            </td>
+                            <td className="hidden md:table-cell"></td>
+                            <td className="hidden lg:table-cell"></td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
 
           {/* BIDS SECTION */}
@@ -1352,6 +1541,108 @@ export default function ProjectDetail() {
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* Bulk Change Order Modal */}
+      <Dialog
+        open={isBulkCOOpen}
+        onOpenChange={(open) => { if (!open) setIsBulkCOOpen(false); }}
+        title="Create Change Order"
+      >
+        <form onSubmit={handleBulkCOSubmit} className="space-y-5">
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">Description <span className="text-destructive">*</span></label>
+            <Input
+              placeholder="e.g. Added exterior drainage scope"
+              value={bulkCODescription}
+              onChange={e => setBulkCODescription(e.target.value)}
+              required
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">Scope / Notes <span className="font-normal text-muted-foreground">(optional)</span></label>
+            <textarea
+              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none min-h-[80px]"
+              placeholder="Describe the additional scope of work…"
+              value={bulkCOScope}
+              onChange={e => setBulkCOScope(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-2 block">Select Subcontractors <span className="text-destructive">*</span></label>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {project.subcontracts?.map(sc => {
+                const checked = selectedSubIds.has(sc.id);
+                return (
+                  <div
+                    key={sc.id}
+                    className={cn(
+                      "rounded-xl border transition-colors cursor-pointer",
+                      checked ? "border-primary bg-primary/5" : "border-border bg-secondary/30 hover:bg-secondary/60"
+                    )}
+                    onClick={() => toggleSubSelection(sc.id)}
+                  >
+                    <div className="flex items-start gap-3 p-3">
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={checked}
+                        className="mt-0.5 h-4 w-4 rounded accent-primary shrink-0 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{sc.sub?.companyName ?? "Unknown"}</p>
+                        {sc.tradeCategory && <p className="text-xs text-muted-foreground">{sc.tradeCategory}</p>}
+                      </div>
+                      {checked && (
+                        <div onClick={e => e.stopPropagation()} className="shrink-0">
+                          <Input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            placeholder="Amount $"
+                            value={subAmounts[sc.id] ?? ""}
+                            onChange={e => setSubAmounts(prev => ({ ...prev, [sc.id]: e.target.value }))}
+                            className="w-[120px] font-mono text-sm h-8"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {selectedSubIds.size > 0 && (
+            <div className="flex items-center justify-between rounded-xl bg-muted/60 px-4 py-3 border border-border">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                <span>Combined CO Value ({selectedSubIds.size} sub{selectedSubIds.size !== 1 ? "s" : ""})</span>
+              </div>
+              <span className="font-mono font-bold text-lg">{formatCurrency(bulkCOTotal)}</span>
+            </div>
+          )}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setIsBulkCOOpen(false)}
+              disabled={bulkCOLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="min-h-[44px] gap-2"
+              isLoading={bulkCOLoading}
+              disabled={selectedSubIds.size === 0}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Send {selectedSubIds.size > 0 ? selectedSubIds.size : ""} Change Order{selectedSubIds.size !== 1 ? "s" : ""}
+            </Button>
+          </div>
+        </form>
       </Dialog>
     </Layout>
   );

@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
-import { sendInviteEmail, sendSubRemovedEmail } from "../lib/email.js";
+import { sendInviteEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 
 const router = Router();
@@ -501,6 +501,104 @@ router.delete("/:projectId/members/:userId", requireAuth, requireGC, async (req,
   }
 
   res.status(204).send();
+});
+
+// GC: get all change orders across all subcontracts for a project
+router.get("/:projectId/change-orders", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, req.params.projectId));
+  if (subcontracts.length === 0) { res.json([]); return; }
+
+  const scIds = subcontracts.map(sc => sc.id);
+  const cos = await db.select().from(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, scIds));
+
+  // Attach sub info to each CO
+  const result = await Promise.all(cos.map(async (co) => {
+    const sc = subcontracts.find(s => s.id === co.subcontractId)!;
+    const [sub] = await db.select({ companyName: usersTable.companyName, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    return {
+      ...co,
+      subContractId: sc.id,
+      tradeCategory: sc.tradeCategory ?? null,
+      subCompanyName: sub?.companyName ?? "Unknown",
+    };
+  }));
+
+  // Sort newest first
+  result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json(result);
+});
+
+// GC: create change orders for multiple subcontracts at once (bulk CO)
+router.post("/:projectId/change-orders/bulk", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { description, scope, entries } = req.body;
+  // entries: Array<{ subcontractId: string; amount: number }>
+  if (!description || !Array.isArray(entries) || entries.length === 0) {
+    res.status(400).json({ error: "description and at least one entry are required" });
+    return;
+  }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.archivedAt) { res.status(400).json({ error: "Archived projects cannot accept new change orders." }); return; }
+
+  // Validate all subcontracts belong to this project
+  const scIds = entries.map((e: any) => e.subcontractId);
+  const subcontracts = await db.select().from(subcontractsTable)
+    .where(and(inArray(subcontractsTable.id, scIds), eq(subcontractsTable.projectId, req.params.projectId)));
+  if (subcontracts.length !== scIds.length) {
+    res.status(400).json({ error: "One or more subcontracts are invalid or don't belong to this project" });
+    return;
+  }
+
+  const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+  const gcUser = (req as any).user;
+  const [gcUserData] = await db.select({ companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, gcUser.id)).limit(1);
+
+  const created = await Promise.all(entries.map(async (entry: { subcontractId: string; amount: number }) => {
+    const amount = Number(entry.amount);
+    if (!amount || amount <= 0) return null;
+
+    const [co] = await db.insert(changeOrdersTable).values({
+      subcontractId: entry.subcontractId,
+      description: String(description).trim(),
+      scope: scope ? String(scope).trim() : null,
+      amount,
+      status: "PENDING_GC",
+    }).returning();
+
+    // Log activity
+    await db.insert(activityLogsTable).values({
+      subcontractId: entry.subcontractId,
+      type: "CO_CREATED",
+      description: `Change order "${description}" for $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} created`,
+      actorName: gcUserData?.companyName ?? "GC",
+      actorRole: "GC",
+    }).catch(() => {});
+
+    // Send email to sub
+    const sc = subcontracts.find(s => s.id === entry.subcontractId)!;
+    const [subUser] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    if (subUser) {
+      sendChangeOrderCreatedEmail({
+        toEmail: subUser.email,
+        projectName: project.name,
+        description: String(description).trim(),
+        amount,
+        appUrl,
+      }).catch((err) => console.error("[email] bulk CO sendChangeOrderCreatedEmail failed:", err));
+    }
+
+    return co;
+  }));
+
+  res.status(201).json(created.filter(Boolean));
 });
 
 export default router;
