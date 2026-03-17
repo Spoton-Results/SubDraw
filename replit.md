@@ -38,7 +38,7 @@ artifacts-monorepo/
 
 ## Database Schema (PostgreSQL)
 
-- `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires)
+- `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires, `isDemo` boolean)
 - `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED; optional fields: address, description, estimatedStartDate (text), notes (GC-only, stripped from API response for non-GC users)
 - `project_members` — Which subs are invited to a project
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
@@ -124,12 +124,32 @@ All prefixed with `/api`
 - `POST /stripe/checkout` — Create Stripe checkout session (returns URL)
 - `POST /stripe/cancel-subscription` — Cancel subscription at period end
 - `POST /stripe/reactivate-subscription` — Reactivate a cancelling subscription
-- `GET /stripe/subscription-status` — Check if GC is subscribed
+- `GET /stripe/subscription-status` — Check if GC is subscribed (returns bypass response for demo accounts)
+- `POST /auth/demo-login` — Log in as demo GC or SUB (no password required; body: `{role: "GC"|"SUB"}`)
 
 ## TypeScript & Composite Projects
 
 Every package extends `tsconfig.base.json` which sets `composite: true`. Always typecheck from the root:
 - `pnpm run typecheck` — full check
+
+## Demo System
+
+- **Demo GC**: `demo-gc@subtracker.com` (Harbor View Construction Co.) — `isDemo: true`
+- **Demo Sub**: `demo-sub@subtracker.com` (Pacific Electric Inc.) — `isDemo: true`
+- Demo data reset every 24h via `startDemoSeeder()` in `artifacts/api-server/src/lib/demoSeeder.ts`
+- Demo project: "Harbor View Office Renovation" (CONSTRUCTION) with 3 subcontracts (Electrical $45k, Plumbing $28k, Drywall $32k), change orders, invoices (including 1 FLAGGED), a signed lien waiver, and drywall insurance expiring in 15 days
+- Demo emails suppressed via Proxy in `email.ts` that intercepts calls to `toEmail` matching `demo-.*@subtracker.com`
+- Demo accounts bypass Stripe subscription-status and project creation limit checks
+- Demo banner shown in Layout when `user.isDemo === true`
+- Login page has "Demo as GC" and "Demo as Sub" buttons (no password required)
+
+## Free Trial
+
+- 14-day free trial starts at registration (no credit card required)
+- `trialStartedAt` column on users defaults to `now()`; `getGCPlanInfo()` computes `trialActive`, `trialExpired`, `trialDaysLeft`
+- During trial: GC has full access (subscribed=true, limit=null)
+- After trial: TrialExpiredGate blocks access until a plan is chosen
+- TrialBanner shown when `trialActive && !planName`: blue (7+ days left), yellow (<7 days), red (<3 days)
 
 ## Test Accounts (seeded during dev)
 

@@ -178,6 +178,10 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
     return;
   }
 
+  if (user.isDemo) {
+    res.status(403).json({ error: "Demo accounts cannot create new projects. Sign up to create your own projects." });
+    return;
+  }
   const planInfo = await getGCPlanInfo(user.id);
   // First project is always free
   if (planInfo.activeCount >= 1) {

@@ -151,6 +151,29 @@ router.post("/forgot-password", async (req, res) => {
   res.json({ message: "If that email exists, a reset link has been sent." });
 });
 
+router.post("/demo-login", async (req, res) => {
+  const { role } = req.body;
+  if (!["GC", "SUB"].includes(role)) {
+    res.status(400).json({ error: "role must be GC or SUB" });
+    return;
+  }
+  const email =
+    role === "GC" ? "demo-gc@subtracker.com" : "demo-sub@subtracker.com";
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+  if (!user) {
+    res.status(503).json({ error: "Demo account is being set up. Please try again in a moment." });
+    return;
+  }
+  const token = generateToken(user);
+  setAuthCookie(res, token);
+  const { passwordHash: _, ...safeUser } = user;
+  res.status(200).json({ user: safeUser });
+});
+
 router.post("/reset-password", async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) {

@@ -19,11 +19,12 @@ export interface TokenPayload {
   email: string;
   role: string;
   companyName: string;
+  isDemo?: boolean;
 }
 
 export function generateToken(user: TokenPayload): string {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, companyName: user.companyName },
+    { id: user.id, email: user.email, role: user.role, companyName: user.companyName, isDemo: user.isDemo ?? false },
     JWT_SECRET,
     { expiresIn: "7d" }
   );

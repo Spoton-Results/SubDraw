@@ -15,8 +15,37 @@ function buildFromEmail(raw: string): string {
 
 const FROM_EMAIL = buildFromEmail(RAW_FROM);
 
-const resend = API_KEY ? new Resend(API_KEY) : null;
+const _resendBase = API_KEY ? new Resend(API_KEY) : null;
 if (!API_KEY) console.log("[email] RESEND_API_KEY not set — emails will be skipped");
+
+function isDemoEmail(email: string): boolean {
+  return /^demo-.*@subtracker\.com$/.test(String(email));
+}
+
+const resend = _resendBase
+  ? new Proxy(_resendBase, {
+      get(target, prop) {
+        if (prop === "emails") {
+          return new Proxy((target as any).emails, {
+            get(emailTarget, emailProp) {
+              if (emailProp === "send") {
+                return async (params: any) => {
+                  const to = Array.isArray(params.to) ? params.to[0] : params.to;
+                  if (isDemoEmail(String(to))) {
+                    console.log(`[email] Skipping demo account email to: ${to}`);
+                    return { data: { id: "demo-suppressed" }, error: null };
+                  }
+                  return (emailTarget as any).send(params);
+                };
+              }
+              return (emailTarget as any)[emailProp];
+            },
+          });
+        }
+        return (target as any)[prop];
+      },
+    })
+  : null;
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);

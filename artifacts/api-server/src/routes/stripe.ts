@@ -175,6 +175,10 @@ router.get("/subscription-status", requireAuth, async (req, res) => {
     res.json({ subscribed: true, planName: null, planLabel: null, limit: null, activeCount: 0, nextPlan: null, isPastDue: false, subscription: null });
     return;
   }
+  if (user.isDemo) {
+    res.json({ subscribed: true, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, trialActive: false, trialExpired: false, trialDaysLeft: 14, trialEndsAt: null, subscription: null });
+    return;
+  }
 
   const planInfo = await getGCPlanInfo(user.id);
   const subscription = await getSubscriptionForUser(user.id);

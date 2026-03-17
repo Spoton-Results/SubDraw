@@ -8,42 +8,37 @@ interface TrialBannerProps {
 }
 
 export function TrialBanner({ daysLeft, trialEndsAt }: TrialBannerProps) {
-  const isUrgent = daysLeft <= 4;
-  const isCritical = daysLeft <= 1;
+  const isRed = daysLeft < 3;
+  const isYellow = !isRed && daysLeft < 7;
 
-  const bgColor = isCritical
+  const bgColor = isRed
     ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-700"
-    : isUrgent
-    ? "bg-orange-50 border-orange-300 dark:bg-orange-950/30 dark:border-orange-700"
+    : isYellow
+    ? "bg-yellow-50 border-yellow-300 dark:bg-yellow-950/30 dark:border-yellow-700"
     : "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-700";
 
-  const textColor = isCritical
+  const textColor = isRed
     ? "text-red-800 dark:text-red-300"
-    : isUrgent
-    ? "text-orange-800 dark:text-orange-300"
+    : isYellow
+    ? "text-yellow-800 dark:text-yellow-300"
     : "text-blue-800 dark:text-blue-200";
 
-  const iconColor = isCritical ? "text-red-500" : isUrgent ? "text-orange-500" : "text-blue-500";
+  const iconColor = isRed ? "text-red-500" : isYellow ? "text-yellow-500" : "text-blue-500";
 
-  const Icon = isUrgent ? AlertTriangle : Clock;
+  const Icon = isRed || isYellow ? AlertTriangle : Clock;
 
   const message =
     daysLeft === 0
-      ? "Your free trial expires today"
+      ? "Your free trial expires today — choose a plan to keep access"
       : daysLeft === 1
-      ? "1 day left in your free trial"
-      : `${daysLeft} days left in your free trial`;
+      ? "Your free trial ends in 1 day — choose a plan to keep access"
+      : `Your free trial ends in ${daysLeft} days — choose a plan to keep access`;
 
   return (
     <div className={`mb-4 rounded-xl border px-4 py-3 flex items-center gap-3 ${bgColor}`}>
       <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
       <div className="flex-1 min-w-0">
         <span className={`text-sm font-semibold ${textColor}`}>{message}</span>
-        {isUrgent && (
-          <span className={`text-xs ml-2 ${textColor} opacity-80`}>
-            — Choose a plan to keep your data and continue without interruption.
-          </span>
-        )}
       </div>
       <Link
         href="/billing"
