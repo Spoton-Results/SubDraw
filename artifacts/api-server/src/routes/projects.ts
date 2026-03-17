@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import archiver from "archiver";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
@@ -696,6 +696,82 @@ router.get("/gc/unsigned-lien-waivers", requireAuth, requireGC, async (req, res)
   const unsigned = invoiceIds.filter(id => !signedInvoiceIds.has(id));
 
   res.json({ count: unsigned.length });
+});
+
+// ─── Insurance alerts ─────────────────────────────────────────────────────────
+
+function calcInsuranceStatus(expirationDate: string | null | undefined): "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_INSURANCE" {
+  if (!expirationDate) return "NO_INSURANCE";
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const exp = new Date(expirationDate);
+  exp.setHours(0, 0, 0, 0);
+  const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return "EXPIRED";
+  if (days <= 30) return "EXPIRING_SOON";
+  return "VALID";
+}
+
+// GET /gc/insurance-alerts — summarize expired/expiring insurance counts for GC dashboard
+// IMPORTANT: must be BEFORE /:projectId route
+router.get("/gc/insurance-alerts", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+
+  const gcProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
+    .where(and(eq(projectsTable.gcId, user.id), isNull(projectsTable.archivedAt)));
+  const projectIds = gcProjects.map(p => p.id);
+
+  if (projectIds.length === 0) { res.json({ expired: 0, expiringSoon: 0 }); return; }
+
+  const scs = await db.select({ id: subcontractsTable.id }).from(subcontractsTable)
+    .where(inArray(subcontractsTable.projectId, projectIds));
+  const scIds = scs.map(s => s.id);
+
+  if (scIds.length === 0) { res.json({ expired: 0, expiringSoon: 0 }); return; }
+
+  const insurances = await db.select().from(subcontractInsurancesTable)
+    .where(inArray(subcontractInsurancesTable.subcontractId, scIds));
+
+  let expired = 0;
+  let expiringSoon = 0;
+  for (const ins of insurances) {
+    const status = calcInsuranceStatus(ins.expirationDate);
+    if (status === "EXPIRED") expired++;
+    else if (status === "EXPIRING_SOON") expiringSoon++;
+  }
+
+  res.json({ expired, expiringSoon });
+});
+
+// GET /:projectId/insurance-summary — insurance status for all subcontracts in a project (GC only)
+router.get("/:projectId/insurance-summary", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const scs = await db.select({ id: subcontractsTable.id }).from(subcontractsTable)
+    .where(eq(subcontractsTable.projectId, projectId));
+  const scIds = scs.map(s => s.id);
+
+  if (scIds.length === 0) { res.json([]); return; }
+
+  const insurances = await db.select().from(subcontractInsurancesTable)
+    .where(inArray(subcontractInsurancesTable.subcontractId, scIds));
+
+  const insMap = new Map(insurances.map(i => [i.subcontractId, i]));
+
+  const result = scIds.map(scId => {
+    const ins = insMap.get(scId);
+    return {
+      subcontractId: scId,
+      status: calcInsuranceStatus(ins?.expirationDate),
+      expirationDate: ins?.expirationDate ?? null,
+    };
+  });
+
+  res.json(result);
 });
 
 export default router;

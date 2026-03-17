@@ -62,6 +62,17 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
+  const { data: insuranceAlerts } = useQuery<{ expired: number; expiringSoon: number }>({
+    queryKey: ["insurance-alerts"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/gc/insurance-alerts`, { credentials: "include" });
+      if (!res.ok) return { expired: 0, expiringSoon: 0 };
+      return res.json();
+    },
+    enabled: isGC,
+    refetchInterval: 60_000,
+  });
+
   const [archiveSearch, setArchiveSearch] = React.useState("");
   const [showArchived, setShowArchived] = React.useState(false);
   const [unarchivingId, setUnarchivingId] = React.useState<string | null>(null);
@@ -165,6 +176,18 @@ export default function Dashboard() {
             <Badge variant="warning" className="gap-1.5 text-sm px-3 py-1.5">
               <AlertTriangle className="h-4 w-4" />
               {unsignedWaivers!.count} Unsigned Lien Waiver{unsignedWaivers!.count !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {isGC && (insuranceAlerts?.expired ?? 0) > 0 && (
+            <Badge variant="destructive" className="gap-1.5 text-sm px-3 py-1.5 animate-pulse">
+              <ShieldAlert className="h-4 w-4" />
+              {insuranceAlerts!.expired} Expired Insurance
+            </Badge>
+          )}
+          {isGC && (insuranceAlerts?.expired ?? 0) === 0 && (insuranceAlerts?.expiringSoon ?? 0) > 0 && (
+            <Badge variant="warning" className="gap-1.5 text-sm px-3 py-1.5">
+              <ShieldAlert className="h-4 w-4" />
+              {insuranceAlerts!.expiringSoon} Insurance Expiring Soon
             </Badge>
           )}
           {isGC && (

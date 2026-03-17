@@ -10,7 +10,7 @@ import {
   useMarkInvoicePaid, useConfirmInvoicePayment, useDisputeInvoicePayment,
   getGetSubcontractQueryKey, getGetSubcontractActivityQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,9 @@ import {
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
   HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
+  Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
 } from "lucide-react";
+import { useUpload } from "@workspace/object-storage-web";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
@@ -103,6 +105,31 @@ export default function SubcontractDetail() {
   const [lienWaiverDialog, setLienWaiverDialog] = React.useState<{ open: boolean; invoiceId: string; invoiceNumber: string; amount: number }>({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
   const [signedByName, setSignedByName] = React.useState("");
   const [waiverSigning, setWaiverSigning] = React.useState(false);
+
+  const [insDialogOpen, setInsDialogOpen] = React.useState(false);
+  const [insCompany, setInsCompany] = React.useState("");
+  const [insPolicy, setInsPolicy] = React.useState("");
+  const [insGL, setInsGL] = React.useState("");
+  const [insWC, setInsWC] = React.useState("");
+  const [insExpDate, setInsExpDate] = React.useState("");
+  const [insSaving, setInsSaving] = React.useState(false);
+  const [insCertPath, setInsCertPath] = React.useState<string | null>(null);
+
+  const { data: insurance, refetch: refetchInsurance } = useQuery({
+    queryKey: ["subcontract-insurance", subcontractId],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/insurance`, { credentials: "include" });
+      if (!res.ok) return { status: "NO_INSURANCE" } as any;
+      return res.json();
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const { uploadFile: uploadCert, progress: certProgress, isUploading: certUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Certificate upload failed"),
+  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
@@ -332,6 +359,61 @@ export default function SubcontractDetail() {
     }
   };
 
+  const insStatus: string = insurance?.status ?? "NO_INSURANCE";
+
+  const openInsDialog = () => {
+    setInsCompany(insurance?.insuranceCompany ?? "");
+    setInsPolicy(insurance?.policyNumber ?? "");
+    setInsGL(insurance?.generalLiabilityCoverage?.toString() ?? "");
+    setInsWC(insurance?.workersCompCoverage?.toString() ?? "");
+    setInsExpDate(insurance?.expirationDate ?? "");
+    setInsCertPath(insurance?.certificateObjectPath ?? null);
+    setInsDialogOpen(true);
+  };
+
+  const handleUploadCert = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadCert(file, `/insurance/${subcontractId}/`, file.name);
+      setInsCertPath(result.objectPath);
+      toast.success("Certificate uploaded — click Save to confirm");
+    } catch { }
+  };
+
+  const handleSaveInsurance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    setInsSaving(true);
+    try {
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/insurance`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          insuranceCompany: insCompany.trim() || null,
+          policyNumber: insPolicy.trim() || null,
+          generalLiabilityCoverage: insGL ? parseFloat(insGL) : null,
+          workersCompCoverage: insWC ? parseFloat(insWC) : null,
+          expirationDate: insExpDate || null,
+          certificateObjectPath: insCertPath || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to save insurance");
+      }
+      toast.success("Insurance certificate saved");
+      refetchInsurance();
+      invalidate();
+      setInsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save insurance");
+    } finally {
+      setInsSaving(false);
+    }
+  };
+
   const getCOStatusBadge = (s: string) => {
     if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
@@ -374,13 +456,63 @@ export default function SubcontractDetail() {
             <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">Subcontract: {sub.sub.companyName}</h1>
             <p className="text-muted-foreground mt-1 md:text-lg">{sub.project.name}</p>
           </div>
-          {sub.tradeCategory && (
-            <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border mt-1 ${TRADE_BADGE_COLORS[sub.tradeCategory] ?? TRADE_BADGE_COLORS.Other}`}>
-              {sub.tradeCategory}
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            {sub.tradeCategory && (
+              <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border ${TRADE_BADGE_COLORS[sub.tradeCategory] ?? TRADE_BADGE_COLORS.Other}`}>
+                {sub.tradeCategory}
+              </span>
+            )}
+            {insStatus === "VALID" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                <ShieldCheck className="h-3.5 w-3.5" /> Insurance Valid
+              </span>
+            )}
+            {insStatus === "EXPIRING_SOON" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800">
+                <Shield className="h-3.5 w-3.5" /> Expiring Soon
+              </span>
+            )}
+            {insStatus === "EXPIRED" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800">
+                <ShieldX className="h-3.5 w-3.5" /> Insurance Expired
+              </span>
+            )}
+            {insStatus === "NO_INSURANCE" && isGC && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
+                <Shield className="h-3.5 w-3.5" /> No Insurance on File
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* INSURANCE EXPIRED BANNER */}
+      {insStatus === "EXPIRED" && (
+        <div className="mb-6 flex items-start gap-3 bg-red-50 dark:bg-red-950/20 border border-red-300 dark:border-red-700 rounded-2xl px-5 py-4">
+          <ShieldX className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-red-700 dark:text-red-300 text-sm">Insurance Expired — Verify coverage before approving any invoices</p>
+            <p className="text-red-600 dark:text-red-400 text-xs mt-0.5">
+              The certificate for {insurance?.insuranceCompany ?? "this subcontractor"} expired on {insurance?.expirationDate ?? "an unknown date"}.
+              {isGC ? " Update the insurance details below." : " Contact the GC for an updated certificate."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* INSURANCE EXPIRING SOON BANNER */}
+      {insStatus === "EXPIRING_SOON" && (
+        <div className="mb-6 flex items-start gap-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded-2xl px-5 py-4">
+          <Shield className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-yellow-700 dark:text-yellow-300 text-sm">Insurance Expiring Soon</p>
+            <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-0.5">
+              The certificate for {insurance?.insuranceCompany ?? "this subcontractor"} expires on {insurance?.expirationDate ?? "an unknown date"}.
+              {isGC ? " Request an updated certificate from the sub." : " Please provide an updated certificate to the GC."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* SCOREBOARD */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -531,6 +663,148 @@ export default function SubcontractDetail() {
           </div>
         )}
       </div>
+
+      {/* INSURANCE DETAILS CARD */}
+      <Card className={cn(
+        "mb-6",
+        insStatus === "EXPIRED" && "border-red-400 dark:border-red-700",
+        insStatus === "EXPIRING_SOON" && "border-yellow-400 dark:border-yellow-700",
+      )}>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              {insStatus === "VALID" && <ShieldCheck className="h-5 w-5 text-green-600" />}
+              {insStatus === "EXPIRING_SOON" && <Shield className="h-5 w-5 text-yellow-600" />}
+              {insStatus === "EXPIRED" && <ShieldX className="h-5 w-5 text-red-600" />}
+              {insStatus === "NO_INSURANCE" && <Shield className="h-5 w-5 text-muted-foreground" />}
+              Insurance Certificate
+            </CardTitle>
+            {isGC && (
+              <Button size="sm" variant="outline" onClick={openInsDialog} className="gap-1.5 min-h-[36px]">
+                <Pencil className="h-3.5 w-3.5" /> {insStatus === "NO_INSURANCE" ? "Add Insurance" : "Update"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {insStatus === "NO_INSURANCE" ? (
+            <p className="text-sm text-muted-foreground">
+              {isGC ? "No insurance certificate on file. Click Update to add coverage details." : "No insurance certificate has been recorded yet. Contact the GC if you believe this is an error."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {insurance?.insuranceCompany && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Insurance Company</p>
+                  <p className="font-semibold">{insurance.insuranceCompany}</p>
+                </div>
+              )}
+              {insurance?.policyNumber && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Policy Number</p>
+                  <p className="font-mono font-semibold">{insurance.policyNumber}</p>
+                </div>
+              )}
+              {insurance?.expirationDate && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Expiration Date</p>
+                  <p className={cn("font-semibold flex items-center gap-1.5",
+                    insStatus === "EXPIRED" && "text-red-600",
+                    insStatus === "EXPIRING_SOON" && "text-yellow-700 dark:text-yellow-400",
+                  )}>
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {insurance.expirationDate}
+                  </p>
+                </div>
+              )}
+              {insurance?.generalLiabilityCoverage != null && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">General Liability</p>
+                  <p className="font-mono font-semibold">{formatCurrency(insurance.generalLiabilityCoverage)}</p>
+                </div>
+              )}
+              {insurance?.workersCompCoverage != null && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Workers Comp</p>
+                  <p className="font-mono font-semibold">{formatCurrency(insurance.workersCompCoverage)}</p>
+                </div>
+              )}
+              {insurance?.certificateObjectPath && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Certificate PDF</p>
+                  <a
+                    href={`/api/storage${insurance.certificateObjectPath}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <FileDown className="h-4 w-4" /> Download Certificate
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* INSURANCE EDIT DIALOG */}
+      <Dialog open={insDialogOpen} onOpenChange={setInsDialogOpen}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setInsDialogOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" /> Insurance Certificate Details
+              </h3>
+              <button onClick={() => setInsDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleSaveInsurance} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Insurance Company</label>
+                  <Input value={insCompany} onChange={e => setInsCompany(e.target.value)} placeholder="e.g. Acme Insurance Co." />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Policy Number</label>
+                  <Input value={insPolicy} onChange={e => setInsPolicy(e.target.value)} placeholder="e.g. POL-123456" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">General Liability Coverage</label>
+                  <Input type="number" min="0" step="1000" value={insGL} onChange={e => setInsGL(e.target.value)} placeholder="e.g. 1000000" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Workers Comp Coverage</label>
+                  <Input type="number" min="0" step="1000" value={insWC} onChange={e => setInsWC(e.target.value)} placeholder="e.g. 500000" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Certificate Expiration Date</label>
+                  <Input type="date" value={insExpDate} onChange={e => setInsExpDate(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">Certificate PDF (optional)</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-dashed border-border hover:border-primary/60 transition-colors bg-muted/30 text-sm text-muted-foreground hover:text-primary">
+                    <Upload className="h-4 w-4" />
+                    {certUploading ? `Uploading ${certProgress}%…` : insCertPath ? "Replace Certificate" : "Upload Certificate"}
+                    <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleUploadCert} disabled={certUploading} />
+                  </label>
+                  {insCertPath && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Certificate on file
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1" isLoading={insSaving} disabled={certUploading}>
+                  Save Insurance Details
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setInsDialogOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Dialog>
 
       {/* FLAGGED INVOICES BANNER */}
       {flaggedInvoices.length > 0 && (

@@ -435,7 +435,61 @@ export async function sendPaymentDisputedEmail(opts: {
   await send(opts.toEmail, `Payment disputed by ${opts.subCompanyName} on ${opts.projectName}`, html);
 }
 
-// ─── 14. Password reset email ──────────────────────────────────────────────────
+// ─── 14. Insurance expiry warning (30 days) — notify GC ──────────────────────
+export async function sendInsuranceExpiryWarningEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#b45309;">⚠ Insurance Expiring in ${opts.daysUntilExpiry} Days</p>
+    </div>
+    ${heading("Subcontractor Insurance Expiring Soon")}
+    ${subtext(`The insurance certificate for <strong>${opts.subCompanyName}</strong> on <strong>${opts.projectName}</strong> will expire in <strong>${opts.daysUntilExpiry} days</strong>. Please request an updated certificate before it expires.`)}
+    ${infoBox([
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Project", value: opts.projectName },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: `${opts.daysUntilExpiry} days` },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Insurance expiring in ${opts.daysUntilExpiry} days — ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+// ─── 15. Insurance urgent expiry alert (7 days) — notify GC ──────────────────
+export async function sendInsuranceUrgentExpiryEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#dc2626;">🚨 URGENT: Insurance Expiring in ${opts.daysUntilExpiry} Day${opts.daysUntilExpiry !== 1 ? "s" : ""}</p>
+    </div>
+    ${heading("Urgent: Insurance Certificate Expiring")}
+    ${subtext(`The insurance certificate for <strong>${opts.subCompanyName}</strong> on <strong>${opts.projectName}</strong> is expiring in <strong>${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""}</strong>. Immediately request an updated certificate and halt invoice approvals until coverage is confirmed.`)}
+    ${warningBox([
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Project", value: opts.projectName },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: `${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""}` },
+    ])}
+    ${ctaButton("Update Insurance Now", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `URGENT: Insurance expiring in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""} — ${opts.subCompanyName}`, html);
+}
+
+// ─── 16. Password reset email ──────────────────────────────────────────────────
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   companyName: string;

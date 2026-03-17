@@ -31,6 +31,7 @@ import {
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2,
+  Shield, ShieldCheck, ShieldX,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -161,6 +162,20 @@ export default function ProjectDetail() {
       return res.json();
     },
     enabled: !!projectId,
+    refetchOnWindowFocus: false,
+  });
+
+  // Fetch insurance summary for all subcontracts in this project (GC only — must be before early return)
+  const { data: projectInsurance = [] } = useQuery<{ subcontractId: string; status: string; expirationDate: string | null }[]>({
+    queryKey: ["project-insurance-summary", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/insurance-summary`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 
@@ -757,6 +772,7 @@ export default function ProjectDetail() {
                         <thead>
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
+                            {isGC && <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Insurance</th>}
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
                             <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
@@ -771,6 +787,7 @@ export default function ProjectDetail() {
                             const remaining = sb?.remaining ?? sub.baseContractAmount;
                             const hasFlagged = (sb as any)?.hasFlaggedInvoices as boolean | undefined;
                             const isNeg = remaining < 0 || hasFlagged;
+                            const insInfo = projectInsurance.find(i => i.subcontractId === sub.id);
                             return (
                               <tr key={sub.id} className="hover:bg-muted/30 transition-colors group">
                                 <td className="px-4 py-3">
@@ -790,6 +807,27 @@ export default function ProjectDetail() {
                                     )}
                                   </div>
                                 </td>
+                                {isGC && (
+                                  <td className="hidden lg:table-cell px-4 py-3">
+                                    {!insInfo || insInfo.status === "NO_INSURANCE" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <Shield className="h-3 w-3" /> None
+                                      </span>
+                                    ) : insInfo.status === "VALID" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                                        <ShieldCheck className="h-3.5 w-3.5" /> Valid
+                                      </span>
+                                    ) : insInfo.status === "EXPIRING_SOON" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                                        <Shield className="h-3.5 w-3.5" /> Expiring
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                        <ShieldX className="h-3.5 w-3.5" /> Expired
+                                      </span>
+                                    )}
+                                  </td>
+                                )}
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
                                 <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
@@ -812,6 +850,7 @@ export default function ProjectDetail() {
                           <tfoot>
                             <tr className="border-t-2 border-border bg-muted/50 font-bold">
                               <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
+                              {isGC && <td className="hidden lg:table-cell"></td>}
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
                               <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>

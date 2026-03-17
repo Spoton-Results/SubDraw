@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import {
@@ -796,7 +796,93 @@ router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, 
   res.json(invoice);
 });
 
-// GC releases retention — creates a final retention-release invoice (GC only, project must be CLOSED)
+// ─── Insurance certificate endpoints ─────────────────────────────────────────
+
+function calcInsuranceStatus(expirationDate: string | null | undefined): "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_INSURANCE" {
+  if (!expirationDate) return "NO_INSURANCE";
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const exp = new Date(expirationDate);
+  exp.setHours(0, 0, 0, 0);
+  const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return "EXPIRED";
+  if (days <= 30) return "EXPIRING_SOON";
+  return "VALID";
+}
+
+// GET /:subcontractId/insurance — GC or owning sub
+router.get("/:subcontractId/insurance", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  const isGC = user.role === "GC" && project?.gcId === user.id;
+  const isSub = user.role === "SUB" && sc.subId === user.id;
+  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [ins] = await db.select().from(subcontractInsurancesTable).where(eq(subcontractInsurancesTable.subcontractId, subcontractId)).limit(1);
+  const status = calcInsuranceStatus(ins?.expirationDate);
+  res.json(ins ? { ...ins, status } : { status: "NO_INSURANCE" });
+});
+
+// PUT /:subcontractId/insurance — GC only (upsert)
+router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const { insuranceCompany, policyNumber, generalLiabilityCoverage, workersCompCoverage, expirationDate, certificateObjectPath } = req.body;
+
+  const [existing] = await db.select().from(subcontractInsurancesTable).where(eq(subcontractInsurancesTable.subcontractId, subcontractId)).limit(1);
+
+  let ins;
+  const expDateChanged = existing?.expirationDate !== expirationDate;
+
+  if (existing) {
+    [ins] = await db.update(subcontractInsurancesTable).set({
+      insuranceCompany: insuranceCompany ?? null,
+      policyNumber: policyNumber ?? null,
+      generalLiabilityCoverage: generalLiabilityCoverage ?? null,
+      workersCompCoverage: workersCompCoverage ?? null,
+      expirationDate: expirationDate ?? null,
+      certificateObjectPath: certificateObjectPath ?? existing.certificateObjectPath,
+      notifiedAt30: expDateChanged ? null : existing.notifiedAt30,
+      notifiedAt7: expDateChanged ? null : existing.notifiedAt7,
+      updatedAt: new Date(),
+    }).where(eq(subcontractInsurancesTable.id, existing.id)).returning();
+  } else {
+    [ins] = await db.insert(subcontractInsurancesTable).values({
+      subcontractId,
+      insuranceCompany: insuranceCompany ?? null,
+      policyNumber: policyNumber ?? null,
+      generalLiabilityCoverage: generalLiabilityCoverage ?? null,
+      workersCompCoverage: workersCompCoverage ?? null,
+      expirationDate: expirationDate ?? null,
+      certificateObjectPath: certificateObjectPath ?? null,
+    }).returning();
+  }
+
+  const scWithRelations = await getSubcontractWithRelations(sc);
+  await logActivity(
+    subcontractId,
+    "INSURANCE_UPDATED",
+    `Insurance certificate updated — ${insuranceCompany ?? "N/A"} | Expires: ${expirationDate ?? "N/A"}`,
+    scWithRelations.project.gc.companyName,
+    "GC"
+  );
+
+  const status = calcInsuranceStatus(ins.expirationDate);
+  res.json({ ...ins, status });
+});
+
 router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { subcontractId } = req.params;

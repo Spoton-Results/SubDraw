@@ -1,5 +1,6 @@
 import app from "./app.js";
 import { runMigrations, getStripeSync } from "./lib/stripeClient.js";
+import { startInsuranceNotifier } from "./lib/insuranceNotifier.js";
 
 const rawPort = process.env["PORT"];
 
@@ -43,6 +44,9 @@ async function initStripe() {
 }
 
 await initStripe();
+
+const appBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+startInsuranceNotifier(appBaseUrl);
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
