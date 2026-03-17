@@ -45,7 +45,7 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     return;
   }
   await db.update(bidsTable).set({ status: "AWARDED", updatedAt: new Date() }).where(eq(bidsTable.id, bidId));
-  await db.update(projectsTable).set({ status: "ACTIVE", updatedAt: new Date() }).where(eq(projectsTable.id, bid.projectId));
+  await db.update(projectsTable).set({ status: "CONSTRUCTION", updatedAt: new Date() }).where(eq(projectsTable.id, bid.projectId));
 
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, bid.projectId)).limit(1);
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);

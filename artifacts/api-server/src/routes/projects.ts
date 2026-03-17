@@ -262,14 +262,29 @@ router.get("/:projectId", requireAuth, async (req, res) => {
   res.json(detail);
 });
 
-// GC: archive a CLOSED project
+// GC: mark a CONSTRUCTION project as COMPLETE
+router.post("/:projectId/complete", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.status === "COMPLETE") { res.status(400).json({ error: "Project is already marked complete" }); return; }
+  if (project.archivedAt) { res.status(400).json({ error: "Archived projects cannot be modified" }); return; }
+  const [updated] = await db.update(projectsTable)
+    .set({ status: "COMPLETE", updatedAt: new Date() })
+    .where(eq(projectsTable.id, req.params.projectId))
+    .returning();
+  res.json(updated);
+});
+
+// GC: archive a COMPLETE project
 router.post("/:projectId/archive", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
-  if (project.status !== "CLOSED") {
-    res.status(400).json({ error: "Only closed projects can be archived. Change the project status to Closed first." });
+  if (project.status !== "COMPLETE") {
+    res.status(400).json({ error: "Only completed projects can be archived. Mark the project as complete first." });
     return;
   }
   if (project.archivedAt) {
@@ -283,7 +298,7 @@ router.post("/:projectId/archive", requireAuth, requireGC, async (req, res) => {
   res.json(updated);
 });
 
-// GC: unarchive a project — moves it back to CLOSED
+// GC: unarchive a project — moves it back to COMPLETE
 router.post("/:projectId/unarchive", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -74,7 +74,6 @@ export default function Dashboard() {
   });
 
   const [archiveSearch, setArchiveSearch] = React.useState("");
-  const [showArchived, setShowArchived] = React.useState(false);
   const [unarchivingId, setUnarchivingId] = React.useState<string | null>(null);
 
   const { data: archivedProjects = [], refetch: refetchArchived } = useQuery({
@@ -87,7 +86,7 @@ export default function Dashboard() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: isGC && showArchived,
+    enabled: isGC,
   });
 
   const handleUnarchive = async (projectId: string) => {
@@ -152,9 +151,17 @@ export default function Dashboard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "BIDDING": return "default";
-      case "ACTIVE": return "success";
-      case "CLOSED": return "secondary";
+      case "CONSTRUCTION": return "success";
+      case "COMPLETE": return "secondary";
       default: return "outline";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "CONSTRUCTION": return "In Construction";
+      case "COMPLETE": return "Complete";
+      default: return status;
     }
   };
 
@@ -270,7 +277,7 @@ export default function Dashboard() {
                           </Badge>
                         )}
                         <Badge variant={getStatusColor(project.status) as any}>
-                          {project.status}
+                          {getStatusLabel(project.status)}
                         </Badge>
                       </div>
                     </div>
@@ -383,108 +390,107 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ARCHIVED PROJECTS SECTION — GC only */}
+      {/* ARCHIVED PROJECTS SECTION — GC only, always visible */}
       {isGC && (
-        <div className="mt-10">
-          <button
-            onClick={() => setShowArchived(prev => !prev)}
-            className="w-full flex items-center justify-between px-5 py-4 rounded-2xl border border-dashed border-border bg-card hover:bg-muted/40 transition-colors group"
-          >
+        <div className="mt-12 pt-8 border-t border-border/60">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-              <div className="bg-muted rounded-xl p-2">
-                <Archive className="h-4 w-4 text-muted-foreground" />
+              <div className="bg-muted rounded-xl p-2.5">
+                <Archive className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div className="text-left">
-                <div className="font-semibold text-sm text-foreground">Archived Projects</div>
-                <div className="text-xs text-muted-foreground">Completed projects stored for reference</div>
+              <div>
+                <h2 className="text-lg font-bold font-display text-foreground">Archived Projects</h2>
+                <p className="text-xs text-muted-foreground">Completed projects stored for reference — read only</p>
               </div>
             </div>
-            {showArchived ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-          </button>
+            {(archivedProjects as any[]).length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {(archivedProjects as any[]).length} project{(archivedProjects as any[]).length !== 1 ? "s" : ""}
+              </Badge>
+            )}
+          </div>
 
-          {showArchived && (
-            <div className="mt-4 space-y-4">
-              {/* Search bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search archived projects by name or address..."
-                  value={archiveSearch}
-                  onChange={e => setArchiveSearch(e.target.value)}
-                />
+          <div className="space-y-4">
+            {/* Search bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Search archived projects by name or address..."
+                value={archiveSearch}
+                onChange={e => setArchiveSearch(e.target.value)}
+              />
+            </div>
+
+            {(archivedProjects as any[]).length === 0 ? (
+              <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border/60">
+                <Archive className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  {archiveSearch ? "No archived projects match your search." : "No archived projects yet."}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Mark a project complete, then archive it to store it here.</p>
               </div>
-
-              {(archivedProjects as any[]).length === 0 ? (
-                <div className="text-center py-12 bg-card rounded-2xl border border-border/50">
-                  <Archive className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    {archiveSearch ? "No archived projects match your search." : "No archived projects yet."}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Archive closed projects to keep your dashboard clean.</p>
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {(archivedProjects as any[]).map(project => {
-                    const summary = project.archivedSummary as { totalContractValue: number; totalPaid: number; subcontractCount: number } | undefined;
-                    return (
-                      <div key={project.id} className="bg-card rounded-2xl border border-border/50 p-5 flex flex-col gap-3 opacity-85 hover:opacity-100 transition-opacity">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <Link href={`/projects/${project.id}`}>
-                              <h3 className="font-bold text-base text-foreground hover:text-primary transition-colors cursor-pointer line-clamp-1">
-                                {project.name}
-                              </h3>
-                            </Link>
-                            {project.address && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <MapPin className="h-3 w-3 shrink-0" /> {project.address}
-                              </p>
-                            )}
-                          </div>
-                          <Badge variant="secondary" className="shrink-0 gap-1 text-xs">
-                            <Archive className="h-2.5 w-2.5" /> Archived
-                          </Badge>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(archivedProjects as any[]).map(project => {
+                  const summary = project.archivedSummary as { totalContractValue: number; totalPaid: number; subcontractCount: number } | undefined;
+                  return (
+                    <div key={project.id} className="bg-card rounded-2xl border border-border/50 p-5 flex flex-col gap-3 opacity-85 hover:opacity-100 transition-opacity">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <Link href={`/projects/${project.id}`}>
+                            <h3 className="font-bold text-base text-foreground hover:text-primary transition-colors cursor-pointer line-clamp-1">
+                              {project.name}
+                            </h3>
+                          </Link>
+                          {project.address && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <MapPin className="h-3 w-3 shrink-0" /> {project.address}
+                            </p>
+                          )}
                         </div>
-
-                        {/* Summary scoreboard */}
-                        {summary && (
-                          <div className="grid grid-cols-3 gap-2 p-3 bg-muted/40 rounded-xl border border-border/50 text-center">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-0.5">Contract</p>
-                              <p className="text-xs font-bold font-mono text-foreground">{formatCurrency(summary.totalContractValue)}</p>
-                            </div>
-                            <div className="border-x border-border/50">
-                              <p className="text-xs text-muted-foreground mb-0.5">Paid</p>
-                              <p className="text-xs font-bold font-mono text-green-600">{formatCurrency(summary.totalPaid)}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-0.5">Subs</p>
-                              <p className="text-xs font-bold font-mono text-foreground">{summary.subcontractCount}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                          <span className="flex items-center gap-1">
-                            <CalendarDays className="h-3 w-3" />
-                            Archived {format(new Date(project.archivedAt), "MMM d, yyyy")}
-                          </span>
-                          <button
-                            onClick={() => handleUnarchive(project.id)}
-                            disabled={unarchivingId === project.id}
-                            className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-                          >
-                            {unarchivingId === project.id ? "Restoring…" : <><ArchiveRestore className="h-3 w-3" /> Restore</>}
-                          </button>
-                        </div>
+                        <Badge variant="secondary" className="shrink-0 gap-1 text-xs">
+                          <Archive className="h-2.5 w-2.5" /> Archived
+                        </Badge>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+
+                      {/* Final scoreboard summary */}
+                      {summary && (
+                        <div className="grid grid-cols-3 gap-2 p-3 bg-muted/40 rounded-xl border border-border/50 text-center">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Contract</p>
+                            <p className="text-xs font-bold font-mono text-foreground">{formatCurrency(summary.totalContractValue)}</p>
+                          </div>
+                          <div className="border-x border-border/50">
+                            <p className="text-xs text-muted-foreground mb-0.5">Paid</p>
+                            <p className="text-xs font-bold font-mono text-green-600">{formatCurrency(summary.totalPaid)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Subs</p>
+                            <p className="text-xs font-bold font-mono text-foreground">{summary.subcontractCount}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
+                        <span className="flex items-center gap-1">
+                          <CalendarDays className="h-3 w-3" />
+                          Archived {format(new Date(project.archivedAt), "MMM d, yyyy")}
+                        </span>
+                        <button
+                          onClick={() => handleUnarchive(project.id)}
+                          disabled={unarchivingId === project.id}
+                          className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                        >
+                          {unarchivingId === project.id ? "Restoring…" : <><ArchiveRestore className="h-3 w-3" /> Restore</>}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

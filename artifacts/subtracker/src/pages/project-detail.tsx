@@ -30,7 +30,7 @@ import {
   Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
-  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2,
+  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -140,7 +140,9 @@ export default function ProjectDetail() {
   const [tradeFilter, setTradeFilter] = React.useState("");
   const [removeMemberConfirm, setRemoveMemberConfirm] = React.useState<{ open: boolean; userId: string; companyName: string }>({ open: false, userId: "", companyName: "" });
 
-  // Archive hooks — must be above early return
+  // Complete + Archive hooks — must be above early return
+  const [completeConfirm, setCompleteConfirm] = React.useState(false);
+  const [completeLoading, setCompleteLoading] = React.useState(false);
   const [archiveConfirm, setArchiveConfirm] = React.useState(false);
   const [unarchiveConfirm, setUnarchiveConfirm] = React.useState(false);
   const [archiveLoading, setArchiveLoading] = React.useState(false);
@@ -415,6 +417,22 @@ export default function ProjectDetail() {
 
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
+  const handleMarkComplete = async () => {
+    setCompleteLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/complete`, { method: "POST", credentials: "include" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to mark project complete");
+      toast.success("Project marked as complete!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setCompleteConfirm(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to mark project complete");
+    } finally {
+      setCompleteLoading(false);
+    }
+  };
+
   const handleArchive = async () => {
     setArchiveLoading(true);
     try {
@@ -525,8 +543,8 @@ export default function ProjectDetail() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">{project.name}</h1>
-              <Badge variant={project.status === "ACTIVE" ? "success" : project.status === "BIDDING" ? "default" : "secondary"}>
-                {project.status}
+              <Badge variant={project.status === "CONSTRUCTION" ? "success" : project.status === "BIDDING" ? "default" : project.status === "COMPLETE" ? "secondary" : "secondary"}>
+                {project.status === "CONSTRUCTION" ? "In Construction" : project.status === "COMPLETE" ? "Complete" : project.status === "BIDDING" ? "Bidding" : project.status}
               </Badge>
             </div>
 
@@ -553,7 +571,7 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {isGC && !isArchived && (
               <Button variant="outline" onClick={handleOpenEdit} className="gap-2 min-h-[44px]">
                 <Pencil className="h-4 w-4" /> Edit Project
@@ -565,13 +583,20 @@ export default function ProjectDetail() {
                 Invite Subcontractor
               </Button>
             )}
-            {isGC && project.status === "CLOSED" && !isArchived && (
+            {isGC && project.status === "CONSTRUCTION" && !isArchived && (
               <Button
-                variant="outline"
-                onClick={() => setArchiveConfirm(true)}
-                className="gap-2 min-h-[44px] text-muted-foreground hover:text-foreground"
+                onClick={() => setCompleteConfirm(true)}
+                className="gap-2 min-h-[48px] px-6 text-base font-semibold bg-green-600 hover:bg-green-700 text-white shadow-md"
               >
-                <Archive className="h-4 w-4" /> Archive Project
+                <CheckCircle2 className="h-5 w-5" /> Mark Project Complete
+              </Button>
+            )}
+            {isGC && project.status === "COMPLETE" && !isArchived && (
+              <Button
+                onClick={() => setArchiveConfirm(true)}
+                className="gap-2 min-h-[48px] px-6 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-md"
+              >
+                <Archive className="h-5 w-5" /> Archive Project
               </Button>
             )}
             {isGC && isArchived && (
@@ -1650,6 +1675,39 @@ export default function ProjectDetail() {
         </div>
       </Dialog>
 
+      {/* Mark Project Complete Confirmation */}
+      <Dialog
+        open={completeConfirm}
+        onOpenChange={(open) => !open && setCompleteConfirm(false)}
+        title="Mark Project Complete"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-4">
+            <p className="text-sm text-foreground font-medium">
+              Are you sure you want to mark this project as complete?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will trigger retention release for all subcontracts.
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> Subcontractors can request their retention balance</li>
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> New invoices and change orders can still be added</li>
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> You can archive the project once all payments are settled</li>
+            </ul>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button variant="ghost" className="min-h-[44px]" onClick={() => setCompleteConfirm(false)}>Cancel</Button>
+            <Button
+              className="min-h-[44px] bg-green-600 hover:bg-green-700 text-white"
+              isLoading={completeLoading}
+              onClick={handleMarkComplete}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" /> Yes, Mark Complete
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
       {/* Archive Project Confirmation */}
       <Dialog
         open={archiveConfirm}
@@ -1658,8 +1716,8 @@ export default function ProjectDetail() {
       >
         <div className="space-y-4">
           <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-4">
-            <p className="text-sm text-foreground">
-              Archive <span className="font-semibold">{project.name}</span>?
+            <p className="text-sm text-foreground font-medium">
+              Archive this project? It will be moved to your archive and become read only. All data is preserved.
             </p>
             <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
               <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> All data, invoices, change orders, and PDFs are preserved</li>
@@ -1690,10 +1748,10 @@ export default function ProjectDetail() {
         <div className="space-y-4">
           <div className="rounded-xl bg-muted border border-border p-4">
             <p className="text-sm text-foreground">
-              Restore <span className="font-semibold">{project.name}</span> back to Closed status?
+              Restore <span className="font-semibold">{project.name}</span> back to your active dashboard?
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              The project will reappear on your main dashboard. You can re-archive it at any time.
+              The project will reappear on your main dashboard as Complete. You can re-archive it at any time.
             </p>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
