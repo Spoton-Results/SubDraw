@@ -1,9 +1,24 @@
 import { Resend } from "resend";
 
 const API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "SubTracker <onboarding@resend.dev>";
+const RAW_FROM = (process.env.RESEND_FROM_EMAIL || "").trim();
+
+// Ensure FROM_EMAIL is a valid Resend "from" address.
+// If the env var is just a domain like "reply.spotonresults.com", construct a default address.
+function buildFromEmail(raw: string): string {
+  if (!raw) return "SubTracker <noreply@reply.spotonresults.com>";
+  // Already looks like a valid email or "Name <email>" form
+  if (raw.includes("@")) return raw;
+  // Raw value is just a domain — prepend a default localpart
+  return `SubTracker <noreply@${raw}>`;
+}
+
+const FROM_EMAIL = buildFromEmail(RAW_FROM);
+
+console.log(`[email] FROM_EMAIL format: ${FROM_EMAIL.includes("@") ? "ok" : "INVALID — missing @"}`);
 
 const resend = API_KEY ? new Resend(API_KEY) : null;
+if (!API_KEY) console.log("[email] RESEND_API_KEY not set — emails will be skipped");
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
