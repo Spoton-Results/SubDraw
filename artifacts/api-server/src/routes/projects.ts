@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
+import archiver from "archiver";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
 import { sendInviteEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
+import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 
 const router = Router();
 
@@ -599,6 +601,101 @@ router.post("/:projectId/change-orders/bulk", requireAuth, requireGC, async (req
   }));
 
   res.status(201).json(created.filter(Boolean));
+});
+
+// List all signed lien waivers for a project
+router.get("/:projectId/lien-waivers", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  // GC sees all; SUB sees only their own
+  if (user.role === "GC") {
+    if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+    const waivers = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.projectId, projectId));
+    res.json(waivers);
+  } else {
+    // SUB: verify they are a member of this project
+    const [member] = await db.select().from(projectMembersTable)
+      .where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, user.id))).limit(1);
+    if (!member) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    // Get their subcontract for this project
+    const [sc] = await db.select().from(subcontractsTable)
+      .where(and(eq(subcontractsTable.projectId, projectId), eq(subcontractsTable.subId, user.id))).limit(1);
+    if (!sc) { res.json([]); return; }
+
+    const waivers = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.subcontractId, sc.id));
+    res.json(waivers);
+  }
+});
+
+// Download all lien waivers for a project as a ZIP (GC only)
+router.get("/:projectId/lien-waivers/zip", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const waivers = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.projectId, projectId));
+  if (waivers.length === 0) {
+    res.status(404).json({ error: "No signed lien waivers found for this project" });
+    return;
+  }
+
+  const safeName = project.name.replace(/[^a-z0-9]/gi, "_").slice(0, 40);
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="LienWaivers_${safeName}.zip"`);
+
+  const archive = archiver("zip", { zlib: { level: 6 } });
+  archive.on("error", (err: Error) => { res.status(500).json({ error: err.message }); });
+  archive.pipe(res);
+
+  for (const waiver of waivers) {
+    const pdfBuffer = await generateLienWaiverPDF({ waiver });
+    const filename = `LienWaiver_${waiver.subCompanyName.replace(/[^a-z0-9]/gi, "_")}_Invoice_${waiver.invoiceNumber}.pdf`;
+    archive.append(pdfBuffer, { name: filename });
+  }
+
+  await archive.finalize();
+});
+
+// GC dashboard: get unsigned lien waivers count (PAYMENT_UNCONFIRMED invoices without a signed waiver)
+router.get("/gc/unsigned-lien-waivers", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+
+  const gcProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
+    .where(and(eq(projectsTable.gcId, user.id), isNull(projectsTable.archivedAt)));
+  const projectIds = gcProjects.map(p => p.id);
+
+  if (projectIds.length === 0) { res.json({ count: 0 }); return; }
+
+  const scs = await db.select({ id: subcontractsTable.id }).from(subcontractsTable)
+    .where(inArray(subcontractsTable.projectId, projectIds));
+  const scIds = scs.map(s => s.id);
+
+  if (scIds.length === 0) { res.json({ count: 0 }); return; }
+
+  // Get all PAYMENT_UNCONFIRMED invoices across these subcontracts
+  const unconfirmedInvs = await db.select({ id: invoicesTable.id })
+    .from(invoicesTable)
+    .where(and(inArray(invoicesTable.subcontractId, scIds), eq(invoicesTable.status, "PAYMENT_UNCONFIRMED")));
+
+  if (unconfirmedInvs.length === 0) { res.json({ count: 0 }); return; }
+
+  const invoiceIds = unconfirmedInvs.map(i => i.id);
+  const signedWaivers = await db.select({ invoiceId: lienWaiversTable.invoiceId })
+    .from(lienWaiversTable)
+    .where(inArray(lienWaiversTable.invoiceId, invoiceIds));
+
+  const signedInvoiceIds = new Set(signedWaivers.map(w => w.invoiceId));
+  const unsigned = invoiceIds.filter(id => !signedInvoiceIds.has(id));
+
+  res.json({ count: unsigned.length });
 });
 
 export default router;

@@ -30,7 +30,7 @@ import {
   Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
-  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock,
+  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -161,6 +161,20 @@ export default function ProjectDetail() {
       return res.json();
     },
     enabled: !!projectId,
+    refetchOnWindowFocus: false,
+  });
+
+  // Fetch lien waivers for this project — must be before early return
+  const { data: lienWaivers = [], isLoading: lienWaiversLoading } = useQuery<any[]>({
+    queryKey: ["project-lien-waivers", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/lien-waivers`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 
@@ -813,6 +827,85 @@ export default function ProjectDetail() {
                     </div>
                   );
                 })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* LIEN WAIVERS SECTION */}
+          {(isGC || lienWaivers.length > 0) && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Stamp className="h-5 w-5 text-primary" /> Lien Waivers
+                    {lienWaivers.length > 0 && (
+                      <span className="ml-1 text-sm font-normal text-muted-foreground">({lienWaivers.length})</span>
+                    )}
+                  </CardTitle>
+                  {isGC && lienWaivers.length > 0 && (
+                    <a
+                      href={`${BASE}/api/projects/${projectId}/lien-waivers/zip`}
+                      download
+                      className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <Download className="h-4 w-4" /> Download All (ZIP)
+                    </a>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {lienWaiversLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : lienWaivers.length === 0 ? (
+                  <p className="text-muted-foreground text-sm py-6 px-6">No signed lien waivers yet. They will appear here once subcontractors confirm payment.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40">
+                          {isGC && <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>}
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Invoice #</th>
+                          <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Amount</th>
+                          <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Signed By</th>
+                          <th className="hidden md:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Signed Date</th>
+                          <th className="px-4 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {lienWaivers.map((waiver: any) => (
+                          <tr key={waiver.id} className="hover:bg-muted/30 transition-colors bg-green-50/30 dark:bg-green-950/10">
+                            {isGC && (
+                              <td className="px-4 py-3">
+                                <p className="font-semibold">{waiver.subCompanyName}</p>
+                              </td>
+                            )}
+                            <td className="px-4 py-3">
+                              <span className="font-mono font-semibold">#{waiver.invoiceNumber}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(waiver.amount)}</td>
+                            <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground italic">{waiver.signedByName}</td>
+                            <td className="hidden md:table-cell px-4 py-3 text-muted-foreground">
+                              {format(new Date(waiver.signedAt), "MMM d, yyyy")}
+                            </td>
+                            <td className="px-4 py-3">
+                              <a
+                                href={`${BASE}/api/subcontracts/${waiver.subcontractId}/invoices/${waiver.invoiceId}/lien-waiver/pdf`}
+                                download={`LienWaiver-${waiver.invoiceNumber}.pdf`}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                title="Download Lien Waiver PDF"
+                              >
+                                <FileDown className="h-4 w-4" />
+                                <span className="hidden sm:inline">PDF</span>
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

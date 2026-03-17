@@ -51,6 +51,17 @@ export default function Dashboard() {
 
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
+  const { data: unsignedWaivers } = useQuery<{ count: number }>({
+    queryKey: ["unsigned-lien-waivers"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/gc/unsigned-lien-waivers`, { credentials: "include" });
+      if (!res.ok) return { count: 0 };
+      return res.json();
+    },
+    enabled: isGC,
+    refetchInterval: 60_000,
+  });
+
   const [archiveSearch, setArchiveSearch] = React.useState("");
   const [showArchived, setShowArchived] = React.useState(false);
   const [unarchivingId, setUnarchivingId] = React.useState<string | null>(null);
@@ -143,11 +154,17 @@ export default function Dashboard() {
           <h1 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
           <p className="text-muted-foreground mt-1 text-sm md:text-base">Manage your active bids and subcontracts</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
           {isGC && gcDisputedInvoices.length > 0 && (
             <Badge variant="destructive" className="gap-1.5 text-sm px-3 py-1.5 animate-pulse">
               <ShieldAlert className="h-4 w-4" />
               {gcDisputedInvoices.length} Disputed Payment{gcDisputedInvoices.length !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {isGC && (unsignedWaivers?.count ?? 0) > 0 && (
+            <Badge variant="warning" className="gap-1.5 text-sm px-3 py-1.5">
+              <AlertTriangle className="h-4 w-4" />
+              {unsignedWaivers!.count} Unsigned Lien Waiver{unsignedWaivers!.count !== 1 ? "s" : ""}
             </Badge>
           )}
           {isGC && (

@@ -58,6 +58,29 @@ export const activityLogsTable = pgTable("subcontract_activity_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const lienWaiversTable = pgTable("lien_waivers", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  invoiceId: text("invoice_id").notNull().references(() => invoicesTable.id),
+  projectId: text("project_id").notNull().references(() => projectsTable.id),
+  signedByName: text("signed_by_name").notNull(),
+  signedAt: timestamp("signed_at").defaultNow().notNull(),
+  // Snapshot fields for PDF generation
+  invoiceNumber: text("invoice_number").notNull(),
+  amount: doublePrecision("amount").notNull(),
+  paymentDate: text("payment_date"),
+  paymentMethod: text("payment_method"),
+  projectName: text("project_name").notNull(),
+  projectAddress: text("project_address"),
+  gcCompanyName: text("gc_company_name").notNull(),
+  subCompanyName: text("sub_company_name").notNull(),
+  subLicenseNumber: text("sub_license_number"),
+});
+
+export const insertLienWaiverSchema = createInsertSchema(lienWaiversTable).omit({ id: true, signedAt: true });
+export type InsertLienWaiver = z.infer<typeof insertLienWaiverSchema>;
+export type LienWaiver = typeof lienWaiversTable.$inferSelect;
+
 export const insertSubcontractSchema = createInsertSchema(subcontractsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSubcontract = z.infer<typeof insertSubcontractSchema>;
 export type Subcontract = typeof subcontractsTable.$inferSelect;

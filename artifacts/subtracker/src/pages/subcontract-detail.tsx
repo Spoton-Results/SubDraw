@@ -24,7 +24,7 @@ import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
   HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
-  CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent,
+  CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
@@ -100,6 +100,9 @@ export default function SubcontractDetail() {
   const [disputeReasonText, setDisputeReasonText] = React.useState("");
   const [releaseRetentionLoading, setReleaseRetentionLoading] = React.useState(false);
   const [releaseRetentionConfirm, setReleaseRetentionConfirm] = React.useState(false);
+  const [lienWaiverDialog, setLienWaiverDialog] = React.useState<{ open: boolean; invoiceId: string; invoiceNumber: string; amount: number }>({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+  const [signedByName, setSignedByName] = React.useState("");
+  const [waiverSigning, setWaiverSigning] = React.useState(false);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
@@ -120,6 +123,17 @@ export default function SubcontractDetail() {
     }
   };
 
+  const openConfirmPayment = (inv: any) => {
+    const lienWaivers: any[] = (sub as any).lienWaivers ?? [];
+    const alreadySigned = lienWaivers.some((w: any) => w.invoiceId === inv.id);
+    if (alreadySigned) {
+      handleConfirmPayment(inv.id);
+    } else {
+      setSignedByName("");
+      setLienWaiverDialog({ open: true, invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount });
+    }
+  };
+
   const handleConfirmPayment = async (invoiceId: string) => {
     try {
       await confirmPayment.mutateAsync({ subcontractId, invoiceId });
@@ -127,6 +141,36 @@ export default function SubcontractDetail() {
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to confirm payment");
+    }
+  };
+
+  const handleSignAndConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signedByName.trim()) return toast.error("Please type your full legal name to sign");
+    setWaiverSigning(true);
+    try {
+      const base = import.meta.env.BASE_URL ?? "/";
+      const signRes = await fetch(`${base}api/subcontracts/${subcontractId}/invoices/${lienWaiverDialog.invoiceId}/sign-lien-waiver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedByName: signedByName.trim() }),
+        credentials: "include",
+      });
+      if (!signRes.ok) {
+        const errData = await signRes.json().catch(() => ({}));
+        toast.error(errData?.error ?? "Failed to sign lien waiver");
+        setWaiverSigning(false);
+        return;
+      }
+      await confirmPayment.mutateAsync({ subcontractId, invoiceId: lienWaiverDialog.invoiceId });
+      toast.success("Lien waiver signed and payment confirmed!");
+      invalidate();
+      setLienWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+      setSignedByName("");
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to confirm payment");
+    } finally {
+      setWaiverSigning(false);
     }
   };
 
@@ -723,8 +767,8 @@ export default function SubcontractDetail() {
                           <Button
                             size="sm"
                             className="bg-green-600 hover:bg-green-700 text-white flex-1 min-h-[44px] gap-1.5"
-                            isLoading={confirmPayment.isPending}
-                            onClick={() => handleConfirmPayment(inv.id)}
+                            isLoading={confirmPayment.isPending || waiverSigning}
+                            onClick={() => openConfirmPayment(inv)}
                           >
                             <CheckCircle2 className="h-4 w-4" /> Confirm Payment Received
                           </Button>
@@ -785,11 +829,15 @@ export default function SubcontractDetail() {
                     <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
                     <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+                    <th className="px-4 py-3 text-center font-semibold text-muted-foreground hidden md:table-cell">Lien Waiver</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {sortedInvoices.map((inv, idx) => (
+                  {sortedInvoices.map((inv, idx) => {
+                    const invLienWaivers: any[] = (sub as any).lienWaivers ?? [];
+                    const waiver = invLienWaivers.find((w: any) => w.invoiceId === inv.id);
+                    return (
                     <tr key={inv.id} className={cn(
                       "hover:bg-muted/30 transition-colors",
                       inv.status === "FLAGGED" && "bg-orange-50/40 dark:bg-orange-950/10",
@@ -807,19 +855,35 @@ export default function SubcontractDetail() {
                       <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
                       <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
                       <td className="px-4 py-3">{getInvStatusBadge(inv.status)}</td>
+                      <td className="px-4 py-3 text-center hidden md:table-cell">
+                        {waiver ? (
+                          <a
+                            href={`/api/subcontracts/${subcontractId}/invoices/${inv.id}/lien-waiver/pdf`}
+                            download={`LienWaiver-${inv.invoiceNumber}.pdf`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:underline"
+                            title="Download Lien Waiver PDF"
+                          >
+                            <Stamp className="h-3.5 w-3.5" />
+                            <span className="hidden lg:inline">Signed</span>
+                          </a>
+                        ) : (inv.status === "PAYMENT_CONFIRMED" || inv.status === "PAYMENT_UNCONFIRMED") ? (
+                          <span className="text-xs text-muted-foreground italic">—</span>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3">
                         <a
                           href={`/api/subcontracts/${subcontractId}/invoices/${inv.id}/pdf`}
                           download={`Invoice-${inv.invoiceNumber}.pdf`}
                           className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                          title="Download PDF"
+                          title="Download Invoice PDF"
                         >
                           <FileDown className="h-4 w-4" />
                           <span className="hidden sm:inline">PDF</span>
                         </a>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1087,6 +1151,51 @@ export default function SubcontractDetail() {
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setDisputeDialog({ open: false, id: "" }); setDisputeReasonText(""); }}>Cancel</Button>
             <Button type="submit" variant="destructive" className="min-h-[44px] gap-2" isLoading={disputePayment.isPending}>
               <ShieldAlert className="h-4 w-4" /> Submit Dispute
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* LIEN WAIVER SIGN DIALOG */}
+      <Dialog
+        open={lienWaiverDialog.open}
+        onOpenChange={(open) => { if (!open && !waiverSigning) setLienWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 }); }}
+        title="Sign Lien Waiver"
+        description={`Invoice #${lienWaiverDialog.invoiceNumber} — ${formatCurrency(lienWaiverDialog.amount)}`}
+      >
+        <form onSubmit={handleSignAndConfirm} className="space-y-5">
+          {/* Waiver statement preview */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-4">
+            <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Stamp className="h-3.5 w-3.5" /> Lien Waiver Statement
+            </p>
+            <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+              Upon receipt of payment in the amount of <strong>{formatCurrency(lienWaiverDialog.amount)}</strong>, your company hereby waives and releases any and all lien rights against the project property for all labor, materials, and equipment furnished through the date of this waiver. This waiver is conditioned upon the actual receipt of said payment and is effective only upon collection thereof.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold block">
+              Type your full legal name to sign <span className="text-red-500">*</span>
+            </label>
+            <p className="text-xs text-muted-foreground">By typing your name below, you are electronically signing this lien waiver document.</p>
+            <Input
+              required
+              autoFocus
+              placeholder="Full legal name (e.g. Jane Smith)"
+              value={signedByName}
+              onChange={e => setSignedByName(e.target.value)}
+              className="font-medium"
+            />
+            {signedByName.trim() && (
+              <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1 mt-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Signed as: <span className="font-bold italic">{signedByName.trim()}</span>
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" className="min-h-[44px]" disabled={waiverSigning} onClick={() => setLienWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 })}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px] gap-2 bg-green-600 hover:bg-green-700 text-white" isLoading={waiverSigning || confirmPayment.isPending}>
+              <CheckCircle2 className="h-4 w-4" /> Sign & Confirm Payment
             </Button>
           </div>
         </form>

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import {
@@ -15,6 +15,7 @@ import {
   sendPaymentDisputedEmail,
 } from "../lib/email.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
+import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 
 const router = Router();
 
@@ -176,8 +177,9 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
   const base = await getSubcontractWithRelations(sc);
   const changeOrders = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
   const invoices = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, subcontractId));
+  const lienWaivers = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.subcontractId, subcontractId));
   const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
-  res.json({ ...base, changeOrders, invoices, scoreboard });
+  res.json({ ...base, changeOrders, invoices, lienWaivers, scoreboard });
 });
 
 router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
@@ -644,7 +646,80 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
   res.json(invoice);
 });
 
-// Sub confirms they received payment — sets status to PAYMENT_CONFIRMED
+// Sub signs the lien waiver before confirming payment
+router.post("/:subcontractId/invoices/:invoiceId/sign-lien-waiver", requireAuth, requireSub, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const subUser = (req as any).user;
+  const { signedByName } = req.body ?? {};
+
+  if (!signedByName?.trim()) {
+    res.status(400).json({ error: "signedByName is required — type your full legal name as your electronic signature" });
+    return;
+  }
+
+  const [invoice] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+  if (invoice.status !== "PAYMENT_UNCONFIRMED") {
+    res.status(400).json({ error: "Lien waiver can only be signed on invoices marked as paid (PAYMENT_UNCONFIRMED status)" });
+    return;
+  }
+
+  // Check if waiver already signed for this invoice
+  const [existing] = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.invoiceId, invoiceId)).limit(1);
+  if (existing) {
+    res.status(400).json({ error: "A lien waiver has already been signed for this invoice" });
+    return;
+  }
+
+  const sc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const scWithRel = await getSubcontractWithRelations(sc);
+
+  // Get sub's license number from profile
+  const [subProfile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, subUser.id)).limit(1);
+
+  const [waiver] = await db.insert(lienWaiversTable).values({
+    subcontractId,
+    invoiceId,
+    projectId: sc.projectId,
+    signedByName: signedByName.trim(),
+    invoiceNumber: invoice.invoiceNumber,
+    amount: invoice.amount,
+    paymentDate: invoice.paymentDate ?? null,
+    paymentMethod: invoice.paymentMethod ?? null,
+    projectName: scWithRel.project.name,
+    projectAddress: (scWithRel.project as any).address ?? null,
+    gcCompanyName: scWithRel.project.gc.companyName,
+    subCompanyName: scWithRel.sub.companyName,
+    subLicenseNumber: subProfile?.licenseNumber ?? null,
+  }).returning();
+
+  await logActivity(subcontractId, "LIEN_WAIVER_SIGNED", `Lien waiver signed by ${signedByName.trim()} for Invoice #${invoice.invoiceNumber}`, scWithRel.sub.companyName, "SUB");
+
+  res.status(201).json(waiver);
+});
+
+// Download the lien waiver PDF for an invoice (GC or owning sub)
+router.get("/:subcontractId/invoices/:invoiceId/lien-waiver/pdf", requireAuth, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const user = (req as any).user;
+
+  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+
+  const [waiver] = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.invoiceId, invoiceId)).limit(1);
+  if (!waiver) { res.status(404).json({ error: "No signed lien waiver found for this invoice" }); return; }
+
+  const pdfBuffer = await generateLienWaiverPDF({ waiver });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="LienWaiver-${waiver.invoiceNumber}.pdf"`);
+  res.setHeader("Content-Length", pdfBuffer.length);
+  res.send(pdfBuffer);
+});
+
+// Sub confirms they received payment — REQUIRES signed lien waiver first
 router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, requireSub, async (req, res) => {
   const { subcontractId, invoiceId } = req.params;
   const subUser = (req as any).user;
@@ -653,6 +728,13 @@ router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, 
   if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
   if (existing.status !== "PAYMENT_UNCONFIRMED") {
     res.status(400).json({ error: "Only invoices with PAYMENT_UNCONFIRMED status can be confirmed" });
+    return;
+  }
+
+  // Require signed lien waiver
+  const [signedWaiver] = await db.select().from(lienWaiversTable).where(eq(lienWaiversTable.invoiceId, invoiceId)).limit(1);
+  if (!signedWaiver) {
+    res.status(400).json({ error: "You must sign the lien waiver before confirming payment. Please sign the lien waiver first." });
     return;
   }
 
