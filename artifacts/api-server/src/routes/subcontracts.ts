@@ -61,6 +61,13 @@ async function canAccessSubcontract(userId: string, userRole: string, subcontrac
   return false;
 }
 
+async function isSubcontractProjectArchived(subcontractId: string): Promise<boolean> {
+  const [sc] = await db.select({ projectId: subcontractsTable.projectId }).from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) return false;
+  const [project] = await db.select({ archivedAt: projectsTable.archivedAt }).from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  return !!project?.archivedAt;
+}
+
 async function getSubcontractWithRelations(sc: any) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
@@ -163,6 +170,9 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   }
   if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
+  }
+  if (await isSubcontractProjectArchived(req.params.subcontractId)) {
+    res.status(400).json({ error: "This project is archived and cannot accept new change orders." }); return;
   }
   const [co] = await db.insert(changeOrdersTable).values({
     subcontractId: req.params.subcontractId,
@@ -313,6 +323,9 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   }
   if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
+  }
+  if (await isSubcontractProjectArchived(subcontractId)) {
+    res.status(400).json({ error: "This project is archived and cannot accept new invoices." }); return;
   }
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) {

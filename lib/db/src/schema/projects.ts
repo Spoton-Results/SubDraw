@@ -12,6 +12,7 @@ export const projectsTable = pgTable("projects", {
   description: text("description"),
   estimatedStartDate: text("estimated_start_date"),
   notes: text("notes"),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

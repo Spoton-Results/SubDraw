@@ -30,6 +30,7 @@ import {
   Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
+  Archive, ArchiveRestore, Lock,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -355,6 +356,50 @@ export default function ProjectDetail() {
     }
   };
 
+  const [archiveConfirm, setArchiveConfirm] = React.useState(false);
+  const [unarchiveConfirm, setUnarchiveConfirm] = React.useState(false);
+  const [archiveLoading, setArchiveLoading] = React.useState(false);
+
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  const handleArchive = async () => {
+    setArchiveLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/archive`, { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to archive project");
+      }
+      toast.success("Project archived!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setArchiveConfirm(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to archive project");
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    setArchiveLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/unarchive`, { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to unarchive project");
+      }
+      toast.success("Project restored!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setUnarchiveConfirm(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unarchive project");
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const isArchived = !!(project as any).archivedAt;
+
   const getFileUrl = (plan: { objectPath?: string | null; fileUrl?: string | null }) => {
     if (plan.objectPath) return `/api/storage${plan.objectPath}`;
     return plan.fileUrl ?? "#";
@@ -400,20 +445,64 @@ export default function ProjectDetail() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {isGC && (
+            {isGC && !isArchived && (
               <Button variant="outline" onClick={handleOpenEdit} className="gap-2 min-h-[44px]">
                 <Pencil className="h-4 w-4" /> Edit Project
               </Button>
             )}
-            {isGC && project.status === "BIDDING" && (
+            {isGC && project.status === "BIDDING" && !isArchived && (
               <Button onClick={() => setIsInviteOpen(true)} className="gap-2 min-h-[44px]">
                 <Mail className="h-5 w-5" />
                 Invite Subcontractor
               </Button>
             )}
+            {isGC && project.status === "CLOSED" && !isArchived && (
+              <Button
+                variant="outline"
+                onClick={() => setArchiveConfirm(true)}
+                className="gap-2 min-h-[44px] text-muted-foreground hover:text-foreground"
+              >
+                <Archive className="h-4 w-4" /> Archive Project
+              </Button>
+            )}
+            {isGC && isArchived && (
+              <Button
+                variant="outline"
+                onClick={() => setUnarchiveConfirm(true)}
+                className="gap-2 min-h-[44px]"
+              >
+                <ArchiveRestore className="h-4 w-4" /> Restore Project
+              </Button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* ARCHIVED READ-ONLY BANNER */}
+      {isArchived && (
+        <div className="mb-6 rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
+          <Lock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-amber-800 dark:text-amber-300 text-sm">This project is archived — read-only</div>
+            <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              All data is preserved. No new change orders or invoices can be added. PDFs are still available for download.
+              {(project as any).archivedAt && (
+                <> Archived on {format(new Date((project as any).archivedAt), "MMMM d, yyyy")}.</>
+              )}
+            </div>
+          </div>
+          {isGC && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setUnarchiveConfirm(true)}
+              className="gap-1.5 shrink-0 text-amber-700 border-amber-400 hover:bg-amber-100"
+            >
+              <ArchiveRestore className="h-3.5 w-3.5" /> Restore
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* GC FINANCIAL OVERVIEW */}
       {isGC && project.subcontracts && project.subcontracts.length > 0 && (() => {
@@ -1201,6 +1290,65 @@ export default function ProjectDetail() {
               onClick={handleDeletePlan}
             >
               <Trash2 className="h-4 w-4 mr-2" /> Delete File
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Archive Project Confirmation */}
+      <Dialog
+        open={archiveConfirm}
+        onOpenChange={(open) => !open && setArchiveConfirm(false)}
+        title="Archive Project"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-4">
+            <p className="text-sm text-foreground">
+              Archive <span className="font-semibold">{project.name}</span>?
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> All data, invoices, change orders, and PDFs are preserved</li>
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> Project disappears from the main dashboard</li>
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> Does not count against your plan limit</li>
+              <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> You can restore it anytime</li>
+            </ul>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button variant="ghost" className="min-h-[44px]" onClick={() => setArchiveConfirm(false)}>Cancel</Button>
+            <Button
+              className="min-h-[44px] bg-amber-600 hover:bg-amber-700 text-white"
+              isLoading={archiveLoading}
+              onClick={handleArchive}
+            >
+              <Archive className="h-4 w-4 mr-2" /> Archive Project
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Unarchive / Restore Project Confirmation */}
+      <Dialog
+        open={unarchiveConfirm}
+        onOpenChange={(open) => !open && setUnarchiveConfirm(false)}
+        title="Restore Project"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-muted border border-border p-4">
+            <p className="text-sm text-foreground">
+              Restore <span className="font-semibold">{project.name}</span> back to Closed status?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              The project will reappear on your main dashboard. You can re-archive it at any time.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button variant="ghost" className="min-h-[44px]" onClick={() => setUnarchiveConfirm(false)}>Cancel</Button>
+            <Button
+              className="min-h-[44px]"
+              isLoading={archiveLoading}
+              onClick={handleUnarchive}
+            >
+              <ArchiveRestore className="h-4 w-4 mr-2" /> Restore Project
             </Button>
           </div>
         </div>

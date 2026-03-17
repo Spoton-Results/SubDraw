@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable } from "@workspace/db/schema";
-import { eq, or, inArray, and } from "drizzle-orm";
+import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { hashPassword } from "../lib/auth.js";
 import { sendInviteEmail, sendSubRemovedEmail } from "../lib/email.js";
@@ -32,6 +32,25 @@ async function computeSubcontractScoreboard(subcontractId: string, baseContractA
   const lastInvoice = sortedInvs[0] ?? null;
 
   return { base: baseContractAmount, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
+}
+
+async function computeArchivedSummary(projectId: string) {
+  const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
+  if (subcontracts.length === 0) return { totalContractValue: 0, totalPaid: 0, subcontractCount: 0 };
+
+  let totalContractValue = 0;
+  let totalPaid = 0;
+
+  await Promise.all(subcontracts.map(async (sc) => {
+    const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, sc.id));
+    const coTotal = cos.filter(c => c.status === "APPROVED").reduce((s, c) => s + c.amount, 0);
+    totalContractValue += sc.baseContractAmount + coTotal;
+
+    const invs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, sc.id));
+    totalPaid += invs.filter(i => i.status === "PAYMENT_CONFIRMED").reduce((s, i) => s + i.amount, 0);
+  }));
+
+  return { totalContractValue, totalPaid, subcontractCount: subcontracts.length };
 }
 
 async function getProjectFinancialSummary(projectId: string) {
@@ -92,7 +111,9 @@ router.get("/", requireAuth, async (req, res) => {
   let projects: any[];
 
   if (user.role === "GC") {
-    const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, user.id));
+    // Exclude archived projects from the main list
+    const gcProjects = await db.select().from(projectsTable)
+      .where(and(eq(projectsTable.gcId, user.id), isNull(projectsTable.archivedAt)));
     projects = await Promise.all(gcProjects.map(async (p) => {
       const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
       const financialSummary = await getProjectFinancialSummary(p.id);
@@ -105,7 +126,9 @@ router.get("/", requireAuth, async (req, res) => {
       res.json([]);
       return;
     }
-    const subProjects = await db.select().from(projectsTable).where(inArray(projectsTable.id, projectIds));
+    // Subs see non-archived projects
+    const subProjects = await db.select().from(projectsTable)
+      .where(and(inArray(projectsTable.id, projectIds), isNull(projectsTable.archivedAt)));
     projects = await Promise.all(subProjects.map(async (p) => {
       const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
       return { ...p, gc };
@@ -113,6 +136,36 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   res.json(projects);
+});
+
+// GC: get archived projects with optional search
+router.get("/archived", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const search = (req.query.search as string | undefined)?.trim() ?? "";
+
+  let query = db.select().from(projectsTable)
+    .where(and(eq(projectsTable.gcId, user.id), isNotNull(projectsTable.archivedAt)));
+
+  const archivedProjects = await query;
+
+  // Filter by name or address (case-insensitive in JS for simplicity)
+  const filtered = search
+    ? archivedProjects.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.address ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : archivedProjects;
+
+  // Sort newest archived first
+  filtered.sort((a, b) => new Date(b.archivedAt!).getTime() - new Date(a.archivedAt!).getTime());
+
+  const result = await Promise.all(filtered.map(async (p) => {
+    const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
+    const archivedSummary = await computeArchivedSummary(p.id);
+    return { ...p, gc, archivedSummary };
+  }));
+
+  res.json(result);
 });
 
 router.post("/", requireAuth, requireGC, async (req, res) => {
@@ -207,6 +260,44 @@ router.get("/:projectId", requireAuth, async (req, res) => {
   res.json(detail);
 });
 
+// GC: archive a CLOSED project
+router.post("/:projectId/archive", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.status !== "CLOSED") {
+    res.status(400).json({ error: "Only closed projects can be archived. Change the project status to Closed first." });
+    return;
+  }
+  if (project.archivedAt) {
+    res.status(400).json({ error: "Project is already archived" });
+    return;
+  }
+  const [updated] = await db.update(projectsTable)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(eq(projectsTable.id, req.params.projectId))
+    .returning();
+  res.json(updated);
+});
+
+// GC: unarchive a project — moves it back to CLOSED
+router.post("/:projectId/unarchive", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!project.archivedAt) {
+    res.status(400).json({ error: "Project is not archived" });
+    return;
+  }
+  const [updated] = await db.update(projectsTable)
+    .set({ archivedAt: null, updatedAt: new Date() })
+    .where(eq(projectsTable.id, req.params.projectId))
+    .returning();
+  res.json(updated);
+});
+
 router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
@@ -216,6 +307,10 @@ router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
   }
   if (project.gcId !== user.id) {
     res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (project.archivedAt) {
+    res.status(400).json({ error: "Archived projects cannot be edited. Unarchive the project first." });
     return;
   }
   const { name, address, description, estimatedStartDate, notes } = req.body;
