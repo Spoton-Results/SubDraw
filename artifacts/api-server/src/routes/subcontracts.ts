@@ -63,6 +63,12 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       flaggedOverAmount: invoice.flaggedOverAmount ?? 0,
       overrideReason: invoice.overrideReason ?? null,
       createdAt: invoice.createdAt,
+      paymentDate: invoice.paymentDate ?? null,
+      paymentMethod: invoice.paymentMethod ?? null,
+      paymentReference: invoice.paymentReference ?? null,
+      paymentNotes: invoice.paymentNotes ?? null,
+      paymentConfirmedAt: invoice.paymentConfirmedAt ?? null,
+      disputeReason: invoice.disputeReason ?? null,
     },
     subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null },
     project: {

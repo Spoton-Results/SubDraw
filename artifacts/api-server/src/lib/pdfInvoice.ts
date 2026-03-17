@@ -14,6 +14,8 @@ const WARNING_BG = "#fffbeb";
 const WARNING_TEXT = "#92400e";
 const PENDING_BG = "#fefce8";
 const PENDING_TEXT = "#854d0e";
+const ORANGE_BG = "#fff7ed";
+const ORANGE_TEXT = "#c2410c";
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -21,6 +23,13 @@ function formatCurrency(n: number) {
 
 function formatDate(d: Date | string) {
   return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric" }).format(new Date(d));
+}
+
+function formatDateTime(d: Date | string) {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "long", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(d));
 }
 
 export interface InvoicePDFData {
@@ -32,6 +41,12 @@ export interface InvoicePDFData {
     flaggedOverAmount: number;
     overrideReason: string | null;
     createdAt: Date | string;
+    paymentDate?: string | null;
+    paymentMethod?: string | null;
+    paymentReference?: string | null;
+    paymentNotes?: string | null;
+    paymentConfirmedAt?: string | null;
+    disputeReason?: string | null;
   };
   subcontract: {
     id: string;
@@ -60,10 +75,10 @@ export interface InvoicePDFData {
 
 export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const { invoice, project, sub, gc, scoreboard } = data;
+    const { invoice, subcontract, project, sub, gc, scoreboard } = data;
 
     const prevInvoiced =
-      invoice.status === "APPROVED"
+      ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED", "PAYMENT_DISPUTED"].includes(invoice.status)
         ? scoreboard.invoicedTotal - invoice.amount
         : scoreboard.invoicedTotal;
     const balanceAfter = scoreboard.currentApprovedTotal - prevInvoiced - invoice.amount;
@@ -92,11 +107,9 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     // ── Header Bar ───────────────────────────────────────────────────────────────
     doc.rect(0, 0, PAGE_W, 76).fill(PRIMARY);
 
-    // SubTracker logo text
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#ffffff").text("SubTracker", MARGIN, 20);
     doc.fontSize(9).font("Helvetica").fillColor("rgba(200,220,255,0.8)").text("Subcontract Management Platform", MARGIN, 44);
 
-    // "INVOICE" label top-right
     doc.fontSize(10).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.9)")
       .text("INVOICE", PAGE_W - MARGIN - 80, 22, { width: 80, align: "right" });
     doc.fontSize(8).font("Helvetica").fillColor("rgba(180,200,240,0.7)")
@@ -107,7 +120,13 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     let stampTextColor: string;
     let stampLabel: string;
 
-    if (invoice.status === "APPROVED") {
+    if (invoice.status === "PAYMENT_CONFIRMED") {
+      stampFill = SUCCESS_BG; stampTextColor = SUCCESS_TEXT; stampLabel = "PAYMENT CONFIRMED";
+    } else if (invoice.status === "PAYMENT_UNCONFIRMED") {
+      stampFill = ORANGE_BG; stampTextColor = ORANGE_TEXT; stampLabel = "PAYMENT UNCONFIRMED";
+    } else if (invoice.status === "PAYMENT_DISPUTED") {
+      stampFill = DANGER_BG; stampTextColor = DANGER_TEXT; stampLabel = "PAYMENT DISPUTED";
+    } else if (invoice.status === "APPROVED") {
       stampFill = SUCCESS_BG; stampTextColor = SUCCESS_TEXT; stampLabel = "APPROVED";
     } else if (invoice.status === "REJECTED") {
       stampFill = DANGER_BG; stampTextColor = DANGER_TEXT; stampLabel = "REJECTED";
@@ -119,16 +138,15 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     let y = 96;
 
-    // Large title + status side by side
     doc.fontSize(30).font("Helvetica-Bold").fillColor(TEXT).text("INVOICE", MARGIN, y);
 
-    const stampW = 140;
+    const stampW = 160;
     const stampH = 38;
     const stampX = PAGE_W - MARGIN - stampW;
     const stampY = y - 2;
     doc.roundedRect(stampX, stampY, stampW, stampH, 6).fill(stampFill);
     doc.roundedRect(stampX, stampY, stampW, stampH, 6).lineWidth(1.5).strokeColor(stampTextColor).stroke();
-    doc.fontSize(11).font("Helvetica-Bold").fillColor(stampTextColor)
+    doc.fontSize(10).font("Helvetica-Bold").fillColor(stampTextColor)
       .text(stampLabel, stampX, stampY + 13, { width: stampW, align: "center" });
 
     y += 50;
@@ -140,14 +158,12 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     // ── Two-column header block ──────────────────────────────────────────────────
     const midX = MARGIN + CONTENT_W / 2 + 10;
 
-    // Left side: FROM
     doc.fontSize(7).font("Helvetica-Bold").fillColor(MUTED).text("FROM", MARGIN, y, { characterSpacing: 1 });
     y += 12;
     doc.fontSize(13).font("Helvetica-Bold").fillColor(TEXT).text(sub.companyName, MARGIN, y);
     y += 17;
     doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(sub.email, MARGIN, y);
 
-    // Right side: invoice metadata
     const detailLabelX = midX;
     const detailValueX = PAGE_W - MARGIN - 130;
     let detailY = y - 29;
@@ -169,7 +185,6 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     y += 22;
 
-    // ── Divider ──────────────────────────────────────────────────────────────────
     doc.moveTo(MARGIN, y).lineTo(PAGE_W - MARGIN, y).lineWidth(0.5).strokeColor(BORDER).stroke();
     y += 16;
 
@@ -194,7 +209,6 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     y += 10;
 
-    // ── Divider ──────────────────────────────────────────────────────────────────
     doc.moveTo(MARGIN, y).lineTo(PAGE_W - MARGIN, y).lineWidth(0.5).strokeColor(BORDER).stroke();
     y += 18;
 
@@ -245,10 +259,8 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     y += summaryRows.length * ROW_H;
 
-    // Separator line
     doc.moveTo(MARGIN, y).lineTo(PAGE_W - MARGIN, y).lineWidth(1).strokeColor(BORDER).stroke();
 
-    // "This Invoice" highlighted row
     const thisInvRowH = 32;
     doc.rect(MARGIN, y, CONTENT_W, thisInvRowH).fill(PRIMARY);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#ffffff")
@@ -257,7 +269,6 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
       .text(formatCurrency(invoice.amount), valX - 120, y + 10, { width: 120, align: "right" });
     y += thisInvRowH;
 
-    // Remaining balance row
     const isNegBal = balanceAfter < 0;
     const balBg = isNegBal ? "#fef2f2" : "#f0fdf4";
     const balColor = isNegBal ? DANGER_TEXT : SUCCESS_TEXT;
@@ -268,7 +279,6 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
       .text(formatCurrency(balanceAfter), valX - 100, y + 8, { width: 100, align: "right" });
     y += ROW_H;
 
-    // Border around entire table
     const tableH = y - tableStartY;
     doc.roundedRect(MARGIN, tableStartY, CONTENT_W, tableH, 6)
       .lineWidth(1).strokeColor(BORDER).stroke();
@@ -283,7 +293,6 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     doc.fontSize(24).font("Helvetica-Bold").fillColor("#ffffff")
       .text(formatCurrency(invoice.amount), MARGIN + 20, y + 23);
 
-    // Payment terms on right side
     doc.fontSize(9).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.7)")
       .text("Payment Terms", PAGE_W - MARGIN - 130, y + 12, { width: 120, align: "right" });
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#ffffff")
@@ -315,6 +324,60 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
       doc.fontSize(9).font("Helvetica").fillColor(WARNING_TEXT)
         .text(invoice.overrideReason, MARGIN + 14, y + 27, { width: CONTENT_W - 28 });
       y += overH + 12;
+    }
+
+    // ── Payment Details (PAYMENT_UNCONFIRMED / PAYMENT_CONFIRMED) ─────────────────
+    const hasPaymentInfo = invoice.paymentDate || invoice.paymentMethod;
+    if (hasPaymentInfo && ["PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED", "PAYMENT_DISPUTED"].includes(invoice.status)) {
+      const isConfirmed = invoice.status === "PAYMENT_CONFIRMED";
+      const isDisputed = invoice.status === "PAYMENT_DISPUTED";
+      const sectionBg = isDisputed ? DANGER_BG : isConfirmed ? SUCCESS_BG : ORANGE_BG;
+      const sectionBorder = isDisputed ? "#fecaca" : isConfirmed ? "#bbf7d0" : "#fed7aa";
+      const sectionAccent = isDisputed ? DANGER_TEXT : isConfirmed ? SUCCESS_TEXT : ORANGE_TEXT;
+      const sectionLabel = isConfirmed ? "PAYMENT CONFIRMED" : isDisputed ? "PAYMENT RECORDED" : "PAYMENT RECORDED — AWAITING CONFIRMATION";
+
+      const payRows: string[][] = [];
+      if (invoice.paymentDate) payRows.push(["Payment Date:", formatDate(invoice.paymentDate)]);
+      if (invoice.paymentMethod) payRows.push(["Payment Method:", invoice.paymentMethod]);
+      if (invoice.paymentReference) payRows.push(["Reference Number:", invoice.paymentReference]);
+      if (invoice.paymentNotes) payRows.push(["Notes:", invoice.paymentNotes]);
+      if (isConfirmed && invoice.paymentConfirmedAt) {
+        payRows.push(["Confirmed by Sub:", formatDateTime(invoice.paymentConfirmedAt)]);
+      }
+
+      const rowLineH = 16;
+      const sectionH = 20 + 18 + payRows.length * rowLineH + 12;
+      doc.roundedRect(MARGIN, y, CONTENT_W, sectionH, 6).fill(sectionBg);
+      doc.roundedRect(MARGIN, y, CONTENT_W, sectionH, 6).lineWidth(1).strokeColor(sectionBorder).stroke();
+      doc.rect(MARGIN, y, 4, sectionH).fill(sectionAccent);
+
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(sectionAccent)
+        .text(sectionLabel, MARGIN + 14, y + 12);
+
+      let rowY = y + 28;
+      const rightValX = PAGE_W - MARGIN - 16;
+      for (const [label, val] of payRows) {
+        doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(label, MARGIN + 14, rowY);
+        doc.fontSize(9).font("Helvetica-Bold").fillColor(TEXT)
+          .text(val, rightValX - 200, rowY, { width: 200, align: "right" });
+        rowY += rowLineH;
+      }
+      y += sectionH + 12;
+    }
+
+    // ── Payment Dispute Reason ────────────────────────────────────────────────────
+    if (invoice.status === "PAYMENT_DISPUTED" && invoice.disputeReason) {
+      doc.fontSize(9).font("Helvetica");
+      const disputeTextH = doc.heightOfString(invoice.disputeReason, { width: CONTENT_W - 28 });
+      const disputeH = Math.max(52, 32 + disputeTextH + 8);
+      doc.roundedRect(MARGIN, y, CONTENT_W, disputeH, 6).fill(DANGER_BG);
+      doc.roundedRect(MARGIN, y, CONTENT_W, disputeH, 6).lineWidth(1).strokeColor("#fecaca").stroke();
+      doc.rect(MARGIN, y, 4, disputeH).fill(DANGER_TEXT);
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(DANGER_TEXT)
+        .text("Sub Dispute Reason:", MARGIN + 14, y + 10);
+      doc.fontSize(9).font("Helvetica").fillColor(DANGER_TEXT)
+        .text(invoice.disputeReason, MARGIN + 14, y + 27, { width: CONTENT_W - 28 });
+      y += disputeH + 12;
     }
 
     // ── Footer ────────────────────────────────────────────────────────────────────
