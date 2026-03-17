@@ -33,7 +33,7 @@ export default function Register() {
   });
 
   React.useEffect(() => {
-    if (user && !isLoading) setLocation("/");
+    if (user && !isLoading && !(user as any).isDemo) setLocation("/");
   }, [user, isLoading, setLocation]);
 
   const onSubmit = async (data: RegisterForm) => {

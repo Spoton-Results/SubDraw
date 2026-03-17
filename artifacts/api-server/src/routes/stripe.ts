@@ -27,6 +27,12 @@ function getAppUrl(req: any) {
 
 router.get("/billing", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
+
+  if (user.isDemo) {
+    res.json({ subscription: null, invoices: [], stripeCustomerId: null, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, trialActive: false, trialExpired: false, trialDaysLeft: 0, trialEndsAt: null });
+    return;
+  }
+
   const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
 
   const subscription = await getSubscriptionForUser(user.id);

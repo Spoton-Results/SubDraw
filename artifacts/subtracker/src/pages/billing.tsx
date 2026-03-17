@@ -176,7 +176,57 @@ export default function Billing() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-5">
-                {isCanceled ? (
+                {billing?.planName === "Demo" ? (
+                  /* ── Demo account ── */
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                        <Zap className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-foreground">Demo Account</div>
+                        <div className="text-sm text-muted-foreground">Sign up for a free 14-day trial to create your own projects</div>
+                      </div>
+                      <Badge variant="secondary" className="ml-auto bg-blue-100 text-blue-700">Demo</Badge>
+                    </div>
+                    <a
+                      href="/register"
+                      className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary text-primary-foreground font-semibold py-2.5 px-4 hover:opacity-90 transition-opacity text-sm"
+                    >
+                      Start your free 14-day trial <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                    <p className="text-sm text-muted-foreground">Available plans after sign-up:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {UNSUBSCRIBED_PLANS.map(plan => {
+                        const Icon = plan.icon;
+                        return (
+                          <div key={plan.name} className={`relative rounded-2xl border-2 p-4 flex flex-col gap-3 ${plan.color}`}>
+                            {(plan as any).popular && (
+                              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                                <span className="bg-primary text-primary-foreground text-xs font-bold px-2.5 py-0.5 rounded-full">Popular</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${plan.headerColor}`} />
+                              <span className={`font-bold text-sm ${plan.headerColor}`}>{plan.label}</span>
+                            </div>
+                            <div>
+                              <div className="text-2xl font-bold">{formatPlanPrice(plan.monthlyUsd)}</div>
+                              <div className="text-xs text-muted-foreground">/month</div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">Up to {plan.limit} active projects</div>
+                            <a
+                              href="/register"
+                              className={`flex items-center justify-center text-xs font-semibold rounded-lg py-1.5 px-3 border transition-colors ${(plan as any).popular ? "bg-primary text-primary-foreground hover:opacity-90" : "border-input hover:bg-secondary"}`}
+                            >
+                              Sign up free
+                            </a>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : isCanceled ? (
                   /* ── No subscription — show plan selector ── */
                   <div className="space-y-5">
                     <div className="flex items-center gap-3">
