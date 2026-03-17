@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "wouter";
-import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe } from "@workspace/api-client-react";
+import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe, useGetGcDisputedInvoices } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -18,6 +18,8 @@ export default function Dashboard() {
   const { data: projects, isLoading } = useGetProjects();
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
+  const isGC = user?.role === "GC";
+  const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
 
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
@@ -56,22 +58,28 @@ export default function Dashboard() {
     }
   };
 
-  const isGC = user?.role === "GC";
-
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Projects</h1>
           <p className="text-muted-foreground mt-1 text-sm md:text-base">Manage your active bids and subcontracts</p>
         </div>
-        {isGC && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 min-h-[44px] shrink-0">
-            <Plus className="h-5 w-5" />
-            <span className="hidden sm:inline">New Project</span>
-            <span className="sm:hidden">New</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-3 shrink-0">
+          {isGC && gcDisputedInvoices.length > 0 && (
+            <Badge variant="destructive" className="gap-1.5 text-sm px-3 py-1.5 animate-pulse">
+              <ShieldAlert className="h-4 w-4" />
+              {gcDisputedInvoices.length} Disputed Payment{gcDisputedInvoices.length !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {isGC && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 min-h-[44px]">
+              <Plus className="h-5 w-5" />
+              <span className="hidden sm:inline">New Project</span>
+              <span className="sm:hidden">New</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
@@ -177,6 +185,57 @@ export default function Dashboard() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {/* GC: Disputed Payments Section */}
+      {isGC && gcDisputedInvoices.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-red-100 dark:bg-red-900/40 rounded-xl p-2">
+              <ShieldAlert className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold font-display text-red-700 dark:text-red-400">Disputed Payments</h2>
+              <p className="text-sm text-muted-foreground">Subcontractors have disputed the following payments — please follow up to resolve.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {gcDisputedInvoices.map(inv => (
+              <div key={inv.invoiceId} className="rounded-2xl border-2 border-red-400 bg-red-50 dark:bg-red-950/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-muted-foreground bg-muted rounded px-1.5 py-0.5">Invoice #{inv.invoiceNumber}</span>
+                      <Badge variant="destructive" className="gap-1 text-xs">
+                        <ShieldAlert className="h-3 w-3" /> Payment Disputed
+                      </Badge>
+                    </div>
+                    <div className="font-mono text-xl font-bold text-foreground">{formatCurrency(inv.amount)}</div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{inv.projectName}</span>
+                      <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{inv.subCompanyName}</span>
+                      <span className="flex items-center gap-1"><Receipt className="h-3.5 w-3.5" />{format(new Date(inv.updatedAt), "MMM d, yyyy")}</span>
+                    </div>
+                    {inv.disputeReason && (
+                      <div className="mt-2 flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-100/60 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold block text-xs uppercase tracking-wide mb-0.5">Dispute Reason</span>
+                          {inv.disputeReason}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <Link href={`/subcontracts/${inv.subcontractId}`}>
+                    <Button size="sm" variant="destructive" className="gap-1.5 min-h-[44px] shrink-0">
+                      <ExternalLink className="h-4 w-4" /> View Subcontract
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

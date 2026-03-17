@@ -25,7 +25,7 @@ async function computeSubcontractScoreboard(subcontractId: string, baseContractA
   const currentApprovedTotal = baseContractAmount + coTotal;
   const invoicedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
   const remaining = currentApprovedTotal - invoicedTotal;
-  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED");
+  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED" || i.status === "PAYMENT_DISPUTED");
 
   const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastInvoice = sortedInvs[0] ?? null;
@@ -36,12 +36,17 @@ async function computeSubcontractScoreboard(subcontractId: string, baseContractA
 async function getProjectFinancialSummary(projectId: string) {
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
   if (subcontracts.length === 0) {
-    return { subcontractCount: 0, totalApprovedAmount: 0, totalInvoiced: 0, hasFlaggedInvoices: false, totalCOApproved: 0 };
+    return { subcontractCount: 0, totalApprovedAmount: 0, totalInvoiced: 0, hasFlaggedInvoices: false, totalCOApproved: 0, disputedCount: 0 };
   }
 
   const scoreboards = await Promise.all(
     subcontracts.map(sc => computeSubcontractScoreboard(sc.id, sc.baseContractAmount))
   );
+
+  const allInvs = await Promise.all(
+    subcontracts.map(sc => db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, sc.id)))
+  );
+  const disputedCount = allInvs.flat().filter(i => i.status === "PAYMENT_DISPUTED").length;
 
   return {
     subcontractCount: subcontracts.length,
@@ -49,6 +54,7 @@ async function getProjectFinancialSummary(projectId: string) {
     totalInvoiced: scoreboards.reduce((s, sb) => s + sb.invoicedTotal, 0),
     hasFlaggedInvoices: scoreboards.some(sb => sb.hasFlaggedInvoices),
     totalCOApproved: scoreboards.reduce((s, sb) => s + sb.coTotal, 0),
+    disputedCount,
   };
 }
 
@@ -124,6 +130,39 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
   }).returning();
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
   res.status(201).json({ ...project, gc });
+});
+
+router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => {
+  const gcUser = (req as any).user;
+  const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, gcUser.id));
+  if (gcProjects.length === 0) { res.json([]); return; }
+
+  const projectIds = gcProjects.map(p => p.id);
+  const subcontracts = await db.select().from(subcontractsTable).where(inArray(subcontractsTable.projectId, projectIds));
+  if (subcontracts.length === 0) { res.json([]); return; }
+
+  const scIds = subcontracts.map(sc => sc.id);
+  const disputedInvoices = await db.select().from(invoicesTable)
+    .where(and(inArray(invoicesTable.subcontractId, scIds), eq(invoicesTable.status, "PAYMENT_DISPUTED")));
+
+  const result = await Promise.all(disputedInvoices.map(async (inv) => {
+    const sc = subcontracts.find(s => s.id === inv.subcontractId)!;
+    const project = gcProjects.find(p => p.id === sc.projectId)!;
+    const [subUser] = await db.select({ companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    return {
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      amount: inv.amount,
+      disputeReason: inv.disputeReason ?? null,
+      updatedAt: inv.updatedAt.toISOString(),
+      projectId: project.id,
+      projectName: project.name,
+      subcontractId: sc.id,
+      subCompanyName: subUser?.companyName ?? "Unknown",
+    };
+  }));
+
+  res.json(result);
 });
 
 router.get("/:projectId", requireAuth, async (req, res) => {

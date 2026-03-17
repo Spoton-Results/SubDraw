@@ -554,6 +554,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Bid"
 
+  /projects/gc/disputed-invoices:
+    get:
+      operationId: getGcDisputedInvoices
+      tags: [projects]
+      summary: Get all disputed invoices across all GC projects (GC only)
+      responses:
+        "200":
+          description: Disputed invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GcDisputedInvoice"
+
   /projects/{projectId}/bids/{bidId}/award:
     post:
       operationId: awardBid
@@ -950,6 +965,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputePaymentRequest"
       responses:
         "200":
           description: Payment disputed
@@ -1340,7 +1361,9 @@ components:
           type: boolean
         totalCOApproved:
           type: number
-      required: [subcontractCount, totalApprovedAmount, totalInvoiced, hasFlaggedInvoices, totalCOApproved]
+        disputedCount:
+          type: number
+      required: [subcontractCount, totalApprovedAmount, totalInvoiced, hasFlaggedInvoices, totalCOApproved, disputedCount]
 
     Project:
       type: object
@@ -1661,6 +1684,12 @@ components:
         paymentNotes:
           type: string
           nullable: true
+        paymentConfirmedAt:
+          type: string
+          nullable: true
+        disputeReason:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1700,6 +1729,37 @@ components:
         paymentNotes:
           type: string
       required: [paymentDate, paymentMethod]
+
+    DisputePaymentRequest:
+      type: object
+      properties:
+        disputeReason:
+          type: string
+
+    GcDisputedInvoice:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        amount:
+          type: number
+        disputeReason:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+        projectId:
+          type: string
+        projectName:
+          type: string
+        subcontractId:
+          type: string
+        subCompanyName:
+          type: string
+      required: [invoiceId, invoiceNumber, amount, updatedAt, projectId, projectName, subcontractId, subCompanyName]
 
     PlanFile:
       type: object

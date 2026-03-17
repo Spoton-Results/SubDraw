@@ -26,9 +26,11 @@ import type {
   ChangePasswordRequest,
   CreateChangeOrderRequest,
   CreateProjectRequest,
+  DisputePaymentRequest,
   ErrorResponse,
   ForgotPasswordRequest,
   GcContact,
+  GcDisputedInvoice,
   HealthStatus,
   InviteContactToProject200,
   InviteRequest,
@@ -1924,6 +1926,81 @@ export const useSubmitBid = <
 };
 
 /**
+ * @summary Get all disputed invoices across all GC projects (GC only)
+ */
+export const getGetGcDisputedInvoicesUrl = () => {
+  return `/api/projects/gc/disputed-invoices`;
+};
+
+export const getGcDisputedInvoices = async (
+  options?: RequestInit,
+): Promise<GcDisputedInvoice[]> => {
+  return customFetch<GcDisputedInvoice[]>(getGetGcDisputedInvoicesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGcDisputedInvoicesQueryKey = () => {
+  return [`/api/projects/gc/disputed-invoices`] as const;
+};
+
+export const getGetGcDisputedInvoicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGcDisputedInvoices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGcDisputedInvoices>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetGcDisputedInvoicesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGcDisputedInvoices>>
+  > = ({ signal }) => getGcDisputedInvoices({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGcDisputedInvoices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGcDisputedInvoicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGcDisputedInvoices>>
+>;
+export type GetGcDisputedInvoicesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all disputed invoices across all GC projects (GC only)
+ */
+
+export function useGetGcDisputedInvoices<
+  TData = Awaited<ReturnType<typeof getGcDisputedInvoices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getGcDisputedInvoices>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGcDisputedInvoicesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Award a bid (GC only) — creates a subcontract
  */
 export const getAwardBidUrl = (projectId: string, bidId: string) => {
@@ -3324,6 +3401,7 @@ export const getDisputeInvoicePaymentUrl = (
 export const disputeInvoicePayment = async (
   subcontractId: string,
   invoiceId: string,
+  disputePaymentRequest?: DisputePaymentRequest,
   options?: RequestInit,
 ): Promise<Invoice> => {
   return customFetch<Invoice>(
@@ -3331,6 +3409,8 @@ export const disputeInvoicePayment = async (
     {
       ...options,
       method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(disputePaymentRequest),
     },
   );
 };
@@ -3342,14 +3422,22 @@ export const getDisputeInvoicePaymentMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof disputeInvoicePayment>>,
     TError,
-    { subcontractId: string; invoiceId: string },
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<DisputePaymentRequest>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof disputeInvoicePayment>>,
   TError,
-  { subcontractId: string; invoiceId: string },
+  {
+    subcontractId: string;
+    invoiceId: string;
+    data: BodyType<DisputePaymentRequest>;
+  },
   TContext
 > => {
   const mutationKey = ["disputeInvoicePayment"];
@@ -3363,11 +3451,20 @@ export const getDisputeInvoicePaymentMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof disputeInvoicePayment>>,
-    { subcontractId: string; invoiceId: string }
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<DisputePaymentRequest>;
+    }
   > = (props) => {
-    const { subcontractId, invoiceId } = props ?? {};
+    const { subcontractId, invoiceId, data } = props ?? {};
 
-    return disputeInvoicePayment(subcontractId, invoiceId, requestOptions);
+    return disputeInvoicePayment(
+      subcontractId,
+      invoiceId,
+      data,
+      requestOptions,
+    );
   };
 
   return { mutationFn, ...mutationOptions };
@@ -3376,7 +3473,7 @@ export const getDisputeInvoicePaymentMutationOptions = <
 export type DisputeInvoicePaymentMutationResult = NonNullable<
   Awaited<ReturnType<typeof disputeInvoicePayment>>
 >;
-
+export type DisputeInvoicePaymentMutationBody = BodyType<DisputePaymentRequest>;
 export type DisputeInvoicePaymentMutationError = ErrorType<unknown>;
 
 /**
@@ -3389,14 +3486,22 @@ export const useDisputeInvoicePayment = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof disputeInvoicePayment>>,
     TError,
-    { subcontractId: string; invoiceId: string },
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<DisputePaymentRequest>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof disputeInvoicePayment>>,
   TError,
-  { subcontractId: string; invoiceId: string },
+  {
+    subcontractId: string;
+    invoiceId: string;
+    data: BodyType<DisputePaymentRequest>;
+  },
   TContext
 > => {
   return useMutation(getDisputeInvoicePaymentMutationOptions(options));

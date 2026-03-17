@@ -39,6 +39,8 @@ export const invoicesTable = pgTable("invoices", {
   paymentMethod: text("payment_method"),
   paymentReference: text("payment_reference"),
   paymentNotes: text("payment_notes"),
+  paymentConfirmedAt: text("payment_confirmed_at"),
+  disputeReason: text("dispute_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

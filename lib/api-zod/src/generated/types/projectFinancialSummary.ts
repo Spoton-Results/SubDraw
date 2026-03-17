@@ -12,4 +12,5 @@ export interface ProjectFinancialSummary {
   totalInvoiced: number;
   hasFlaggedInvoices: boolean;
   totalCOApproved: number;
+  disputedCount: number;
 }

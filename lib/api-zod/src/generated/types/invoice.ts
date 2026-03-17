@@ -20,6 +20,8 @@ export interface Invoice {
   paymentMethod?: string | null;
   paymentReference?: string | null;
   paymentNotes?: string | null;
+  paymentConfirmedAt?: string | null;
+  disputeReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

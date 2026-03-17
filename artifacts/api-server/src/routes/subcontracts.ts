@@ -511,7 +511,7 @@ router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, 
 
   const [invoice] = await db
     .update(invoicesTable)
-    .set({ status: "PAYMENT_CONFIRMED", updatedAt: new Date() })
+    .set({ status: "PAYMENT_CONFIRMED", paymentConfirmedAt: new Date().toISOString(), updatedAt: new Date() })
     .where(eq(invoicesTable.id, invoiceId))
     .returning();
 
@@ -523,6 +523,7 @@ router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, 
 router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, requireSub, async (req, res) => {
   const { subcontractId, invoiceId } = req.params;
   const subUser = (req as any).user;
+  const { disputeReason } = req.body ?? {};
 
   const [existing] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
   if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -533,11 +534,11 @@ router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, 
 
   const [invoice] = await db
     .update(invoicesTable)
-    .set({ status: "PAYMENT_DISPUTED", updatedAt: new Date() })
+    .set({ status: "PAYMENT_DISPUTED", disputeReason: disputeReason ?? null, updatedAt: new Date() })
     .where(eq(invoicesTable.id, invoiceId))
     .returning();
 
-  await logActivity(subcontractId, "INVOICE_PAYMENT_DISPUTED", `Invoice #${invoice.invoiceNumber} payment disputed by ${subUser.companyName}`, subUser.companyName, "SUB");
+  await logActivity(subcontractId, "INVOICE_PAYMENT_DISPUTED", `Invoice #${invoice.invoiceNumber} payment disputed by ${subUser.companyName}${disputeReason ? `: ${disputeReason}` : ""}`, subUser.companyName, "SUB");
   res.json(invoice);
 });
 

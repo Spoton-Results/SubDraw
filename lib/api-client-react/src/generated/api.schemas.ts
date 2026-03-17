@@ -126,6 +126,7 @@ export interface ProjectFinancialSummary {
   totalInvoiced: number;
   hasFlaggedInvoices: boolean;
   totalCOApproved: number;
+  disputedCount: number;
 }
 
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
@@ -210,6 +211,8 @@ export interface Invoice {
   paymentMethod?: string | null;
   paymentReference?: string | null;
   paymentNotes?: string | null;
+  paymentConfirmedAt?: string | null;
+  disputeReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -351,6 +354,22 @@ export interface MarkAsPaidRequest {
   paymentMethod: MarkAsPaidRequestPaymentMethod;
   paymentReference?: string;
   paymentNotes?: string;
+}
+
+export interface DisputePaymentRequest {
+  disputeReason?: string;
+}
+
+export interface GcDisputedInvoice {
+  invoiceId: string;
+  invoiceNumber: string;
+  amount: number;
+  disputeReason?: string | null;
+  updatedAt: string;
+  projectId: string;
+  projectName: string;
+  subcontractId: string;
+  subCompanyName: string;
 }
 
 export interface PlanFile {

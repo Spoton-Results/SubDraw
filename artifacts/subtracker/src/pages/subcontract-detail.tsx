@@ -94,7 +94,8 @@ export default function SubcontractDetail() {
   const [payMethod, setPayMethod] = React.useState("");
   const [payReference, setPayReference] = React.useState("");
   const [payNotes, setPayNotes] = React.useState("");
-  const [disputeConfirm, setDisputeConfirm] = React.useState<string | null>(null);
+  const [disputeDialog, setDisputeDialog] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
+  const [disputeReasonText, setDisputeReasonText] = React.useState("");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
@@ -125,12 +126,15 @@ export default function SubcontractDetail() {
     }
   };
 
-  const handleDisputePayment = async (invoiceId: string) => {
+  const handleDisputePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeReasonText.trim()) return toast.error("Please describe the issue");
     try {
-      await disputePayment.mutateAsync({ subcontractId, invoiceId });
+      await disputePayment.mutateAsync({ subcontractId, invoiceId: disputeDialog.id, data: { disputeReason: disputeReasonText.trim() } });
       toast.success("Payment dispute recorded");
       invalidate();
-      setDisputeConfirm(null);
+      setDisputeDialog({ open: false, id: "" });
+      setDisputeReasonText("");
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to dispute payment");
     }
@@ -564,26 +568,6 @@ export default function SubcontractDetail() {
                             <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
                           </Button>
                         )}
-                        {!isGC && inv.status === "PAYMENT_UNCONFIRMED" && (
-                          disputeConfirm === inv.id ? (
-                            <div className="flex flex-col gap-1 items-end">
-                              <span className="text-xs text-red-600 font-semibold">Dispute payment?</span>
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="destructive" className="min-h-[36px] text-xs px-2" isLoading={disputePayment.isPending} onClick={() => handleDisputePayment(inv.id)}>Dispute</Button>
-                                <Button size="sm" variant="ghost" className="min-h-[36px] text-xs px-2" onClick={() => setDisputeConfirm(null)}>Cancel</Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-1.5 items-end">
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] text-xs gap-1" isLoading={confirmPayment.isPending} onClick={() => handleConfirmPayment(inv.id)}>
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Confirm Received
-                              </Button>
-                              <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 min-h-[36px] text-xs gap-1" onClick={() => setDisputeConfirm(inv.id)}>
-                                <ShieldAlert className="h-3.5 w-3.5" /> Dispute
-                              </Button>
-                            </div>
-                          )
-                        )}
                         {!isGC && inv.status === "PENDING" && (
                           cancelConfirm === inv.id ? (
                             <div className="flex items-center gap-1">
@@ -599,6 +583,60 @@ export default function SubcontractDetail() {
                         )}
                       </div>
                     </div>
+
+                    {/* Sub: yellow payment confirmation banner */}
+                    {!isGC && inv.status === "PAYMENT_UNCONFIRMED" && (
+                      <div className="mt-3 rounded-xl border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20 p-3 space-y-3">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-300 font-semibold flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          Your GC has marked this invoice as paid — please confirm you received this payment.
+                        </p>
+                        {Date.now() - new Date(inv.updatedAt).getTime() > 7 * 24 * 60 * 60 * 1000 && (
+                          <p className="text-xs text-orange-700 dark:text-orange-400 flex items-center gap-1 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-1.5">
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            Reminder: This has been awaiting your confirmation for over 7 days.
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white flex-1 min-h-[44px] gap-1.5"
+                            isLoading={confirmPayment.isPending}
+                            onClick={() => handleConfirmPayment(inv.id)}
+                          >
+                            <CheckCircle2 className="h-4 w-4" /> Confirm Payment Received
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="flex-1 min-h-[44px] gap-1.5"
+                            onClick={() => { setDisputeDialog({ open: true, id: inv.id }); setDisputeReasonText(""); }}
+                          >
+                            <ShieldAlert className="h-4 w-4" /> Dispute Payment
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Both: confirmed date/time */}
+                    {inv.status === "PAYMENT_CONFIRMED" && (inv as any).paymentConfirmedAt && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                        Confirmed {format(new Date((inv as any).paymentConfirmedAt), "MMM d, yyyy 'at' h:mm a")}
+                      </div>
+                    )}
+
+                    {/* GC: red dispute banner */}
+                    {isGC && inv.status === "PAYMENT_DISPUTED" && (
+                      <div className="mt-3 rounded-xl border-2 border-red-400 bg-red-50 dark:bg-red-950/20 p-3">
+                        <p className="text-sm font-bold text-red-700 dark:text-red-400 flex items-center gap-2 mb-1">
+                          <ShieldAlert className="h-4 w-4 shrink-0" /> Sub has disputed this payment
+                        </p>
+                        {(inv as any).disputeReason && (
+                          <p className="text-sm text-red-700 dark:text-red-300 italic">"{(inv as any).disputeReason}"</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -895,6 +933,37 @@ export default function SubcontractDetail() {
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setPayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 }); setPayDate(""); setPayMethod(""); setPayReference(""); setPayNotes(""); }}>Cancel</Button>
             <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-2" isLoading={markPaid.isPending}>
               <DollarSign className="h-4 w-4" /> Submit Payment
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Dispute Payment Dialog */}
+      <Dialog
+        open={disputeDialog.open}
+        onOpenChange={(open) => { if (!open) { setDisputeDialog({ open: false, id: "" }); setDisputeReasonText(""); } }}
+        title="Dispute Payment"
+        description="Describe the issue with this payment. Your GC will be notified with your explanation."
+      >
+        <form onSubmit={handleDisputePayment} className="space-y-4 mt-2">
+          <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400">
+            This will mark the invoice as <strong>Payment Disputed</strong>. Please be specific about what went wrong so your GC can resolve it.
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">Describe the Issue <span className="text-red-500">*</span></label>
+            <Textarea
+              required
+              rows={4}
+              className="resize-none text-sm"
+              placeholder="e.g. I have not received this payment. The amount deposited was different from what was expected."
+              value={disputeReasonText}
+              onChange={e => setDisputeReasonText(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setDisputeDialog({ open: false, id: "" }); setDisputeReasonText(""); }}>Cancel</Button>
+            <Button type="submit" variant="destructive" className="min-h-[44px] gap-2" isLoading={disputePayment.isPending}>
+              <ShieldAlert className="h-4 w-4" /> Submit Dispute
             </Button>
           </div>
         </form>

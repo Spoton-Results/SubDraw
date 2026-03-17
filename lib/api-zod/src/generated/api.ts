@@ -188,6 +188,7 @@ export const GetProjectsResponseItem = zod.object({
       totalInvoiced: zod.number(),
       hasFlaggedInvoices: zod.boolean(),
       totalCOApproved: zod.number(),
+      disputedCount: zod.number(),
     })
     .optional(),
 });
@@ -343,6 +344,7 @@ export const GetProjectResponse = zod.object({
             totalInvoiced: zod.number(),
             hasFlaggedInvoices: zod.boolean(),
             totalCOApproved: zod.number(),
+            disputedCount: zod.number(),
           })
           .optional(),
       }),
@@ -398,6 +400,8 @@ export const GetProjectResponse = zod.object({
               paymentMethod: zod.string().nullish(),
               paymentReference: zod.string().nullish(),
               paymentNotes: zod.string().nullish(),
+              paymentConfirmedAt: zod.string().nullish(),
+              disputeReason: zod.string().nullish(),
               createdAt: zod.date(),
               updatedAt: zod.date(),
             })
@@ -556,6 +560,7 @@ export const UpdateProjectResponse = zod.object({
             totalInvoiced: zod.number(),
             hasFlaggedInvoices: zod.boolean(),
             totalCOApproved: zod.number(),
+            disputedCount: zod.number(),
           })
           .optional(),
       }),
@@ -611,6 +616,8 @@ export const UpdateProjectResponse = zod.object({
               paymentMethod: zod.string().nullish(),
               paymentReference: zod.string().nullish(),
               paymentNotes: zod.string().nullish(),
+              paymentConfirmedAt: zod.string().nullish(),
+              disputeReason: zod.string().nullish(),
               createdAt: zod.date(),
               updatedAt: zod.date(),
             })
@@ -755,6 +762,24 @@ export const SubmitBidBody = zod.object({
 });
 
 /**
+ * @summary Get all disputed invoices across all GC projects (GC only)
+ */
+export const GetGcDisputedInvoicesResponseItem = zod.object({
+  invoiceId: zod.string(),
+  invoiceNumber: zod.string(),
+  amount: zod.number(),
+  disputeReason: zod.string().nullish(),
+  updatedAt: zod.date(),
+  projectId: zod.string(),
+  projectName: zod.string(),
+  subcontractId: zod.string(),
+  subCompanyName: zod.string(),
+});
+export const GetGcDisputedInvoicesResponse = zod.array(
+  GetGcDisputedInvoicesResponseItem,
+);
+
+/**
  * @summary Award a bid (GC only) — creates a subcontract
  */
 export const AwardBidParams = zod.object({
@@ -812,6 +837,7 @@ export const GetSubcontractsResponseItem = zod.object({
         totalInvoiced: zod.number(),
         hasFlaggedInvoices: zod.boolean(),
         totalCOApproved: zod.number(),
+        disputedCount: zod.number(),
       })
       .optional(),
   }),
@@ -867,6 +893,8 @@ export const GetSubcontractsResponseItem = zod.object({
           paymentMethod: zod.string().nullish(),
           paymentReference: zod.string().nullish(),
           paymentNotes: zod.string().nullish(),
+          paymentConfirmedAt: zod.string().nullish(),
+          disputeReason: zod.string().nullish(),
           createdAt: zod.date(),
           updatedAt: zod.date(),
         })
@@ -926,6 +954,7 @@ export const GetSubcontractResponse = zod.object({
         totalInvoiced: zod.number(),
         hasFlaggedInvoices: zod.boolean(),
         totalCOApproved: zod.number(),
+        disputedCount: zod.number(),
       })
       .optional(),
   }),
@@ -984,6 +1013,8 @@ export const GetSubcontractResponse = zod.object({
       paymentMethod: zod.string().nullish(),
       paymentReference: zod.string().nullish(),
       paymentNotes: zod.string().nullish(),
+      paymentConfirmedAt: zod.string().nullish(),
+      disputeReason: zod.string().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -1019,6 +1050,8 @@ export const GetSubcontractResponse = zod.object({
         paymentMethod: zod.string().nullish(),
         paymentReference: zod.string().nullish(),
         paymentNotes: zod.string().nullish(),
+        paymentConfirmedAt: zod.string().nullish(),
+        disputeReason: zod.string().nullish(),
         createdAt: zod.date(),
         updatedAt: zod.date(),
       })
@@ -1131,6 +1164,8 @@ export const GetInvoicesResponseItem = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1186,6 +1221,8 @@ export const ApproveInvoiceResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1219,6 +1256,8 @@ export const RejectInvoiceResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1256,6 +1295,8 @@ export const OverrideInvoiceResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1302,6 +1343,8 @@ export const MarkInvoicePaidResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1335,6 +1378,8 @@ export const ConfirmInvoicePaymentResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1345,6 +1390,10 @@ export const ConfirmInvoicePaymentResponse = zod.object({
 export const DisputeInvoicePaymentParams = zod.object({
   subcontractId: zod.coerce.string(),
   invoiceId: zod.coerce.string(),
+});
+
+export const DisputeInvoicePaymentBody = zod.object({
+  disputeReason: zod.string().optional(),
 });
 
 export const DisputeInvoicePaymentResponse = zod.object({
@@ -1368,6 +1417,8 @@ export const DisputeInvoicePaymentResponse = zod.object({
   paymentMethod: zod.string().nullish(),
   paymentReference: zod.string().nullish(),
   paymentNotes: zod.string().nullish(),
+  paymentConfirmedAt: zod.string().nullish(),
+  disputeReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
