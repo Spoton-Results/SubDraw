@@ -85,7 +85,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
                 <SelectTrigger id="trade">
                   <SelectValue placeholder="Select your trade…" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-56 overflow-y-auto">
                   {TRADES.map((t) => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
                   ))}
