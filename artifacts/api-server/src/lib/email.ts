@@ -1,11 +1,9 @@
-import sgMail from "@sendgrid/mail";
+import { Resend } from "resend";
 
-const API_KEY = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || "noreply@subtracker.app";
+const API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "SubTracker <onboarding@resend.dev>";
 
-if (API_KEY) {
-  sgMail.setApiKey(API_KEY);
-}
+const resend = API_KEY ? new Resend(API_KEY) : null;
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -73,20 +71,20 @@ interface Attachment {
   content: string;
   filename: string;
   type: string;
-  disposition: "attachment" | "inline";
 }
 
 async function send(to: string, subject: string, html: string, attachments?: Attachment[]) {
-  if (!API_KEY) {
-    console.log(`[email] SendGrid not configured — would have sent to ${to}: ${subject}`);
+  if (!resend) {
+    console.log(`[email] Resend not configured — would have sent to ${to}: ${subject}`);
     return;
   }
   try {
-    const msg: any = { from: FROM_EMAIL, to, subject, html };
-    if (attachments?.length) msg.attachments = attachments;
-    await sgMail.send(msg);
+    const payload: any = { from: FROM_EMAIL, to, subject, html };
+    if (attachments?.length) payload.attachments = attachments;
+    const { error } = await resend.emails.send(payload);
+    if (error) console.error("[email] Resend error:", error);
   } catch (err: any) {
-    console.error("[email] SendGrid error:", err?.response?.body ?? err);
+    console.error("[email] Resend send error:", err);
   }
 }
 
@@ -95,7 +93,6 @@ function pdfAttachment(buffer: Buffer, invoiceNumber: string): Attachment {
     content: buffer.toString("base64"),
     filename: `Invoice-${invoiceNumber}.pdf`,
     type: "application/pdf",
-    disposition: "attachment",
   };
 }
 
