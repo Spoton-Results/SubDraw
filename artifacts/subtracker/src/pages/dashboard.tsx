@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
 import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
 
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [isPaywallOpen, setIsPaywallOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
   const [newAddress, setNewAddress] = React.useState("");
   const [newDescription, setNewDescription] = React.useState("");
@@ -44,8 +46,13 @@ export default function Dashboard() {
       setNewAddress("");
       setNewDescription("");
       setNewStartDate("");
-    } catch {
-      toast.error("Failed to create project");
+    } catch (err: any) {
+      if (err?.status === 402 || err?.data?.error === "SUBSCRIPTION_REQUIRED") {
+        setIsCreateOpen(false);
+        setIsPaywallOpen(true);
+      } else {
+        toast.error("Failed to create project");
+      }
     }
   };
 
@@ -238,6 +245,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <PaywallModal open={isPaywallOpen} onOpenChange={setIsPaywallOpen} />
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project" description="Add details about your project. Only the name is required.">
         <form onSubmit={handleCreate} className="space-y-4 mt-2">

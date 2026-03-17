@@ -90,6 +90,7 @@ Change order flow: GC creates (status: PENDING_GC) → Sub approves/rejects (`re
 - `/projects/:id` — Project detail (members, bids, subcontracts)
 - `/subcontracts/:id` — Subcontract detail (scoreboard, change orders, invoices)
 - `/contacts` — GC Contact Book (GC-only; lists all subs ever invited, with trade profiles, notes, and "Add to Project" action)
+- `/billing` — GC Billing page (GC-only; shows current plan, next billing date, cancel/reactivate, billing history; integrates with Stripe)
 - Profile setup — inline in ProtectedRoute; shown to SUB users with `subProfile === null` before any protected page
 
 ## API Routes
@@ -113,6 +114,11 @@ All prefixed with `/api`
 - `POST /contacts/:subId/invite/:projectId` — Add existing contact to a project
 - `GET /profile/me` — Get sub's own profile (SUB-only)
 - `PUT /profile/me` — Upsert sub's trade profile (SUB-only)
+- `GET /stripe/billing` — Get billing info (subscription + invoices) for GC
+- `POST /stripe/checkout` — Create Stripe checkout session (returns URL)
+- `POST /stripe/cancel-subscription` — Cancel subscription at period end
+- `POST /stripe/reactivate-subscription` — Reactivate a cancelling subscription
+- `GET /stripe/subscription-status` — Check if GC is subscribed
 
 ## TypeScript & Composite Projects
 

@@ -17,6 +17,7 @@ import ResetPassword from "./pages/reset-password";
 import Account from "./pages/account";
 import Contacts from "./pages/contacts";
 import ProfileSetup from "./pages/profile-setup";
+import Billing from "./pages/billing";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +77,7 @@ function Router() {
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
       <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
       <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} gcOnly />} />
+      <Route path="/billing" component={() => <ProtectedRoute component={Billing} gcOnly />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />

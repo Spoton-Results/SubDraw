@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import {
@@ -75,6 +75,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {user.role === "GC" && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
+            {user.role === "GC" && navItem("/billing", <CreditCard className="h-5 w-5" />, "Billing")}
           </nav>
         </div>
 
@@ -131,6 +132,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Account Settings
                 </Link>
               </DropdownMenuItem>
+              {user.role === "GC" && (
+                <DropdownMenuItem asChild>
+                  <Link href="/billing" className="flex items-center gap-2 cursor-pointer">
+                    <CreditCard className="h-4 w-4" />
+                    Billing
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}
