@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
@@ -12,12 +12,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getSubscriptionStatus } from "@/lib/stripe";
+import { TrialExpiredGate } from "@/components/trial-expired-gate";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const logout = useLogout();
+
+  const { data: subStatus } = useQuery({
+    queryKey: ["subscription-status"],
+    queryFn: getSubscriptionStatus,
+    enabled: user?.role === "GC",
+    staleTime: 60_000,
+  });
 
   if (isLoading) {
     return (
@@ -40,6 +49,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
       toast.error("Failed to logout");
     }
   };
+
+  // Show trial-expired gate for GCs whose trial has ended and have no paid subscription.
+  // Allow access to /billing so they can manage/reactivate a subscription.
+  const showTrialGate =
+    user.role === "GC" &&
+    subStatus?.trialExpired === true &&
+    !subStatus?.subscribed &&
+    location !== "/billing";
+
+  if (showTrialGate) {
+    return (
+      <TrialExpiredGate
+        companyName={user.companyName}
+        onLogout={handleLogout}
+      />
+    );
+  }
 
   const isActive = (path: string) => location === path;
 

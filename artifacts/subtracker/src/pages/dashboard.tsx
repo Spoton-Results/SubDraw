@@ -16,6 +16,7 @@ import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, Al
 import { formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
+import { TrialBanner } from "@/components/trial-banner";
 import toast from "react-hot-toast";
 
 export default function Dashboard() {
@@ -124,6 +125,14 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Trial countdown banner — only when trial is active and no paid plan */}
+      {isGC && subStatus?.trialActive && !subStatus?.planName && (
+        <TrialBanner
+          daysLeft={subStatus.trialDaysLeft}
+          trialEndsAt={subStatus.trialEndsAt ?? null}
+        />
+      )}
 
       {/* Payment failure banner */}
       {isGC && subStatus?.isPastDue && (

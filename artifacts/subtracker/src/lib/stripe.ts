@@ -1,36 +1,48 @@
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const API = `${BASE}/api`;
 
-export async function getSubscriptionStatus() {
-  const res = await fetch(`${API}/stripe/subscription-status`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch subscription status");
-  return res.json() as Promise<{
-    subscribed: boolean;
-    planName: string | null;
-    planLabel: string | null;
-    limit: number | null;
-    activeCount: number;
-    nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
-    isPastDue: boolean;
-    subscription: any | null;
-  }>;
+export interface TrialInfo {
+  trialActive: boolean;
+  trialExpired: boolean;
+  trialDaysLeft: number;
+  trialEndsAt: string | null;
 }
 
-export async function getBilling() {
+export interface SubscriptionStatus extends TrialInfo {
+  subscribed: boolean;
+  planName: string | null;
+  planLabel: string | null;
+  limit: number | null;
+  activeCount: number;
+  nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+  isPastDue: boolean;
+  isInGrace: boolean;
+  subscription: any | null;
+}
+
+export interface BillingInfo extends TrialInfo {
+  subscription: any | null;
+  invoices: any[];
+  stripeCustomerId: string | null;
+  planName: string | null;
+  planLabel: string | null;
+  limit: number | null;
+  activeCount: number;
+  nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+  isPastDue: boolean;
+  isInGrace: boolean;
+}
+
+export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
+  const res = await fetch(`${API}/stripe/subscription-status`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch subscription status");
+  return res.json();
+}
+
+export async function getBilling(): Promise<BillingInfo> {
   const res = await fetch(`${API}/stripe/billing`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch billing info");
-  return res.json() as Promise<{
-    subscription: any | null;
-    invoices: any[];
-    stripeCustomerId: string | null;
-    planName: string | null;
-    planLabel: string | null;
-    limit: number | null;
-    activeCount: number;
-    nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
-    isPastDue: boolean;
-    isInGrace: boolean;
-  }>;
+  return res.json();
 }
 
 export async function startCheckout(planName: string): Promise<string> {

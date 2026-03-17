@@ -48,6 +48,10 @@ router.get("/billing", requireAuth, requireGC, async (req, res) => {
     nextPlan: planInfo.nextPlan,
     isPastDue: planInfo.isPastDue,
     isInGrace: planInfo.isInGrace,
+    trialActive: planInfo.trialActive,
+    trialExpired: planInfo.trialExpired,
+    trialDaysLeft: planInfo.trialDaysLeft,
+    trialEndsAt: planInfo.trialEndsAt?.toISOString() ?? null,
   });
 });
 
@@ -184,6 +188,10 @@ router.get("/subscription-status", requireAuth, async (req, res) => {
     nextPlan: planInfo.nextPlan,
     isPastDue: planInfo.isPastDue,
     isInGrace: planInfo.isInGrace,
+    trialActive: planInfo.trialActive,
+    trialExpired: planInfo.trialExpired,
+    trialDaysLeft: planInfo.trialDaysLeft,
+    trialEndsAt: planInfo.trialEndsAt?.toISOString() ?? null,
     subscription,
   });
 });

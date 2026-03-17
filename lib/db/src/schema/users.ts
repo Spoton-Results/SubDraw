@@ -13,6 +13,7 @@ export const usersTable = pgTable("users", {
   passwordResetExpires: timestamp("password_reset_expires"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  trialStartedAt: timestamp("trial_started_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

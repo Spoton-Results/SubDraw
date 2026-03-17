@@ -184,10 +184,30 @@ export default function Billing() {
                         <Zap className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <div>
-                        <div className="font-semibold text-foreground">Free Plan</div>
-                        <div className="text-sm text-muted-foreground">1 project included — no credit card required</div>
+                        {billing?.trialActive ? (
+                          <>
+                            <div className="font-semibold text-foreground">Free Trial</div>
+                            <div className="text-sm text-muted-foreground">
+                              {billing.trialDaysLeft === 0
+                                ? "Expires today"
+                                : billing.trialDaysLeft === 1
+                                ? "1 day remaining"
+                                : `${billing.trialDaysLeft} days remaining`}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold text-foreground">No Active Plan</div>
+                            <div className="text-sm text-muted-foreground">Free trial ended — choose a plan below</div>
+                          </>
+                        )}
                       </div>
-                      <Badge variant="secondary" className="ml-auto">Free</Badge>
+                      <Badge
+                        variant="secondary"
+                        className={`ml-auto ${billing?.trialActive && (billing?.trialDaysLeft ?? 99) <= 4 ? "bg-orange-100 text-orange-700" : ""}`}
+                      >
+                        {billing?.trialActive ? `${billing.trialDaysLeft}d left` : "Expired"}
+                      </Badge>
                     </div>
 
                     {isPastDue && (

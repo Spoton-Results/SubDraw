@@ -143,6 +143,8 @@ export async function getGCProjectCount(gcId: string): Promise<number> {
   return parseInt((result.rows[0] as any)?.count ?? "0", 10);
 }
 
+const TRIAL_DAYS = 14;
+
 export interface GCPlanInfo {
   subscribed: boolean;
   planName: string | null;
@@ -152,27 +154,68 @@ export interface GCPlanInfo {
   nextPlan: (typeof PLANS)[number] | null;
   isPastDue: boolean;
   isInGrace: boolean;
+  // Trial fields
+  trialActive: boolean;
+  trialExpired: boolean;
+  trialDaysLeft: number;
+  trialEndsAt: Date | null;
 }
 
 export async function getGCPlanInfo(userId: string): Promise<GCPlanInfo> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   const activeCount = await getActiveProjectCount(userId);
 
+  // ── Trial calculation ──────────────────────────────────────────────────────
+  const trialStart = user?.trialStartedAt ?? user?.createdAt ?? new Date();
+  const trialEndsAt = new Date(trialStart.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const msLeft = trialEndsAt.getTime() - now.getTime();
+  const trialDaysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+  const trialActive = now < trialEndsAt;
+  const trialExpired = !trialActive;
+
+  // No subscription — access determined by trial status
   if (!user?.stripeSubscriptionId) {
-    return { subscribed: false, planName: null, planLabel: null, limit: null, activeCount, nextPlan: PLANS[0], isPastDue: false, isInGrace: false };
+    return {
+      subscribed: trialActive, // during trial, unlimited full access
+      planName: null,
+      planLabel: null,
+      limit: null, // unlimited during trial
+      activeCount,
+      nextPlan: PLANS[0],
+      isPastDue: false,
+      isInGrace: false,
+      trialActive,
+      trialExpired,
+      trialDaysLeft,
+      trialEndsAt,
+    };
   }
 
   const sub = await getSubscriptionById(user.stripeSubscriptionId);
   if (!sub) {
-    return { subscribed: false, planName: null, planLabel: null, limit: null, activeCount, nextPlan: PLANS[0], isPastDue: false, isInGrace: false };
+    return {
+      subscribed: trialActive,
+      planName: null,
+      planLabel: null,
+      limit: null,
+      activeCount,
+      nextPlan: PLANS[0],
+      isPastDue: false,
+      isInGrace: false,
+      trialActive,
+      trialExpired,
+      trialDaysLeft,
+      trialEndsAt,
+    };
   }
 
   const isPastDue = sub.status === "past_due";
   let isInGrace = false;
   if (isPastDue) {
-    const now = Math.floor(Date.now() / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
     const gracePeriodEnd = (sub.current_period_end ?? 0) + 3 * 24 * 60 * 60;
-    isInGrace = now <= gracePeriodEnd;
+    isInGrace = nowSec <= gracePeriodEnd;
   }
 
   const subscribed = sub.status === "active" || sub.status === "trialing" || (isPastDue && isInGrace);
@@ -190,6 +233,10 @@ export async function getGCPlanInfo(userId: string): Promise<GCPlanInfo> {
     nextPlan: nextPlan ?? null,
     isPastDue,
     isInGrace,
+    trialActive: false, // has paid sub — trial info not relevant
+    trialExpired: false,
+    trialDaysLeft: 0,
+    trialEndsAt: null,
   };
 }
 
