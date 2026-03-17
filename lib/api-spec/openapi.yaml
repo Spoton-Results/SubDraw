@@ -880,6 +880,84 @@ paths:
               schema:
                 $ref: "#/components/schemas/Invoice"
 
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/pay:
+    post:
+      operationId: markInvoicePaid
+      tags: [invoices]
+      summary: Mark an approved invoice as paid (GC only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAsPaidRequest"
+      responses:
+        "200":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/confirm-payment:
+    post:
+      operationId: confirmInvoicePayment
+      tags: [invoices]
+      summary: Sub confirms they received payment (Sub only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /subcontracts/{subcontractId}/invoices/{invoiceId}/dispute-payment:
+    post:
+      operationId: disputeInvoicePayment
+      tags: [invoices]
+      summary: Sub disputes that payment was received (Sub only)
+      parameters:
+        - name: subcontractId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment disputed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
   /subcontracts/{subcontractId}/invoices/{invoiceId}/pdf:
     get:
       operationId: downloadInvoicePdf
@@ -1457,6 +1535,10 @@ components:
           type: number
         invoicedTotal:
           type: number
+        approvedTotal:
+          type: number
+        paidTotal:
+          type: number
         remaining:
           type: number
         hasFlaggedInvoices:
@@ -1464,7 +1546,7 @@ components:
         lastInvoice:
           nullable: true
           $ref: "#/components/schemas/Invoice"
-      required: [base, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices]
+      required: [base, coTotal, currentApprovedTotal, invoicedTotal, approvedTotal, paidTotal, remaining, hasFlaggedInvoices]
 
     SubcontractDetail:
       type: object
@@ -1561,10 +1643,22 @@ components:
           nullable: true
         status:
           type: string
-          enum: [PENDING, APPROVED, REJECTED, FLAGGED]
+          enum: [PENDING, APPROVED, REJECTED, FLAGGED, PAYMENT_UNCONFIRMED, PAYMENT_CONFIRMED, PAYMENT_DISPUTED]
         flaggedOverAmount:
           type: number
         overrideReason:
+          type: string
+          nullable: true
+        paymentDate:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+        paymentReference:
+          type: string
+          nullable: true
+        paymentNotes:
           type: string
           nullable: true
         createdAt:
@@ -1592,6 +1686,20 @@ components:
         overrideReason:
           type: string
       required: [overrideReason]
+
+    MarkAsPaidRequest:
+      type: object
+      properties:
+        paymentDate:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [Check, ACH Transfer, Wire Transfer, Credit Card, Other]
+        paymentReference:
+          type: string
+        paymentNotes:
+          type: string
+      required: [paymentDate, paymentMethod]
 
     PlanFile:
       type: object

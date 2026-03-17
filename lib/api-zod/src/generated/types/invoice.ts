@@ -16,6 +16,10 @@ export interface Invoice {
   status: InvoiceStatus;
   flaggedOverAmount: number;
   overrideReason?: string | null;
+  paymentDate?: string | null;
+  paymentMethod?: string | null;
+  paymentReference?: string | null;
+  paymentNotes?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

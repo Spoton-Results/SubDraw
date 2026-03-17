@@ -192,6 +192,9 @@ export const InvoiceStatus = {
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
   FLAGGED: "FLAGGED",
+  PAYMENT_UNCONFIRMED: "PAYMENT_UNCONFIRMED",
+  PAYMENT_CONFIRMED: "PAYMENT_CONFIRMED",
+  PAYMENT_DISPUTED: "PAYMENT_DISPUTED",
 } as const;
 
 export interface Invoice {
@@ -203,6 +206,10 @@ export interface Invoice {
   status: InvoiceStatus;
   flaggedOverAmount: number;
   overrideReason?: string | null;
+  paymentDate?: string | null;
+  paymentMethod?: string | null;
+  paymentReference?: string | null;
+  paymentNotes?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -212,6 +219,8 @@ export interface Scoreboard {
   coTotal: number;
   currentApprovedTotal: number;
   invoicedTotal: number;
+  approvedTotal: number;
+  paidTotal: number;
   remaining: number;
   hasFlaggedInvoices: boolean;
   lastInvoice?: Invoice | null;
@@ -324,6 +333,24 @@ export interface SubmitInvoiceRequest {
 
 export interface OverrideInvoiceRequest {
   overrideReason: string;
+}
+
+export type MarkAsPaidRequestPaymentMethod =
+  (typeof MarkAsPaidRequestPaymentMethod)[keyof typeof MarkAsPaidRequestPaymentMethod];
+
+export const MarkAsPaidRequestPaymentMethod = {
+  Check: "Check",
+  ACH_Transfer: "ACH Transfer",
+  Wire_Transfer: "Wire Transfer",
+  Credit_Card: "Credit Card",
+  Other: "Other",
+} as const;
+
+export interface MarkAsPaidRequest {
+  paymentDate: string;
+  paymentMethod: MarkAsPaidRequestPaymentMethod;
+  paymentReference?: string;
+  paymentNotes?: string;
 }
 
 export interface PlanFile {

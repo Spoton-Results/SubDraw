@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable } from "@workspace/db/schema";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import {
   sendChangeOrderCreatedEmail,
@@ -30,12 +30,20 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
 
   const coTotal = cos.filter(c => c.status === "APPROVED").reduce((s, c) => s + c.amount, 0);
   const currentApprovedTotal = baseContractAmount + coTotal;
-  const invoicedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
-  const remaining = currentApprovedTotal - invoicedTotal;
-  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED");
+  // approvedTotal: invoices GC has verified (APPROVED) but payment not yet confirmed
+  const approvedTotal = invs.filter(i => i.status === "APPROVED").reduce((s, i) => s + i.amount, 0);
+  // paidTotal: only invoices the sub has confirmed receiving payment
+  const paidTotal = invs.filter(i => i.status === "PAYMENT_CONFIRMED").reduce((s, i) => s + i.amount, 0);
+  // invoicedTotal: all invoices in any approved/payment state
+  const invoicedTotal = invs.filter(i =>
+    ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status)
+  ).reduce((s, i) => s + i.amount, 0);
+  // remaining: current total minus only confirmed-paid invoices
+  const remaining = currentApprovedTotal - paidTotal;
+  const hasFlaggedInvoices = invs.some(i => i.status === "FLAGGED" || i.status === "PAYMENT_DISPUTED");
   const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastInvoice = sortedInvs[0] ?? null;
-  return { base: baseContractAmount, coTotal, currentApprovedTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
+  return { base: baseContractAmount, coTotal, currentApprovedTotal, approvedTotal, paidTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
 }
 
 async function getSubcontractWithRelations(sc: any) {
@@ -455,6 +463,81 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
     }
   })();
 
+  res.json(invoice);
+});
+
+// Mark invoice as paid (GC only) — sets status to PAYMENT_UNCONFIRMED
+router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const { paymentDate, paymentMethod, paymentReference, paymentNotes } = req.body;
+  const gcUser = (req as any).user;
+
+  if (!paymentDate || !paymentMethod) {
+    res.status(400).json({ error: "paymentDate and paymentMethod are required" });
+    return;
+  }
+
+  const [existing] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+  if (existing.status !== "APPROVED") {
+    res.status(400).json({ error: "Only APPROVED invoices can be marked as paid" });
+    return;
+  }
+
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set({ status: "PAYMENT_UNCONFIRMED", paymentDate, paymentMethod, paymentReference: paymentReference ?? null, paymentNotes: paymentNotes ?? null, updatedAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
+  const rawSc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  const sc = await getSubcontractWithRelations(rawSc);
+  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, gcUser.companyName, "GC");
+
+  res.json(invoice);
+});
+
+// Sub confirms they received payment — sets status to PAYMENT_CONFIRMED
+router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, requireSub, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const subUser = (req as any).user;
+
+  const [existing] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+  if (existing.status !== "PAYMENT_UNCONFIRMED") {
+    res.status(400).json({ error: "Only invoices with PAYMENT_UNCONFIRMED status can be confirmed" });
+    return;
+  }
+
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set({ status: "PAYMENT_CONFIRMED", updatedAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
+  await logActivity(subcontractId, "INVOICE_PAYMENT_CONFIRMED", `Invoice #${invoice.invoiceNumber} payment confirmed by ${subUser.companyName}`, subUser.companyName, "SUB");
+  res.json(invoice);
+});
+
+// Sub disputes that payment was received — sets status to PAYMENT_DISPUTED
+router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, requireSub, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const subUser = (req as any).user;
+
+  const [existing] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+  if (existing.status !== "PAYMENT_UNCONFIRMED") {
+    res.status(400).json({ error: "Only invoices with PAYMENT_UNCONFIRMED status can be disputed" });
+    return;
+  }
+
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set({ status: "PAYMENT_DISPUTED", updatedAt: new Date() })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
+  await logActivity(subcontractId, "INVOICE_PAYMENT_DISPUTED", `Invoice #${invoice.invoiceNumber} payment disputed by ${subUser.companyName}`, subUser.companyName, "SUB");
   res.json(invoice);
 });
 

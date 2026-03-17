@@ -12,6 +12,8 @@ export interface Scoreboard {
   coTotal: number;
   currentApprovedTotal: number;
   invoicedTotal: number;
+  approvedTotal: number;
+  paidTotal: number;
   remaining: number;
   hasFlaggedInvoices: boolean;
   lastInvoice?: Invoice | null;

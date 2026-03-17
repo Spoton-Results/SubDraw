@@ -6,6 +6,7 @@ import {
   useCreateChangeOrder, useApproveChangeOrder, useRejectChangeOrder,
   useSubmitInvoice, useApproveInvoice, useRejectInvoice, useOverrideInvoice,
   useDeleteInvoice, useGetSubcontractActivity,
+  useMarkInvoicePaid, useConfirmInvoicePayment, useDisputeInvoicePayment,
   getGetSubcontractQueryKey, getGetSubcontractActivityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
   HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
+  CreditCard, DollarSign, CheckCircle2, ShieldAlert,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
@@ -62,6 +64,9 @@ export default function SubcontractDetail() {
   const rejectInv = useRejectInvoice();
   const overrideInv = useOverrideInvoice();
   const deleteInv = useDeleteInvoice();
+  const markPaid = useMarkInvoicePaid();
+  const confirmPayment = useConfirmInvoicePayment();
+  const disputePayment = useDisputeInvoicePayment();
 
   const [coDialogOpen, setCoDialogOpen] = React.useState(false);
   const [coDesc, setCoDesc] = React.useState("");
@@ -84,9 +89,51 @@ export default function SubcontractDetail() {
 
   const [cancelConfirm, setCancelConfirm] = React.useState<string | null>(null);
 
+  const [payDialog, setPayDialog] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
+  const [payDate, setPayDate] = React.useState("");
+  const [payMethod, setPayMethod] = React.useState("");
+  const [payReference, setPayReference] = React.useState("");
+  const [payNotes, setPayNotes] = React.useState("");
+  const [disputeConfirm, setDisputeConfirm] = React.useState<string | null>(null);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
     queryClient.invalidateQueries({ queryKey: getGetSubcontractActivityQueryKey(subcontractId) });
+  };
+
+  const handleMarkPaid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payDate || !payMethod) return toast.error("Payment date and method are required");
+    try {
+      await markPaid.mutateAsync({ subcontractId, invoiceId: payDialog.id, data: { paymentDate: payDate, paymentMethod: payMethod as any, paymentReference: payReference || undefined, paymentNotes: payNotes || undefined } });
+      toast.success("Invoice marked as paid — awaiting sub confirmation");
+      invalidate();
+      setPayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 });
+      setPayDate(""); setPayMethod(""); setPayReference(""); setPayNotes("");
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to record payment");
+    }
+  };
+
+  const handleConfirmPayment = async (invoiceId: string) => {
+    try {
+      await confirmPayment.mutateAsync({ subcontractId, invoiceId });
+      toast.success("Payment confirmed — thank you!");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to confirm payment");
+    }
+  };
+
+  const handleDisputePayment = async (invoiceId: string) => {
+    try {
+      await disputePayment.mutateAsync({ subcontractId, invoiceId });
+      toast.success("Payment dispute recorded");
+      invalidate();
+      setDisputeConfirm(null);
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to dispute payment");
+    }
   };
 
   if (isLoading || !sub || !user) {
@@ -101,7 +148,7 @@ export default function SubcontractDetail() {
 
   const isGC = user.role === "GC";
   const sb = sub.scoreboard;
-  const hasFlagged = (sb as any).hasFlaggedInvoices as boolean;
+  const hasFlagged = (sb as any).hasFlaggedInvoices as boolean || sub.invoices.some(i => i.status === "PAYMENT_DISPUTED");
   const lastInvoice = (sb as any).lastInvoice as { amount: number; createdAt: string; status: string } | null;
 
   const invoicePercent = sb.currentApprovedTotal > 0
@@ -213,9 +260,12 @@ export default function SubcontractDetail() {
   };
 
   const getInvStatusBadge = (s: string) => {
-    if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
+    if (s === "APPROVED") return <Badge className="bg-blue-500 text-white hover:bg-blue-600">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
     if (s === "FLAGGED") return <Badge className="bg-orange-500 text-white hover:bg-orange-600">Flagged</Badge>;
+    if (s === "PAYMENT_UNCONFIRMED") return <Badge className="bg-orange-400 text-white hover:bg-orange-500">Payment Unconfirmed</Badge>;
+    if (s === "PAYMENT_CONFIRMED") return <Badge className="bg-green-600 text-white hover:bg-green-700">Payment Confirmed</Badge>;
+    if (s === "PAYMENT_DISPUTED") return <Badge className="bg-red-600 text-white hover:bg-red-700">Payment Disputed</Badge>;
     return <Badge variant="warning">Pending</Badge>;
   };
 
@@ -257,7 +307,7 @@ export default function SubcontractDetail() {
         <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
       </h2>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         <ScoreCard
           title="Base Contract"
           amount={sb.base}
@@ -275,16 +325,22 @@ export default function SubcontractDetail() {
           tooltip="Base contract plus all approved change orders — the current maximum the sub can invoice."
         />
         <ScoreCard
-          title="Invoiced To Date"
-          amount={sb.invoicedTotal}
-          tooltip="Total of all approved invoices paid or approved so far."
+          title="Approved (Unpaid)"
+          amount={(sb as any).approvedTotal ?? 0}
+          tooltip="Invoices the GC has approved but payment has not yet been confirmed."
+        />
+        <ScoreCard
+          title="Paid (Confirmed)"
+          amount={(sb as any).paidTotal ?? 0}
+          className="border-green-500/50 bg-green-50/50 dark:bg-green-950/10"
+          tooltip="Invoices where sub has confirmed receiving payment."
         />
         <ScoreCard
           title="Remaining Balance"
           amount={sb.remaining}
           danger={isOverBudget}
           className={isOverBudget ? "border-red-500 bg-red-50 dark:bg-red-950/20" : "border-green-500/50 bg-green-50/50 dark:bg-green-950/10"}
-          tooltip="How much is left to invoice before hitting the approved contract ceiling. Negative means over budget."
+          tooltip="Current contract total minus all confirmed-paid invoices."
         />
       </div>
 
@@ -448,7 +504,10 @@ export default function SubcontractDetail() {
                     key={inv.id}
                     className={cn(
                       "p-4 hover:bg-muted/50 transition-colors",
-                      inv.status === "FLAGGED" && "bg-orange-50/60 dark:bg-orange-950/20"
+                      inv.status === "FLAGGED" && "bg-orange-50/60 dark:bg-orange-950/20",
+                      inv.status === "PAYMENT_UNCONFIRMED" && "bg-orange-50/40 dark:bg-orange-950/10",
+                      inv.status === "PAYMENT_CONFIRMED" && "bg-green-50/40 dark:bg-green-950/10",
+                      inv.status === "PAYMENT_DISPUTED" && "bg-red-50/40 dark:bg-red-950/10",
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -469,6 +528,14 @@ export default function SubcontractDetail() {
                             Override: {inv.overrideReason}
                           </p>
                         )}
+                        {(inv.status === "PAYMENT_UNCONFIRMED" || inv.status === "PAYMENT_CONFIRMED" || inv.status === "PAYMENT_DISPUTED") && inv.paymentMethod && (
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground border-l-2 border-green-400 pl-2">
+                            <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" />{inv.paymentMethod}</span>
+                            {inv.paymentDate && <span>{inv.paymentDate}</span>}
+                            {inv.paymentReference && <span>Ref: {inv.paymentReference}</span>}
+                            {inv.paymentNotes && <span className="italic">{inv.paymentNotes}</span>}
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col gap-2 items-end shrink-0">
                         {isGC && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
@@ -478,7 +545,7 @@ export default function SubcontractDetail() {
                                 Override &amp; Approve
                               </Button>
                             ) : (
-                              <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white min-h-[44px] min-w-[44px] p-0" isLoading={approveInv.isPending} onClick={() => handleActionInv(inv.id, "approve")}>
+                              <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white min-h-[44px] min-w-[44px] p-0" isLoading={approveInv.isPending} onClick={() => handleActionInv(inv.id, "approve")}>
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
@@ -491,6 +558,31 @@ export default function SubcontractDetail() {
                               <X className="h-4 w-4" />
                             </Button>
                           </>
+                        )}
+                        {isGC && inv.status === "APPROVED" && (
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
+                            <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
+                          </Button>
+                        )}
+                        {!isGC && inv.status === "PAYMENT_UNCONFIRMED" && (
+                          disputeConfirm === inv.id ? (
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className="text-xs text-red-600 font-semibold">Dispute payment?</span>
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="destructive" className="min-h-[36px] text-xs px-2" isLoading={disputePayment.isPending} onClick={() => handleDisputePayment(inv.id)}>Dispute</Button>
+                                <Button size="sm" variant="ghost" className="min-h-[36px] text-xs px-2" onClick={() => setDisputeConfirm(null)}>Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1.5 items-end">
+                              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] text-xs gap-1" isLoading={confirmPayment.isPending} onClick={() => handleConfirmPayment(inv.id)}>
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Confirm Received
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 min-h-[36px] text-xs gap-1" onClick={() => setDisputeConfirm(inv.id)}>
+                                <ShieldAlert className="h-3.5 w-3.5" /> Dispute
+                              </Button>
+                            </div>
+                          )
                         )}
                         {!isGC && inv.status === "PENDING" && (
                           cancelConfirm === inv.id ? (
@@ -541,7 +633,10 @@ export default function SubcontractDetail() {
                   {sortedInvoices.map((inv, idx) => (
                     <tr key={inv.id} className={cn(
                       "hover:bg-muted/30 transition-colors",
-                      inv.status === "FLAGGED" && "bg-orange-50/40 dark:bg-orange-950/10"
+                      inv.status === "FLAGGED" && "bg-orange-50/40 dark:bg-orange-950/10",
+                      inv.status === "PAYMENT_UNCONFIRMED" && "bg-orange-50/30 dark:bg-orange-950/10",
+                      inv.status === "PAYMENT_CONFIRMED" && "bg-green-50/30 dark:bg-green-950/10",
+                      inv.status === "PAYMENT_DISPUTED" && "bg-red-50/30 dark:bg-red-950/10",
                     )}>
                       <td className="px-4 py-3 text-muted-foreground">{sortedInvoices.length - idx}</td>
                       <td className="px-4 py-3">
@@ -751,6 +846,56 @@ export default function SubcontractDetail() {
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setOverrideDialogOpen({ open: false, id: "" })}>Cancel</Button>
             <Button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white min-h-[44px]" isLoading={overrideInv.isPending}>Override &amp; Approve</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Mark as Paid Dialog */}
+      <Dialog
+        open={payDialog.open}
+        onOpenChange={(open) => { if (!open) { setPayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 }); setPayDate(""); setPayMethod(""); setPayReference(""); setPayNotes(""); } }}
+        title="Record Payment"
+        description={`Invoice #${payDialog.invoiceNumber} — ${formatCurrency(payDialog.amount)}`}
+      >
+        <form onSubmit={handleMarkPaid} className="space-y-4 mt-2">
+          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-sm text-green-700 dark:text-green-400">
+            After submitting, the subcontractor will be asked to confirm receipt of payment. The invoice will show as <strong>Payment Unconfirmed</strong> until they confirm.
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">Payment Date <span className="text-red-500">*</span></label>
+            <Input type="date" required value={payDate} onChange={e => setPayDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">Payment Method <span className="text-red-500">*</span></label>
+            <select
+              required
+              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              value={payMethod}
+              onChange={e => setPayMethod(e.target.value)}
+            >
+              <option value="">— Select method —</option>
+              {["Check", "ACH Transfer", "Wire Transfer", "Credit Card", "Other"].map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">
+              Check / Reference Number <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Input placeholder="e.g. Check #1042 or ACH ref 8812349" value={payReference} onChange={e => setPayReference(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">
+              Payment Notes <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Textarea rows={2} className="resize-none text-sm" placeholder="e.g. Partial payment, remainder next month" value={payNotes} onChange={e => setPayNotes(e.target.value)} />
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setPayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 }); setPayDate(""); setPayMethod(""); setPayReference(""); setPayNotes(""); }}>Cancel</Button>
+            <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-2" isLoading={markPaid.isPending}>
+              <DollarSign className="h-4 w-4" /> Submit Payment
+            </Button>
           </div>
         </form>
       </Dialog>

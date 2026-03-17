@@ -28,6 +28,8 @@ export * from "./inviteResponse";
 export * from "./invoice";
 export * from "./invoiceStatus";
 export * from "./loginRequest";
+export * from "./markAsPaidRequest";
+export * from "./markAsPaidRequestPaymentMethod";
 export * from "./messageResponse";
 export * from "./overrideInvoiceRequest";
 export * from "./planFile";

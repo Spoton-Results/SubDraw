@@ -35,6 +35,7 @@ import type {
   InviteResponse,
   Invoice,
   LoginRequest,
+  MarkAsPaidRequest,
   MessageResponse,
   OverrideInvoiceRequest,
   PlanFile,
@@ -3106,6 +3107,299 @@ export const useOverrideInvoice = <
   TContext
 > => {
   return useMutation(getOverrideInvoiceMutationOptions(options));
+};
+
+/**
+ * @summary Mark an approved invoice as paid (GC only)
+ */
+export const getMarkInvoicePaidUrl = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return `/api/subcontracts/${subcontractId}/invoices/${invoiceId}/pay`;
+};
+
+export const markInvoicePaid = async (
+  subcontractId: string,
+  invoiceId: string,
+  markAsPaidRequest: MarkAsPaidRequest,
+  options?: RequestInit,
+): Promise<Invoice> => {
+  return customFetch<Invoice>(getMarkInvoicePaidUrl(subcontractId, invoiceId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(markAsPaidRequest),
+  });
+};
+
+export const getMarkInvoicePaidMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markInvoicePaid>>,
+    TError,
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<MarkAsPaidRequest>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markInvoicePaid>>,
+  TError,
+  {
+    subcontractId: string;
+    invoiceId: string;
+    data: BodyType<MarkAsPaidRequest>;
+  },
+  TContext
+> => {
+  const mutationKey = ["markInvoicePaid"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markInvoicePaid>>,
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<MarkAsPaidRequest>;
+    }
+  > = (props) => {
+    const { subcontractId, invoiceId, data } = props ?? {};
+
+    return markInvoicePaid(subcontractId, invoiceId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkInvoicePaidMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markInvoicePaid>>
+>;
+export type MarkInvoicePaidMutationBody = BodyType<MarkAsPaidRequest>;
+export type MarkInvoicePaidMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark an approved invoice as paid (GC only)
+ */
+export const useMarkInvoicePaid = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markInvoicePaid>>,
+    TError,
+    {
+      subcontractId: string;
+      invoiceId: string;
+      data: BodyType<MarkAsPaidRequest>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markInvoicePaid>>,
+  TError,
+  {
+    subcontractId: string;
+    invoiceId: string;
+    data: BodyType<MarkAsPaidRequest>;
+  },
+  TContext
+> => {
+  return useMutation(getMarkInvoicePaidMutationOptions(options));
+};
+
+/**
+ * @summary Sub confirms they received payment (Sub only)
+ */
+export const getConfirmInvoicePaymentUrl = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return `/api/subcontracts/${subcontractId}/invoices/${invoiceId}/confirm-payment`;
+};
+
+export const confirmInvoicePayment = async (
+  subcontractId: string,
+  invoiceId: string,
+  options?: RequestInit,
+): Promise<Invoice> => {
+  return customFetch<Invoice>(
+    getConfirmInvoicePaymentUrl(subcontractId, invoiceId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getConfirmInvoicePaymentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmInvoicePayment>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmInvoicePayment>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  const mutationKey = ["confirmInvoicePayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmInvoicePayment>>,
+    { subcontractId: string; invoiceId: string }
+  > = (props) => {
+    const { subcontractId, invoiceId } = props ?? {};
+
+    return confirmInvoicePayment(subcontractId, invoiceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmInvoicePaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmInvoicePayment>>
+>;
+
+export type ConfirmInvoicePaymentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Sub confirms they received payment (Sub only)
+ */
+export const useConfirmInvoicePayment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmInvoicePayment>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof confirmInvoicePayment>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  return useMutation(getConfirmInvoicePaymentMutationOptions(options));
+};
+
+/**
+ * @summary Sub disputes that payment was received (Sub only)
+ */
+export const getDisputeInvoicePaymentUrl = (
+  subcontractId: string,
+  invoiceId: string,
+) => {
+  return `/api/subcontracts/${subcontractId}/invoices/${invoiceId}/dispute-payment`;
+};
+
+export const disputeInvoicePayment = async (
+  subcontractId: string,
+  invoiceId: string,
+  options?: RequestInit,
+): Promise<Invoice> => {
+  return customFetch<Invoice>(
+    getDisputeInvoicePaymentUrl(subcontractId, invoiceId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDisputeInvoicePaymentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disputeInvoicePayment>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof disputeInvoicePayment>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  const mutationKey = ["disputeInvoicePayment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof disputeInvoicePayment>>,
+    { subcontractId: string; invoiceId: string }
+  > = (props) => {
+    const { subcontractId, invoiceId } = props ?? {};
+
+    return disputeInvoicePayment(subcontractId, invoiceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DisputeInvoicePaymentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof disputeInvoicePayment>>
+>;
+
+export type DisputeInvoicePaymentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Sub disputes that payment was received (Sub only)
+ */
+export const useDisputeInvoicePayment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof disputeInvoicePayment>>,
+    TError,
+    { subcontractId: string; invoiceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof disputeInvoicePayment>>,
+  TError,
+  { subcontractId: string; invoiceId: string },
+  TContext
+> => {
+  return useMutation(getDisputeInvoicePaymentMutationOptions(options));
 };
 
 /**

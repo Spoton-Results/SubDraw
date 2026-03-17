@@ -32,9 +32,13 @@ export const invoicesTable = pgTable("invoices", {
   invoiceNumber: text("invoice_number").notNull(),
   amount: doublePrecision("amount").notNull(),
   description: text("description"),
-  status: text("status").notNull().default("PENDING"), // PENDING | APPROVED | REJECTED | FLAGGED
+  status: text("status").notNull().default("PENDING"), // PENDING | APPROVED | REJECTED | FLAGGED | PAYMENT_UNCONFIRMED | PAYMENT_CONFIRMED | PAYMENT_DISPUTED
   flaggedOverAmount: doublePrecision("flagged_over_amount").notNull().default(0),
   overrideReason: text("override_reason"),
+  paymentDate: text("payment_date"),
+  paymentMethod: text("payment_method"),
+  paymentReference: text("payment_reference"),
+  paymentNotes: text("payment_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
