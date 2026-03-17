@@ -2,6 +2,8 @@ import * as React from "react";
 import { Link } from "wouter";
 import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe, useGetGcDisputedInvoices } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/usePageTitle";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { Layout } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,22 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const isGC = user?.role === "GC";
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
+
+  usePageTitle("Projects");
+
+  const onboardingKey = user ? `onboarding-dismissed-${user.id}` : null;
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  React.useEffect(() => {
+    if (onboardingKey && !localStorage.getItem(onboardingKey) && !isLoading && projects !== undefined) {
+      if (projects.length === 0) setShowOnboarding(true);
+    }
+  }, [onboardingKey, isLoading, projects]);
+
+  const dismissOnboarding = () => {
+    if (onboardingKey) localStorage.setItem(onboardingKey, "1");
+    setShowOnboarding(false);
+  };
 
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = React.useState(false);
@@ -88,6 +106,10 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {showOnboarding && user && (
+        <OnboardingBanner role={user.role as "GC" | "SUB"} onDismiss={dismissOnboarding} />
+      )}
 
       {isLoading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

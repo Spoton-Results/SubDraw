@@ -1,12 +1,14 @@
 import * as React from "react";
 import { Link } from "wouter";
 import { useForgotPassword } from "@workspace/api-client-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HardHat, ArrowLeft, MailCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function ForgotPassword() {
+  usePageTitle("Forgot Password");
   const [email, setEmail] = React.useState("");
   const [submitted, setSubmitted] = React.useState(false);
   const forgotPassword = useForgotPassword();

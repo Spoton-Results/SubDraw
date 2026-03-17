@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Layout } from "@/components/layout";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   useGetContacts,
   useUpdateContactNote,
@@ -19,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const TRADE_LABELS: Record<string, string> = {};
 
 export default function Contacts() {
+  usePageTitle("Contact Book");
   const { data: contacts, isLoading } = useGetContacts();
   const { data: projects } = useGetProjects();
   const updateNote = useUpdateContactNote();

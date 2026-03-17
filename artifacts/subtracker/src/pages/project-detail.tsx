@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/layout";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   useGetProject,
   useGetMe,
@@ -88,6 +89,7 @@ export default function ProjectDetail() {
 
   const { data: user } = useGetMe();
   const { data: project, isLoading } = useGetProject(projectId);
+  usePageTitle(project?.name ?? "Project");
   const queryClient = useQueryClient();
 
   const inviteSub = useInviteSubcontractor();
@@ -437,7 +439,7 @@ export default function ProjectDetail() {
                   stat.highlight ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"
                 )}>{stat.label}</p>
                 <p className={cn(
-                  "text-xl font-bold font-mono",
+                  "text-base md:text-xl font-bold font-mono break-all leading-tight",
                   stat.highlight ? "text-amber-700 dark:text-amber-400" : "text-foreground"
                 )}>{formatCurrency(stat.value)}</p>
               </div>
@@ -556,14 +558,14 @@ export default function ProjectDetail() {
                   );
                   return (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm min-w-[580px]">
+                      <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
-                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
-                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
-                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
-                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Invoiced</th>
+                            <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
+                            <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
+                            <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
+                            <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Invoiced</th>
                             <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Remaining</th>
                             <th className="px-4 py-3"></th>
                           </tr>
@@ -593,10 +595,10 @@ export default function ProjectDetail() {
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
-                                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
-                                <td className="px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
-                                <td className="px-4 py-3 text-right font-mono">{formatCurrency(sb?.invoicedTotal ?? 0)}</td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
+                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
+                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.invoicedTotal ?? 0)}</td>
                                 <td className={cn("px-4 py-3 text-right font-mono font-semibold", isNeg ? "text-red-600" : "text-green-600")}>
                                   {formatCurrency(remaining)}
                                 </td>
@@ -615,10 +617,10 @@ export default function ProjectDetail() {
                           <tfoot>
                             <tr className="border-t-2 border-border bg-muted/50 font-bold">
                               <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
-                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
-                              <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
-                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>
-                              <td className="px-4 py-3 text-right font-mono">{formatCurrency(totals.invoiced)}</td>
+                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
+                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
+                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>
+                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.invoiced)}</td>
                               <td className={cn("px-4 py-3 text-right font-mono", totals.remaining < 0 ? "text-red-600" : "text-green-600")}>
                                 {formatCurrency(totals.remaining)}
                               </td>

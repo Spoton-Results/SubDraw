@@ -5,10 +5,14 @@ import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import {
   sendChangeOrderCreatedEmail,
+  sendChangeOrderSubmittedBySubEmail,
   sendChangeOrderDecisionEmail,
   sendInvoiceSubmittedEmail,
   sendInvoiceFlaggedEmail,
   sendInvoiceDecisionEmail,
+  sendPaymentRecordedEmail,
+  sendPaymentConfirmedEmail,
+  sendPaymentDisputedEmail,
 } from "../lib/email.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 
@@ -44,6 +48,17 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
   const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastInvoice = sortedInvs[0] ?? null;
   return { base: baseContractAmount, coTotal, currentApprovedTotal, approvedTotal, paidTotal, invoicedTotal, remaining, hasFlaggedInvoices, lastInvoice };
+}
+
+async function canAccessSubcontract(userId: string, userRole: string, subcontractId: string): Promise<boolean> {
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) return false;
+  if (userRole === "SUB") return sc.subId === userId;
+  if (userRole === "GC") {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+    return project?.gcId === userId;
+  }
+  return false;
 }
 
 async function getSubcontractWithRelations(sc: any) {
@@ -103,11 +118,12 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 router.get("/:subcontractId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
   const { subcontractId } = req.params;
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
-  if (!sc) {
-    res.status(404).json({ error: "Subcontract not found" });
-    return;
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
   }
   const base = await getSubcontractWithRelations(sc);
   const changeOrders = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, subcontractId));
@@ -117,6 +133,10 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
 });
 
 router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
   const logs = await db
     .select()
     .from(activityLogsTable)
@@ -126,6 +146,10 @@ router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
 });
 
 router.get("/:subcontractId/change-orders", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
   const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, req.params.subcontractId));
   res.json(cos);
 });
@@ -136,6 +160,9 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   if (!description || !amount) {
     res.status(400).json({ error: "description and amount are required" });
     return;
+  }
+  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
   }
   const [co] = await db.insert(changeOrdersTable).values({
     subcontractId: req.params.subcontractId,
@@ -157,13 +184,27 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     user.role
   );
 
-  sendChangeOrderCreatedEmail({
-    toEmail: sc.sub.email,
-    projectName: sc.project.name,
-    description,
-    amount: Number(amount),
-    appUrl: getAppUrl(req),
-  }).catch((err) => console.error("[email] sendChangeOrderCreatedEmail failed:", err));
+  const appUrl = getAppUrl(req);
+  if (user.role === "GC") {
+    // GC created the CO — notify sub
+    sendChangeOrderCreatedEmail({
+      toEmail: sc.sub.email,
+      projectName: sc.project.name,
+      description,
+      amount: Number(amount),
+      appUrl,
+    }).catch((err) => console.error("[email] sendChangeOrderCreatedEmail failed:", err));
+  } else {
+    // Sub created the CO — notify GC
+    sendChangeOrderSubmittedBySubEmail({
+      toEmail: sc.project.gc.email,
+      projectName: sc.project.name,
+      subCompanyName: sc.sub.companyName,
+      description,
+      amount: Number(amount),
+      appUrl,
+    }).catch((err) => console.error("[email] sendChangeOrderSubmittedBySubEmail failed:", err));
+  }
 
   res.status(201).json(co);
 });
@@ -230,12 +271,20 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
 });
 
 router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
   const invs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, req.params.subcontractId));
   res.json(invs);
 });
 
 router.get("/:subcontractId/invoices/:invoiceId/pdf", requireAuth, async (req, res) => {
+  const user = (req as any).user;
   const { subcontractId, invoiceId } = req.params;
+  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
@@ -261,6 +310,9 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   if (!invoiceNumber || !String(invoiceNumber).trim()) {
     res.status(400).json({ error: "invoiceNumber is required" });
     return;
+  }
+  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
   }
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) {
@@ -500,6 +552,18 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
   const sc = await getSubcontractWithRelations(rawSc);
   await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, gcUser.companyName, "GC");
 
+  sendPaymentRecordedEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    gcCompanyName: sc.project.gc.companyName,
+    invoiceNumber: invoice.invoiceNumber,
+    amount: invoice.amount,
+    paymentDate,
+    paymentMethod,
+    paymentReference: paymentReference ?? undefined,
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendPaymentRecordedEmail failed:", err));
+
   res.json(invoice);
 });
 
@@ -522,6 +586,18 @@ router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, 
     .returning();
 
   await logActivity(subcontractId, "INVOICE_PAYMENT_CONFIRMED", `Invoice #${invoice.invoiceNumber} payment confirmed by ${subUser.companyName}`, subUser.companyName, "SUB");
+
+  const rawSc2 = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  const sc2 = await getSubcontractWithRelations(rawSc2);
+  sendPaymentConfirmedEmail({
+    toEmail: sc2.project.gc.email,
+    projectName: sc2.project.name,
+    subCompanyName: sc2.sub.companyName,
+    invoiceNumber: invoice.invoiceNumber,
+    amount: invoice.amount,
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendPaymentConfirmedEmail failed:", err));
+
   res.json(invoice);
 });
 
@@ -545,6 +621,19 @@ router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, 
     .returning();
 
   await logActivity(subcontractId, "INVOICE_PAYMENT_DISPUTED", `Invoice #${invoice.invoiceNumber} payment disputed by ${subUser.companyName}${disputeReason ? `: ${disputeReason}` : ""}`, subUser.companyName, "SUB");
+
+  const rawSc3 = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  const sc3 = await getSubcontractWithRelations(rawSc3);
+  sendPaymentDisputedEmail({
+    toEmail: sc3.project.gc.email,
+    projectName: sc3.project.name,
+    subCompanyName: sc3.sub.companyName,
+    invoiceNumber: invoice.invoiceNumber,
+    amount: invoice.amount,
+    disputeReason: disputeReason ?? undefined,
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendPaymentDisputedEmail failed:", err));
+
   res.json(invoice);
 });
 

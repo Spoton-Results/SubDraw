@@ -3,6 +3,7 @@ import { Layout } from "@/components/layout";
 import {
   useGetMe, useUpdateProfile, useChangePassword, getGetMeQueryKey
 } from "@workspace/api-client-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Eye, EyeOff, User, KeyRound, Building2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function Account() {
+  usePageTitle("Account Settings");
   const { data: user } = useGetMe();
   const queryClient = useQueryClient();
 

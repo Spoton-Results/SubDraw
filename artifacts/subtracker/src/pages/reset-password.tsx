@@ -1,12 +1,14 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useResetPassword } from "@workspace/api-client-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HardHat, KeyRound, Eye, EyeOff, CheckCircle, XCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function ResetPassword() {
+  usePageTitle("Reset Password");
   const [, setLocation] = useLocation();
   const [newPassword, setNewPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");

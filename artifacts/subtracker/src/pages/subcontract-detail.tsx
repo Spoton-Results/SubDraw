@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useRoute, Link } from "wouter";
 import { Layout } from "@/components/layout";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   useGetSubcontract, useGetMe,
   useCreateChangeOrder, useApproveChangeOrder, useRejectChangeOrder,
@@ -52,6 +53,7 @@ export default function SubcontractDetail() {
 
   const { data: user } = useGetMe();
   const { data: sub, isLoading } = useGetSubcontract(subcontractId);
+  usePageTitle(sub?.description ?? "Subcontract");
   const { data: activityLog = [], isLoading: activityLoading } = useGetSubcontractActivity(subcontractId);
   const queryClient = useQueryClient();
 
@@ -434,7 +436,7 @@ export default function SubcontractDetail() {
                     "p-4 hover:bg-muted/50 transition-colors",
                     co.status === "PENDING_GC" && !isGC && "bg-amber-50/50 dark:bg-amber-950/10"
                   )}>
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           {getCOStatusBadge(co.status)}
@@ -459,19 +461,19 @@ export default function SubcontractDetail() {
                       </div>
                       {!isGC && co.status === "PENDING_GC" && (
                         approveCOConfirm === co.id ? (
-                          <div className="flex flex-col gap-2 shrink-0">
-                            <p className="text-xs text-muted-foreground text-right">Confirm approve?</p>
-                            <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" isLoading={approveCO.isPending} onClick={() => handleApproveCO(co.id)}>
+                          <div className="flex sm:flex-col gap-2 shrink-0">
+                            <p className="text-xs text-muted-foreground sm:text-right hidden sm:block">Confirm approve?</p>
+                            <Button size="sm" className="flex-1 sm:flex-none min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" isLoading={approveCO.isPending} onClick={() => handleApproveCO(co.id)}>
                               <Check className="h-3.5 w-3.5" /> Yes, Approve
                             </Button>
-                            <Button size="sm" variant="ghost" className="min-h-[44px]" onClick={() => setApproveCOConfirm(null)}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => setApproveCOConfirm(null)}>Cancel</Button>
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-2 shrink-0">
-                            <Button size="sm" className="min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => setApproveCOConfirm(co.id)}>
+                          <div className="flex sm:flex-col gap-2 shrink-0">
+                            <Button size="sm" className="flex-1 sm:flex-none min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => setApproveCOConfirm(co.id)}>
                               <Check className="h-3.5 w-3.5" /> Approve
                             </Button>
-                            <Button size="sm" variant="destructive" className="min-h-[44px] gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
+                            <Button size="sm" variant="destructive" className="flex-1 sm:flex-none min-h-[44px] gap-1" onClick={() => setRejectCODialogOpen({ open: true, id: co.id })}>
                               <X className="h-3.5 w-3.5" /> Reject
                             </Button>
                           </div>
@@ -655,14 +657,13 @@ export default function SubcontractDetail() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[480px]">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Invoice No.</th>
                     <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Amount</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
+                    <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
+                    <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
                     <th className="px-4 py-3"></th>
                   </tr>
@@ -676,13 +677,15 @@ export default function SubcontractDetail() {
                       inv.status === "PAYMENT_CONFIRMED" && "bg-green-50/30 dark:bg-green-950/10",
                       inv.status === "PAYMENT_DISPUTED" && "bg-red-50/30 dark:bg-red-950/10",
                     )}>
-                      <td className="px-4 py-3 text-muted-foreground">{sortedInvoices.length - idx}</td>
                       <td className="px-4 py-3">
-                        <span className="font-mono font-semibold">#{inv.invoiceNumber}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono font-semibold">#{inv.invoiceNumber}</span>
+                          <span className="text-xs text-muted-foreground sm:hidden">{format(new Date(inv.createdAt), "MMM d, yyyy")}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(inv.amount)}</td>
-                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
+                      <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
+                      <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
                       <td className="px-4 py-3">{getInvStatusBadge(inv.status)}</td>
                       <td className="px-4 py-3">
                         <a
@@ -692,7 +695,7 @@ export default function SubcontractDetail() {
                           title="Download PDF"
                         >
                           <FileDown className="h-4 w-4" />
-                          PDF
+                          <span className="hidden sm:inline">PDF</span>
                         </a>
                       </td>
                     </tr>
@@ -984,8 +987,8 @@ function ScoreCard({
 }) {
   return (
     <Card className={cn("overflow-hidden border-border/50", highlight && "border-primary shadow-primary/10", className)}>
-      <CardContent className={cn("p-4", highlight ? "bg-primary/5" : "bg-card")}>
-        <div className="flex items-center gap-1 mb-2">
+      <CardContent className={cn("p-3 md:p-4", highlight ? "bg-primary/5" : "bg-card")}>
+        <div className="flex items-center gap-1 mb-1 md:mb-2">
           <p className={cn(
             "text-xs font-semibold uppercase tracking-wider",
             highlight ? "text-primary" : danger ? "text-red-600" : "text-muted-foreground"
@@ -1002,7 +1005,7 @@ function ScoreCard({
           </Tooltip>
         </div>
         <p className={cn(
-          "text-xl md:text-2xl font-bold font-mono tracking-tight truncate",
+          "text-base md:text-xl font-bold font-mono tracking-tight break-all leading-tight",
           danger ? "text-red-600" : "text-foreground"
         )}>{formatCurrency(amount)}</p>
       </CardContent>

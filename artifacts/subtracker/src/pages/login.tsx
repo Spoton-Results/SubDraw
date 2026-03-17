@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useLogin, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function Login() {
+  usePageTitle("Sign In");
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });

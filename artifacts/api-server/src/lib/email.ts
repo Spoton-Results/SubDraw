@@ -320,7 +320,112 @@ export async function sendAddedToProjectEmail(opts: {
   await send(opts.toEmail, `You've been added to ${opts.projectName} on SubTracker`, html);
 }
 
-// ─── 10. Password reset email ──────────────────────────────────────────────────
+// ─── 10. Sub created a change order (notify GC) ───────────────────────────────
+export async function sendChangeOrderSubmittedBySubEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  subCompanyName: string;
+  description: string;
+  amount: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("New change order submitted by subcontractor")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has submitted a change order on <strong>${opts.projectName}</strong> that requires your review.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Description", value: opts.description },
+      { label: "Amount", value: formatCurrency(opts.amount) },
+    ])}
+    ${ctaButton("Review Change Order", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `New change order from ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+// ─── 11. GC recorded payment — sub needs to confirm ───────────────────────────
+export async function sendPaymentRecordedEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  gcCompanyName: string;
+  invoiceNumber: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  paymentReference?: string;
+  appUrl: string;
+}) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Project", value: opts.projectName },
+    { label: "Invoice #", value: opts.invoiceNumber },
+    { label: "Amount", value: formatCurrency(opts.amount) },
+    { label: "Payment Date", value: opts.paymentDate },
+    { label: "Payment Method", value: opts.paymentMethod },
+  ];
+  if (opts.paymentReference) rows.push({ label: "Reference #", value: opts.paymentReference });
+  const html = layout(`
+    ${heading("Payment recorded — please confirm receipt")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has recorded a payment for your invoice on <strong>${opts.projectName}</strong>. Please log in to confirm or dispute that you received this payment.`)}
+    ${infoBox(rows)}
+    ${ctaButton("Confirm or Dispute Payment", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Payment recorded for invoice #${opts.invoiceNumber} — action required`, html);
+}
+
+// ─── 12. Sub confirmed payment — notify GC ────────────────────────────────────
+export async function sendPaymentConfirmedEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  subCompanyName: string;
+  invoiceNumber: string;
+  amount: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Payment confirmed by subcontractor")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has confirmed receipt of payment for invoice #${opts.invoiceNumber} on <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Invoice #", value: opts.invoiceNumber },
+      { label: "Amount", value: formatCurrency(opts.amount) },
+      { label: "Status", value: "✅ Payment Confirmed" },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Payment confirmed by ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+// ─── 13. Sub disputed payment — notify GC ─────────────────────────────────────
+export async function sendPaymentDisputedEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  subCompanyName: string;
+  invoiceNumber: string;
+  amount: number;
+  disputeReason?: string;
+  appUrl: string;
+}) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Project", value: opts.projectName },
+    { label: "Subcontractor", value: opts.subCompanyName },
+    { label: "Invoice #", value: opts.invoiceNumber },
+    { label: "Amount", value: formatCurrency(opts.amount) },
+  ];
+  if (opts.disputeReason) rows.push({ label: "Dispute Reason", value: opts.disputeReason });
+  const html = layout(`
+    <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#dc2626;">Payment Dispute — Action Required</p>
+    </div>
+    ${heading("Subcontractor disputed payment receipt")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has disputed that they received payment for invoice #${opts.invoiceNumber} on <strong>${opts.projectName}</strong>. Please investigate and resolve this dispute.`)}
+    ${warningBox(rows)}
+    ${ctaButton("Resolve Dispute", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Payment disputed by ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+// ─── 14. Password reset email ──────────────────────────────────────────────────
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   companyName: string;

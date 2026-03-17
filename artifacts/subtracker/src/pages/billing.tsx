@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Layout } from "@/components/layout";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ function formatDate(ts: number) {
 }
 
 export default function Billing() {
+  usePageTitle("Billing");
   const { data: user } = useGetMe();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
