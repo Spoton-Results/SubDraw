@@ -182,6 +182,7 @@ export interface Bid {
   amount: number;
   notes?: string | null;
   status: BidStatus;
+  scopeOfWorkObjectPath?: string | null;
   createdAt: string;
   sub: User;
 }
@@ -280,6 +281,7 @@ export interface InviteRequest {
 export interface SubmitBidRequest {
   amount: number;
   notes?: string;
+  scopeOfWorkObjectPath?: string | null;
 }
 
 export type ChangeOrderStatus =

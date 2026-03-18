@@ -42,7 +42,7 @@ artifacts-monorepo/
 - `gc_project_assignments` — Maps GC team members (PMs) to specific projects they can access: (teamMemberUserId, projectId)
 - `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED; optional fields: address, description, estimatedStartDate (text), notes (GC-only, stripped from API response for non-GC users)
 - `project_members` — Which subs are invited to a project
-- `bids` — Subs submit bids; GC awards one → creates a subcontract
+- `bids` — Subs submit bids; GC awards one → creates a subcontract. Fields: `amount`, `notes`, `status` (PENDING|AWARDED|REJECTED), `scopeOfWorkObjectPath` (optional file upload path via object storage)
 - `subcontracts` — Awarded contract with baseContractAmount, `retentionPercentage` (0–15%, default 10%)
 - `change_orders` — Proposed/approved scope changes; status: PENDING_GC | APPROVED | REJECTED
 - `invoices` — Subs submit invoices; auto-flagged if over remaining budget; status: PENDING | APPROVED | REJECTED | FLAGGED. Fields: `retentionAmount` (calculated on approval, null for retention-release invoices), `isRetentionRelease` (boolean). Professional PDF generated on every invoice action, attached to all email notifications and downloadable via GET /api/subcontracts/:id/invoices/:id/pdf; PDFs show retention line items (Retention Held, Net Payable Now)

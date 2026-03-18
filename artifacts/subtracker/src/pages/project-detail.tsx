@@ -125,6 +125,8 @@ export default function ProjectDetail() {
 
   const [bidAmount, setBidAmount] = React.useState("");
   const [bidNotes, setBidNotes] = React.useState("");
+  const [bidScopeFile, setBidScopeFile] = React.useState<File | null>(null);
+  const [bidScopeUploading, setBidScopeUploading] = React.useState(false);
 
   const [isPlanOpen, setIsPlanOpen] = React.useState(false);
   const [planDescription, setPlanDescription] = React.useState("");
@@ -199,6 +201,13 @@ export default function ProjectDetail() {
     onError: (err) => {
       toast.error(err.message || "Upload failed");
       setUploadStep("idle");
+    },
+  });
+
+  const { uploadFile: uploadBidScope } = useUpload({
+    onError: (err) => {
+      toast.error(err.message || "Scope of work upload failed");
+      setBidScopeUploading(false);
     },
   });
 
@@ -311,13 +320,22 @@ export default function ProjectDetail() {
     const amount = parseFloat(bidAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Invalid bid amount");
     try {
-      await submitBid.mutateAsync({ projectId, data: { amount, notes: bidNotes.trim() || undefined } });
+      let scopeOfWorkObjectPath: string | undefined;
+      if (bidScopeFile) {
+        setBidScopeUploading(true);
+        const result = await uploadBidScope(bidScopeFile, `/bids/${projectId}/scope/`, bidScopeFile.name);
+        scopeOfWorkObjectPath = result.objectPath;
+        setBidScopeUploading(false);
+      }
+      await submitBid.mutateAsync({ projectId, data: { amount, notes: bidNotes.trim() || undefined, scopeOfWorkObjectPath: scopeOfWorkObjectPath ?? null } });
       toast.success("Bid submitted successfully!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       setBidAmount("");
       setBidNotes("");
+      setBidScopeFile(null);
     } catch {
       toast.error("Failed to submit bid");
+      setBidScopeUploading(false);
     }
   };
 
@@ -1103,6 +1121,16 @@ export default function ProjectDetail() {
                             {bid.notes && (
                               <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{bid.notes}</p>
                             )}
+                            {bid.scopeOfWorkObjectPath && (
+                              <a
+                                href={`${BASE}/api/storage${bid.scopeOfWorkObjectPath}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-2"
+                              >
+                                <FileText className="h-4 w-4" /> View Scope of Work
+                              </a>
+                            )}
                           </div>
                           {bid.status === "PENDING" && project.status === "BIDDING" && (
                             <Button
@@ -1143,12 +1171,42 @@ export default function ProjectDetail() {
                         onChange={e => setBidNotes(e.target.value)}
                       />
                     </div>
+                    <div>
+                      <label className="text-sm font-semibold mb-1 block">
+                        Scope of Work Document <span className="font-normal text-muted-foreground">(optional)</span>
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">Upload your bid breakdown, scope of work, or proposal PDF</p>
+                      <label className={cn(
+                        "flex items-center gap-3 cursor-pointer border border-dashed rounded-xl px-4 py-3 transition-colors",
+                        bidScopeFile ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                      )}>
+                        <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm text-muted-foreground truncate flex-1">
+                          {bidScopeFile ? bidScopeFile.name : "PDF, Word doc, or image — up to 50 MB"}
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          className="hidden"
+                          onChange={(e) => setBidScopeFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      {bidScopeFile && (
+                        <button
+                          type="button"
+                          onClick={() => setBidScopeFile(null)}
+                          className="text-xs text-muted-foreground hover:text-destructive mt-1.5 ml-1"
+                        >
+                          Remove file
+                        </button>
+                      )}
+                    </div>
                     <Button
                       type="submit"
-                      isLoading={submitBid.isPending}
+                      isLoading={submitBid.isPending || bidScopeUploading}
                       className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white min-h-[44px]"
                     >
-                      <DollarSign className="h-5 w-5" /> Submit Bid
+                      <DollarSign className="h-5 w-5" /> {bidScopeUploading ? "Uploading document…" : "Submit Bid"}
                     </Button>
                   </form>
                 ) : (
@@ -1178,6 +1236,18 @@ export default function ProjectDetail() {
                             <div className="mt-3">
                               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Scope of Work Notes</p>
                               <p className="text-sm text-foreground leading-relaxed">{myBid.notes}</p>
+                            </div>
+                          )}
+                          {myBid.scopeOfWorkObjectPath && (
+                            <div className="mt-3">
+                              <a
+                                href={`${BASE}/api/storage${myBid.scopeOfWorkObjectPath}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                              >
+                                <FileText className="h-4 w-4" /> View Scope of Work Document
+                              </a>
                             </div>
                           )}
                         </div>

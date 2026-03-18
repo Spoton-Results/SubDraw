@@ -15,6 +15,7 @@ export interface Bid {
   amount: number;
   notes?: string | null;
   status: BidStatus;
+  scopeOfWorkObjectPath?: string | null;
   createdAt: Date;
   sub: User;
 }

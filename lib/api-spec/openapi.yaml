@@ -1506,6 +1506,9 @@ components:
         status:
           type: string
           enum: [PENDING, AWARDED, REJECTED]
+        scopeOfWorkObjectPath:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1520,6 +1523,9 @@ components:
           type: number
         notes:
           type: string
+        scopeOfWorkObjectPath:
+          type: string
+          nullable: true
       required: [amount]
 
     Subcontract:

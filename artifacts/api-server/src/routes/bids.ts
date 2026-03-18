@@ -22,7 +22,7 @@ router.get("/", requireAuth, requireGC, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { projectId } = req.params as any;
-  const { amount, notes } = req.body;
+  const { amount, notes, scopeOfWorkObjectPath } = req.body;
   if (!amount || isNaN(Number(amount))) {
     res.status(400).json({ error: "amount is required" });
     return;
@@ -32,6 +32,7 @@ router.post("/", requireAuth, async (req, res) => {
     subId: user.id,
     amount: Number(amount),
     notes: notes?.trim() || null,
+    scopeOfWorkObjectPath: scopeOfWorkObjectPath?.trim() || null,
   }).returning();
   const bidWithSub = await getBidWithSub(bid);
   res.status(201).json(bidWithSub);

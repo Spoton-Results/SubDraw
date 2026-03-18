@@ -9,4 +9,5 @@
 export interface SubmitBidRequest {
   amount: number;
   notes?: string;
+  scopeOfWorkObjectPath?: string | null;
 }

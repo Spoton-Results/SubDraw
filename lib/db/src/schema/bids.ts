@@ -11,6 +11,7 @@ export const bidsTable = pgTable("bids", {
   amount: doublePrecision("amount").notNull(),
   notes: text("notes"),
   status: text("status").notNull().default("PENDING"), // PENDING | AWARDED | REJECTED
+  scopeOfWorkObjectPath: text("scope_of_work_object_path"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
