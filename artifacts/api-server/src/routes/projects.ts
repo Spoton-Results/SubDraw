@@ -240,6 +240,204 @@ router.post("/", requireAuth, requireGCOwner, async (req, res) => {
   res.status(201).json({ ...project, gc });
 });
 
+// ── GC: Consolidated action-required items across all active projects ─────────
+router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
+  const gcUser = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(gcUser);
+
+  // 1. All non-archived GC projects
+  const gcProjects = await db.select().from(projectsTable)
+    .where(and(eq(projectsTable.gcId, effectiveGcId), isNull(projectsTable.archivedAt)));
+  if (gcProjects.length === 0) { res.json([]); return; }
+
+  const projectIds = gcProjects.map(p => p.id);
+  const projectMap = Object.fromEntries(gcProjects.map(p => [p.id, p]));
+
+  // 2. All subcontracts
+  const subcontracts = await db.select().from(subcontractsTable)
+    .where(inArray(subcontractsTable.projectId, projectIds));
+  if (subcontracts.length === 0) { res.json([]); return; }
+
+  const scIds = subcontracts.map(sc => sc.id);
+  const scMap = Object.fromEntries(subcontracts.map(sc => [sc.id, sc]));
+
+  // 3. Batch-fetch invoices, change orders, insurances, sub users
+  const [allInvoices, allCOs, allInsurances, subUsers] = await Promise.all([
+    db.select().from(invoicesTable).where(inArray(invoicesTable.subcontractId, scIds)),
+    db.select().from(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, scIds)),
+    db.select().from(subcontractInsurancesTable).where(inArray(subcontractInsurancesTable.subcontractId, scIds)),
+    db.select({ id: usersTable.id, companyName: usersTable.companyName })
+      .from(usersTable)
+      .where(inArray(usersTable.id, [...new Set(subcontracts.map(sc => sc.subId))])),
+  ]);
+
+  const subUserMap = Object.fromEntries(subUsers.map(u => [u.id, u.companyName ?? "Unknown"]));
+
+  // helpers
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  type ActionItem = {
+    id: string;
+    type: string;
+    urgency: "URGENT" | "PENDING" | "UPCOMING";
+    projectId: string;
+    projectName: string;
+    subcontractId: string;
+    subCompanyName: string;
+    description: string;
+    amount?: number;
+    overAmount?: number;
+    expiresAt?: string;
+    href: string;
+  };
+
+  const items: ActionItem[] = [];
+
+  // Pre-compute per-subcontract scoreboard (for flagged invoice over-amount)
+  const scScoreboard: Record<string, { approvedTotal: number; totalApproved: number }> = {};
+  for (const sc of subcontracts) {
+    const cos = allCOs.filter(c => c.subcontractId === sc.id && c.status === "APPROVED");
+    const approvedInvs = allInvoices.filter(i => i.subcontractId === sc.id && i.status === "APPROVED");
+    const coTotal = cos.reduce((s, c) => s + c.amount, 0);
+    const approvedTotal = sc.contractAmount + coTotal;
+    const totalApproved = approvedInvs.reduce((s, i) => s + i.amount, 0);
+    scScoreboard[sc.id] = { approvedTotal, totalApproved };
+  }
+
+  for (const inv of allInvoices) {
+    const sc = scMap[inv.subcontractId];
+    if (!sc) continue;
+    const project = projectMap[sc.projectId];
+    if (!project) continue;
+    const subName = subUserMap[sc.subId] ?? "Unknown";
+    const href = `/subcontracts/${sc.id}`;
+
+    // URGENT: Flagged invoices (over approved total)
+    if (inv.status === "FLAGGED") {
+      const { approvedTotal, totalApproved } = scScoreboard[sc.id];
+      const remaining = approvedTotal - totalApproved;
+      const overAmount = Math.max(0, inv.amount - remaining);
+      items.push({
+        id: `flagged-${inv.id}`,
+        type: "FLAGGED_INVOICE",
+        urgency: "URGENT",
+        projectId: project.id,
+        projectName: project.name,
+        subcontractId: sc.id,
+        subCompanyName: subName,
+        description: `Invoice #${inv.invoiceNumber} for ${subName} exceeds the approved contract total`,
+        amount: inv.amount,
+        overAmount,
+        href,
+      });
+    }
+
+    // PENDING: Invoices waiting for GC approval
+    if (inv.status === "PENDING") {
+      items.push({
+        id: `pending-${inv.id}`,
+        type: "PENDING_INVOICE",
+        urgency: "PENDING",
+        projectId: project.id,
+        projectName: project.name,
+        subcontractId: sc.id,
+        subCompanyName: subName,
+        description: `Invoice #${inv.invoiceNumber} from ${subName} is awaiting your approval`,
+        amount: inv.amount,
+        href,
+      });
+    }
+
+    // URGENT: Disputed payments
+    if (inv.status === "PAYMENT_DISPUTED") {
+      items.push({
+        id: `disputed-${inv.id}`,
+        type: "DISPUTED_PAYMENT",
+        urgency: "URGENT",
+        projectId: project.id,
+        projectName: project.name,
+        subcontractId: sc.id,
+        subCompanyName: subName,
+        description: `${subName} disputed the payment record for Invoice #${inv.invoiceNumber}`,
+        amount: inv.amount,
+        href,
+      });
+    }
+
+    // URGENT: Approved invoices past Net-30 due date
+    if (inv.status === "APPROVED") {
+      const dueDate = new Date(inv.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+      if (dueDate < now) {
+        items.push({
+          id: `pastdue-${inv.id}`,
+          type: "PAST_DUE_INVOICE",
+          urgency: "URGENT",
+          projectId: project.id,
+          projectName: project.name,
+          subcontractId: sc.id,
+          subCompanyName: subName,
+          description: `Invoice #${inv.invoiceNumber} for ${subName} was approved but payment is overdue (Net 30)`,
+          amount: inv.amount,
+          href,
+        });
+      }
+    }
+  }
+
+  // PENDING: Unsigned subcontracts (sub has not signed yet)
+  for (const sc of subcontracts) {
+    if (!(sc as any).signedBySubAt) {
+      const project = projectMap[sc.projectId];
+      if (!project) continue;
+      const subName = subUserMap[sc.subId] ?? "Unknown";
+      items.push({
+        id: `unsigned-${sc.id}`,
+        type: "UNSIGNED_CONTRACT",
+        urgency: "PENDING",
+        projectId: project.id,
+        projectName: project.name,
+        subcontractId: sc.id,
+        subCompanyName: subName,
+        description: `${subName} has not yet signed their subcontract agreement`,
+        href: `/subcontracts/${sc.id}`,
+      });
+    }
+  }
+
+  // UPCOMING: Insurance expiring within 30 days
+  for (const ins of allInsurances) {
+    const sc = scMap[ins.subcontractId];
+    if (!sc) continue;
+    const project = projectMap[sc.projectId];
+    if (!project) continue;
+    if (!ins.expirationDate) continue;
+    const expDate = new Date(ins.expirationDate);
+    if (expDate > now && expDate <= in30Days) {
+      const subName = subUserMap[sc.subId] ?? "Unknown";
+      const daysLeft = Math.ceil((expDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      items.push({
+        id: `insurance-${ins.id}`,
+        type: "INSURANCE_EXPIRING",
+        urgency: "UPCOMING",
+        projectId: project.id,
+        projectName: project.name,
+        subcontractId: sc.id,
+        subCompanyName: subName,
+        description: `${subName}'s insurance certificate expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`,
+        expiresAt: ins.expirationDate,
+        href: `/subcontracts/${sc.id}`,
+      });
+    }
+  }
+
+  // Sort: URGENT first, PENDING second, UPCOMING third
+  const urgencyOrder = { URGENT: 0, PENDING: 1, UPCOMING: 2 };
+  items.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
+
+  res.json(items);
+});
+
 router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => {
   const gcUser = (req as any).user;
   const effectiveGcId = getEffectiveGcId(gcUser);

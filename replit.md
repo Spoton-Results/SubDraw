@@ -22,6 +22,7 @@ The project is built as a pnpm monorepo using Node.js 24 and TypeScript 5.9. The
 -   **UI/UX:** Uses Tailwind CSS for styling and shadcn/ui for components, ensuring a modern and consistent design. The frontend routes are structured for clear navigation between dashboards, project details, subcontract details, and administrative sections like contact management and team management.
 -   **Demo System:** Includes a fully functional demo environment with seeded data that resets daily, allowing users to explore the platform's capabilities without registration.
 -   **Free Trial:** Offers a 14-day free trial for GCs, providing full access to features before requiring a subscription.
+-   **Action Required Dashboard:** A consolidated action panel at the top of the GC dashboard aggregating all items needing attention across every active project — flagged invoices, pending approvals, disputed payments, past-due invoices, unsigned subcontracts, and expiring insurance. Groups items by urgency (URGENT/PENDING/UPCOMING) with direct clickable links to each item. Shows a zero-state green banner when all is clear.
 
 ## External Dependencies
 

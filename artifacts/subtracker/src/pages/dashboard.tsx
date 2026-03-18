@@ -12,12 +12,182 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
 import { TrialBanner } from "@/components/trial-banner";
 import toast from "react-hot-toast";
+
+// ── Action Required types ──────────────────────────────────────────────────────
+type ActionItem = {
+  id: string;
+  type: string;
+  urgency: "URGENT" | "PENDING" | "UPCOMING";
+  projectId: string;
+  projectName: string;
+  subcontractId: string;
+  subCompanyName: string;
+  description: string;
+  amount?: number;
+  overAmount?: number;
+  expiresAt?: string;
+  href: string;
+};
+
+const URGENCY_CONFIG = {
+  URGENT: {
+    label: "Urgent",
+    headerBg: "bg-red-50 dark:bg-red-950/20",
+    headerBorder: "border-red-200 dark:border-red-800",
+    headerText: "text-red-700 dark:text-red-400",
+    dot: "bg-red-500",
+    rowHover: "hover:bg-red-50/60 dark:hover:bg-red-950/10",
+    pillBg: "bg-red-100 dark:bg-red-900/40",
+    pillText: "text-red-700 dark:text-red-400",
+  },
+  PENDING: {
+    label: "Pending",
+    headerBg: "bg-amber-50 dark:bg-amber-950/20",
+    headerBorder: "border-amber-200 dark:border-amber-800",
+    headerText: "text-amber-700 dark:text-amber-400",
+    dot: "bg-amber-500",
+    rowHover: "hover:bg-amber-50/60 dark:hover:bg-amber-950/10",
+    pillBg: "bg-amber-100 dark:bg-amber-900/40",
+    pillText: "text-amber-700 dark:text-amber-400",
+  },
+  UPCOMING: {
+    label: "Upcoming",
+    headerBg: "bg-blue-50 dark:bg-blue-950/20",
+    headerBorder: "border-blue-200 dark:border-blue-800",
+    headerText: "text-blue-700 dark:text-blue-400",
+    dot: "bg-blue-500",
+    rowHover: "hover:bg-blue-50/60 dark:hover:bg-blue-950/10",
+    pillBg: "bg-blue-100 dark:bg-blue-900/40",
+    pillText: "text-blue-700 dark:text-blue-400",
+  },
+} as const;
+
+function getItemIcon(type: string) {
+  switch (type) {
+    case "FLAGGED_INVOICE":    return <FileWarning className="h-4 w-4 shrink-0" />;
+    case "PENDING_INVOICE":    return <Receipt className="h-4 w-4 shrink-0" />;
+    case "DISPUTED_PAYMENT":   return <ShieldAlert className="h-4 w-4 shrink-0" />;
+    case "PAST_DUE_INVOICE":   return <Banknote className="h-4 w-4 shrink-0" />;
+    case "UNSIGNED_CONTRACT":  return <PenLine className="h-4 w-4 shrink-0" />;
+    case "INSURANCE_EXPIRING": return <Shield className="h-4 w-4 shrink-0" />;
+    default:                   return <AlertTriangle className="h-4 w-4 shrink-0" />;
+  }
+}
+
+function ActionRequired({ items, isLoading }: { items: ActionItem[]; isLoading: boolean }) {
+  const totalCount = items.length;
+
+  if (isLoading) {
+    return (
+      <div className="mb-6 rounded-2xl border border-border bg-card animate-pulse h-24" />
+    );
+  }
+
+  return (
+    <div className="mb-6">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        <h2 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          Action Required
+        </h2>
+        {totalCount > 0 ? (
+          <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-600 text-white text-xs font-bold leading-none">
+            {totalCount}
+          </span>
+        ) : null}
+      </div>
+
+      {totalCount === 0 ? (
+        /* Zero state */
+        <div className="flex items-center gap-3 rounded-2xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 px-5 py-4">
+          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+          <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+            All caught up — nothing needs your attention right now.
+          </p>
+        </div>
+      ) : (
+        /* Grouped items */
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          {(["URGENT", "PENDING", "UPCOMING"] as const).map((urgency) => {
+            const group = items.filter(i => i.urgency === urgency);
+            if (group.length === 0) return null;
+            const cfg = URGENCY_CONFIG[urgency];
+            return (
+              <div key={urgency}>
+                {/* Group sub-header */}
+                <div className={cn("flex items-center gap-2 px-4 py-2 border-b", cfg.headerBg, cfg.headerBorder)}>
+                  <span className={cn("h-2 w-2 rounded-full shrink-0", cfg.dot)} />
+                  <span className={cn("text-xs font-bold uppercase tracking-widest", cfg.headerText)}>
+                    {cfg.label} — {group.length} item{group.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {/* Items */}
+                {group.map((item, idx) => (
+                  <Link key={item.id} href={item.href}>
+                    <div className={cn(
+                      "flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors",
+                      cfg.rowHover,
+                      idx < group.length - 1 && "border-b border-border/50"
+                    )}>
+                      {/* Icon pill */}
+                      <div className={cn("mt-0.5 rounded-lg p-1.5 shrink-0", cfg.pillBg)}>
+                        <span className={cfg.pillText}>{getItemIcon(item.type)}</span>
+                      </div>
+
+                      {/* Text content */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                          {item.description}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                          <span className="text-xs text-muted-foreground">{item.projectName}</span>
+                          {item.amount !== undefined && (
+                            <>
+                              <span className="text-xs text-muted-foreground">·</span>
+                              <span className="text-xs font-mono font-semibold text-foreground">
+                                {formatCurrency(item.amount)}
+                              </span>
+                            </>
+                          )}
+                          {item.overAmount !== undefined && item.overAmount > 0 && (
+                            <>
+                              <span className="text-xs text-muted-foreground">·</span>
+                              <span className="text-xs font-mono font-semibold text-red-600 dark:text-red-400">
+                                +{formatCurrency(item.overAmount)} over
+                              </span>
+                            </>
+                          )}
+                          {item.expiresAt && (
+                            <>
+                              <span className="text-xs text-muted-foreground">·</span>
+                              <span className="text-xs text-muted-foreground">
+                                Expires {format(new Date(item.expiresAt), "MMM d, yyyy")}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Arrow */}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { data: user } = useGetMe();
@@ -72,6 +242,17 @@ export default function Dashboard() {
     },
     enabled: isGC,
     refetchInterval: 60_000,
+  });
+
+  const { data: actionItems = [], isLoading: actionItemsLoading } = useQuery<ActionItem[]>({
+    queryKey: ["gc-action-items"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/gc/action-items`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isGC,
+    refetchInterval: 30_000,
   });
 
   const [archiveSearch, setArchiveSearch] = React.useState("");
@@ -363,6 +544,11 @@ export default function Dashboard() {
 
       {showOnboarding && user && (
         <OnboardingBanner role={user.role as "GC" | "SUB"} onDismiss={dismissOnboarding} />
+      )}
+
+      {/* ── GC: Action Required Dashboard ─────────────────────────────────── */}
+      {isGC && (
+        <ActionRequired items={actionItems} isLoading={actionItemsLoading} />
       )}
 
       {isLoading ? (
