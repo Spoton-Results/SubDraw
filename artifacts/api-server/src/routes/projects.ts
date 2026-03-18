@@ -475,6 +475,110 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
   });
 });
 
+// Direct subcontract creation (construction phase — no bid required)
+router.post("/:projectId/subcontracts/direct", requireAuth, requireGC, async (req, res) => {
+  const gcUser = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(gcUser);
+  const { projectId } = req.params;
+  const { subId, email, companyName, baseContractAmount, tradeCategory, retentionPercentage, drawScheduleItemId } = req.body;
+
+  if (!baseContractAmount || isNaN(Number(baseContractAmount)) || Number(baseContractAmount) <= 0) {
+    res.status(400).json({ error: "baseContractAmount is required and must be positive" });
+    return;
+  }
+  if (!subId && !email) {
+    res.status(400).json({ error: "subId or email is required" });
+    return;
+  }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== effectiveGcId) {
+    res.status(project ? 403 : 404).json({ error: project ? "Forbidden" : "Project not found" });
+    return;
+  }
+
+  // Find or create the sub
+  let sub: any;
+  if (subId) {
+    const [found] = await db.select().from(usersTable).where(eq(usersTable.id, subId)).limit(1);
+    if (!found || found.role !== "SUB") {
+      res.status(404).json({ error: "Subcontractor not found" });
+      return;
+    }
+    sub = found;
+  } else {
+    let [found] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+    if (!found) {
+      if (!companyName) {
+        res.status(400).json({ error: "companyName is required for new subcontractors" });
+        return;
+      }
+      const passwordHash = crypto.randomBytes(32).toString("hex");
+      const [created] = await db.insert(usersTable).values({
+        email, passwordHash, role: "SUB", companyName, mustChangePassword: false,
+      }).returning();
+      found = created;
+    }
+    if (found.role !== "SUB") {
+      res.status(400).json({ error: "Can only add subcontractors" });
+      return;
+    }
+    sub = found;
+  }
+
+  // Add to project members if not already
+  const existingMembers = await db.select().from(projectMembersTable)
+    .where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, sub.id)));
+  if (existingMembers.length === 0) {
+    await db.insert(projectMembersTable).values({ projectId, userId: sub.id, roleOnProject: "SUB" });
+  }
+
+  // Add to GC contact book if not already
+  await db.insert(gcContactsTable).values({ gcId: effectiveGcId, subId: sub.id }).onConflictDoNothing();
+
+  // Prevent duplicate subcontracts
+  const existing = await db.select().from(subcontractsTable)
+    .where(and(eq(subcontractsTable.projectId, projectId), eq(subcontractsTable.subId, sub.id)));
+  if (existing.length > 0) {
+    res.status(400).json({ error: "A subcontract already exists for this subcontractor on this project" });
+    return;
+  }
+
+  const retPct = Math.min(15, Math.max(0, Number(retentionPercentage ?? 10)));
+  const [subcontract] = await db.insert(subcontractsTable).values({
+    projectId,
+    subId: sub.id,
+    baseContractAmount: Number(baseContractAmount),
+    tradeCategory: tradeCategory?.trim() || null,
+    retentionPercentage: retPct,
+    drawScheduleItemId: drawScheduleItemId || null,
+  }).returning();
+
+  await db.insert(activityLogsTable).values({
+    subcontractId: subcontract.id,
+    type: "SUBCONTRACT_CREATED",
+    description: `Subcontract created for ${sub.companyName} for $${Number(baseContractAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+    actorName: getActorName(gcUser),
+    actorRole: "GC",
+  }).catch(err => console.error("[activity] Failed to log direct subcontract creation:", err));
+
+  // Send added-to-project email with magic link
+  const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+  const magicToken = crypto.randomBytes(32).toString("hex");
+  await db.insert(magicLinkTokensTable).values({
+    userId: sub.id, token: magicToken, expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+  });
+  const magicUrl = `${appUrl}/api/auth/magic-link/verify?token=${magicToken}`;
+  sendAddedToProjectEmail({
+    toEmail: sub.email,
+    subCompanyName: sub.companyName,
+    projectName: project.name,
+    appUrl: magicUrl,
+  }).catch((err) => console.error("[email] Failed to send added-to-project email:", err));
+
+  res.status(201).json({ ...subcontract, sub, project });
+});
+
 router.delete("/:projectId/members/:userId", requireAuth, requireGC, async (req, res) => {
   const { projectId, userId } = req.params;
   const gcUser = (req as any).user;

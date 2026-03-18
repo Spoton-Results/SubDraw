@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "wouter";
-import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe, useGetGcDisputedInvoices } from "@workspace/api-client-react";
+import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe, useGetGcDisputedInvoices, useGetContacts, useInviteSubcontractor, useInviteContactToProject } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { OnboardingBanner } from "@/components/onboarding-banner";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -76,6 +76,130 @@ export default function Dashboard() {
 
   const [archiveSearch, setArchiveSearch] = React.useState("");
   const [unarchivingId, setUnarchivingId] = React.useState<string | null>(null);
+
+  // Add Subcontractor from dashboard
+  const { data: contacts = [] } = useGetContacts({ query: { enabled: isGC } });
+  const inviteSub = useInviteSubcontractor();
+  const inviteContactToProject = useInviteContactToProject();
+  const [isAddSubOpen, setIsAddSubOpen] = React.useState(false);
+  const [addSubProjectId, setAddSubProjectId] = React.useState("");
+  const [addSubTab, setAddSubTab] = React.useState<"contact" | "new">("contact");
+  const [addSubContactSearch, setAddSubContactSearch] = React.useState("");
+  const [addSubEmail, setAddSubEmail] = React.useState("");
+  const [addSubCompanyName, setAddSubCompanyName] = React.useState("");
+  const [addSubStep, setAddSubStep] = React.useState<"project" | "sub" | "contract">("project");
+  const [addSubSelected, setAddSubSelected] = React.useState<{ subId?: string; email?: string; companyName: string } | null>(null);
+  const [addSubAmount, setAddSubAmount] = React.useState("");
+  const [addSubTrade, setAddSubTrade] = React.useState("");
+  const [addSubRetention, setAddSubRetention] = React.useState("10");
+  const [addSubLoading, setAddSubLoading] = React.useState(false);
+  const [addSubSuccess, setAddSubSuccess] = React.useState<{ companyName: string; projectName: string } | null>(null);
+  const [addSubCopied, setAddSubCopied] = React.useState(false);
+  const [addSubNewResult, setAddSubNewResult] = React.useState<{ email: string; temporaryPassword: string } | null>(null);
+
+  const ADD_SUB_TRADE_CATEGORIES = ["General","Electrical","Plumbing","HVAC","Framing","Drywall","Roofing","Flooring","Concrete","Masonry","Painting","Landscaping","Fire Protection","Elevators","Security","Other"];
+
+  const activeProjects = (projects ?? []).filter((p: any) => p.status === "BIDDING" || p.status === "CONSTRUCTION");
+  const selectedProject = activeProjects.find((p: any) => p.id === addSubProjectId) as any;
+  const selectedProjectIsConstruction = selectedProject?.status === "CONSTRUCTION";
+
+  const handleAddSubClose = () => {
+    setIsAddSubOpen(false);
+    setAddSubProjectId("");
+    setAddSubTab("contact");
+    setAddSubContactSearch("");
+    setAddSubEmail("");
+    setAddSubCompanyName("");
+    setAddSubStep("project");
+    setAddSubSelected(null);
+    setAddSubAmount("");
+    setAddSubTrade("");
+    setAddSubRetention("10");
+    setAddSubLoading(false);
+    setAddSubSuccess(null);
+    setAddSubCopied(false);
+    setAddSubNewResult(null);
+  };
+
+  const handleAddSubContactSelect = async (subId: string, companyName: string) => {
+    if (selectedProjectIsConstruction) {
+      setAddSubSelected({ subId, companyName });
+      setAddSubStep("contract");
+    } else {
+      setAddSubLoading(true);
+      try {
+        await inviteContactToProject.mutateAsync({ subId, projectId: addSubProjectId });
+        queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+        setAddSubSuccess({ companyName, projectName: selectedProject?.name ?? "" });
+      } catch (err: any) {
+        toast.error(err?.data?.error ?? "Failed to add to project");
+      } finally {
+        setAddSubLoading(false);
+      }
+    }
+  };
+
+  const handleAddSubNewNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addSubEmail.trim() || !addSubCompanyName.trim()) return;
+    if (selectedProjectIsConstruction) {
+      setAddSubSelected({ email: addSubEmail.trim(), companyName: addSubCompanyName.trim() });
+      setAddSubStep("contract");
+    } else {
+      handleAddSubInviteNew();
+    }
+  };
+
+  const handleAddSubInviteNew = async () => {
+    setAddSubLoading(true);
+    try {
+      const result = await inviteSub.mutateAsync({ projectId: addSubProjectId, data: { email: addSubEmail, companyName: addSubCompanyName } });
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+      if ((result as any).isNewUser && (result as any).temporaryPassword) {
+        setAddSubNewResult({ email: addSubEmail, temporaryPassword: (result as any).temporaryPassword });
+      } else {
+        setAddSubSuccess({ companyName: addSubCompanyName, projectName: selectedProject?.name ?? "" });
+      }
+    } catch (err: any) {
+      toast.error(err?.data?.error || err?.message || "Failed to invite subcontractor");
+    } finally {
+      setAddSubLoading(false);
+    }
+  };
+
+  const handleAddSubDirectContract = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addSubSelected) return;
+    const amount = parseFloat(addSubAmount.replace(/[$,]/g, ""));
+    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid contract amount");
+    setAddSubLoading(true);
+    try {
+      const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${BASE}/api/projects/${addSubProjectId}/subcontracts/direct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          subId: addSubSelected.subId,
+          email: addSubSelected.email,
+          companyName: addSubSelected.companyName,
+          baseContractAmount: amount,
+          tradeCategory: addSubTrade.trim() || undefined,
+          retentionPercentage: Number(addSubRetention) || 10,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to create subcontract");
+      }
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+      setAddSubSuccess({ companyName: addSubSelected.companyName, projectName: selectedProject?.name ?? "" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create subcontract");
+    } finally {
+      setAddSubLoading(false);
+    }
+  };
 
   const { data: archivedProjects = [], refetch: refetchArchived } = useQuery({
     queryKey: ["archived-projects", archiveSearch],
@@ -197,6 +321,13 @@ export default function Dashboard() {
               <ShieldAlert className="h-4 w-4" />
               {insuranceAlerts!.expiringSoon} Insurance Expiring Soon
             </Badge>
+          )}
+          {isGC && activeProjects.length > 0 && (
+            <Button variant="outline" onClick={() => setIsAddSubOpen(true)} className="gap-2 min-h-[44px]">
+              <UserPlus className="h-5 w-5" />
+              <span className="hidden sm:inline">Add Subcontractor</span>
+              <span className="sm:hidden">Add Sub</span>
+            </Button>
           )}
           {isOwner && (
             <Button onClick={() => setIsCreateOpen(true)} className="gap-2 min-h-[44px]">
@@ -501,6 +632,249 @@ export default function Dashboard() {
         limitMessage={paywallMessage}
         suggestedPlanName={paywallSuggestedPlan}
       />
+
+      {/* Add Subcontractor from Dashboard */}
+      <Dialog
+        open={isAddSubOpen}
+        onOpenChange={(open) => { if (!open) handleAddSubClose(); }}
+        title={
+          addSubSuccess ? "Subcontractor Added!" :
+          addSubNewResult ? "Subcontractor Invited" :
+          addSubStep === "contract" ? `Contract Details — ${addSubSelected?.companyName}` :
+          addSubStep === "sub" ? `Add Sub to ${selectedProject?.name}` :
+          "Add Subcontractor"
+        }
+        description={
+          addSubStep === "project" ? "Choose which project to add the subcontractor to." :
+          addSubStep === "contract" ? `${selectedProject?.name} · In Construction` :
+          selectedProjectIsConstruction ? "Project is in Construction — you'll set a contract amount next." :
+          undefined
+        }
+      >
+        {/* ─── SUCCESS ─── */}
+        {addSubSuccess ? (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
+              <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-green-800 dark:text-green-300">{addSubSuccess.companyName} added to {addSubSuccess.projectName}</p>
+                <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">
+                  {selectedProjectIsConstruction
+                    ? "Subcontract created — they can now submit invoices."
+                    : "They'll be notified and can submit a bid."}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 flex-col-reverse sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => { setAddSubSuccess(null); setAddSubStep("project"); setAddSubProjectId(""); setAddSubTab("contact"); setAddSubContactSearch(""); setAddSubEmail(""); setAddSubCompanyName(""); setAddSubSelected(null); setAddSubAmount(""); }} className="min-h-[44px]">Add Another</Button>
+              <Button onClick={handleAddSubClose} className="min-h-[44px]">Done</Button>
+            </div>
+          </div>
+
+        /* ─── NEW USER CREDENTIALS ─── */
+        ) : addSubNewResult ? (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
+                <KeyRound className="h-4 w-4" />
+                Account created — added to {selectedProject?.name}
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Login email:</span>
+                  <span className="font-mono font-medium">{addSubNewResult.email}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Temp password:</span>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono font-bold text-base bg-background border border-border px-2 py-0.5 rounded-md">
+                      {addSubNewResult.temporaryPassword}
+                    </code>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => {
+                      navigator.clipboard.writeText(addSubNewResult!.temporaryPassword);
+                      setAddSubCopied(true);
+                      setTimeout(() => setAddSubCopied(false), 2000);
+                    }}>
+                      {addSubCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleAddSubClose} className="min-h-[44px]">Done</Button>
+            </div>
+          </div>
+
+        /* ─── STEP 1: pick project ─── */
+        ) : addSubStep === "project" ? (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-sm font-semibold mb-2 block">Select Project</label>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {activeProjects.map((p: any) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => { setAddSubProjectId(p.id); setAddSubStep("sub"); }}
+                    className="w-full flex items-center justify-between gap-3 p-3.5 rounded-xl border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-left min-h-[56px]"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{(p as any).address || "No address"}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${p.status === "CONSTRUCTION" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400"}`}>
+                      {p.status === "CONSTRUCTION" ? "In Construction" : "Bidding"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" variant="ghost" onClick={handleAddSubClose} className="min-h-[44px]">Cancel</Button>
+            </div>
+          </div>
+
+        /* ─── STEP 2: contract details (construction only) ─── */
+        ) : addSubStep === "contract" ? (
+          <form onSubmit={handleAddSubDirectContract} className="mt-4 space-y-4">
+            <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
+                {addSubSelected?.companyName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{addSubSelected?.companyName}</p>
+                <p className="text-xs text-muted-foreground">Will be added to {selectedProject?.name}</p>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-semibold mb-1 block">Contract Amount *</label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                required
+                placeholder="$85,000"
+                value={addSubAmount}
+                onChange={e => setAddSubAmount(e.target.value)}
+                className="text-lg font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-semibold mb-1 block">Trade Category</label>
+                <select
+                  value={addSubTrade}
+                  onChange={e => setAddSubTrade(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm min-h-[44px]"
+                >
+                  <option value="">Select…</option>
+                  {ADD_SUB_TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold mb-1 block">Retention %</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="15"
+                  step="0.5"
+                  value={addSubRetention}
+                  onChange={e => setAddSubRetention(e.target.value)}
+                  placeholder="10"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
+              <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("sub")}>← Back</Button>
+              <Button type="submit" isLoading={addSubLoading} className="min-h-[44px] px-6">Create Subcontract</Button>
+            </div>
+          </form>
+
+        /* ─── STEP 2: select sub (contact book or new) ─── */
+        ) : (
+          <div className="mt-4">
+            {selectedProjectIsConstruction && (
+              <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                In Construction — you'll enter the contract amount after selecting.
+              </div>
+            )}
+            <div className="flex rounded-xl border border-border overflow-hidden mb-4">
+              <button type="button" className={`flex-1 py-2.5 text-sm font-medium transition-colors ${addSubTab === "contact" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`} onClick={() => setAddSubTab("contact")}>
+                From Contact Book
+              </button>
+              <button type="button" className={`flex-1 py-2.5 text-sm font-medium transition-colors ${addSubTab === "new" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`} onClick={() => setAddSubTab("new")}>
+                Invite New Sub
+              </button>
+            </div>
+
+            {addSubTab === "contact" ? (
+              <div className="space-y-3">
+                <Input placeholder="Search contacts…" value={addSubContactSearch} onChange={e => setAddSubContactSearch(e.target.value)} />
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {contacts.filter((c: any) =>
+                    c.sub.companyName.toLowerCase().includes(addSubContactSearch.toLowerCase()) ||
+                    c.sub.email.toLowerCase().includes(addSubContactSearch.toLowerCase())
+                  ).length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      {contacts.length === 0 ? "Contact book is empty. Use 'Invite New Sub' instead." : "No contacts match your search."}
+                    </p>
+                  ) : contacts
+                    .filter((c: any) =>
+                      c.sub.companyName.toLowerCase().includes(addSubContactSearch.toLowerCase()) ||
+                      c.sub.email.toLowerCase().includes(addSubContactSearch.toLowerCase())
+                    )
+                    .map((contact: any) => {
+                      const alreadyMember = selectedProject?.members?.some((m: any) => m.id === contact.subId);
+                      const hasSubcontract = selectedProjectIsConstruction && selectedProject?.subcontracts?.some((s: any) => s.subId === contact.subId);
+                      const disabled = selectedProjectIsConstruction ? hasSubcontract : alreadyMember;
+                      return (
+                        <div key={contact.subId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
+                            {contact.sub.companyName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm truncate">{contact.sub.companyName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{contact.subProfile?.trade ?? contact.sub.email}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={disabled ? "outline" : "default"}
+                            disabled={disabled || addSubLoading}
+                            onClick={() => !disabled && handleAddSubContactSelect(contact.subId, contact.sub.companyName)}
+                          >
+                            {disabled ? (selectedProjectIsConstruction ? "Active" : "Added") : selectedProjectIsConstruction ? "Select →" : "Add"}
+                          </Button>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+                <div className="flex justify-between pt-1">
+                  <Button type="button" variant="ghost" onClick={() => setAddSubStep("project")}>← Back</Button>
+                  <Button type="button" variant="ghost" onClick={handleAddSubClose}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleAddSubNewNext} className="space-y-4">
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Email Address</label>
+                  <Input type="email" required placeholder="sub@example.com" value={addSubEmail} onChange={e => setAddSubEmail(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Company Name</label>
+                  <Input type="text" required placeholder="ABC Electric LLC" value={addSubCompanyName} onChange={e => setAddSubCompanyName(e.target.value)} />
+                </div>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
+                  <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("project")}>← Back</Button>
+                  <Button type="submit" isLoading={addSubLoading} className="min-h-[44px]">
+                    {selectedProjectIsConstruction ? "Next — Enter Contract Amount →" : "Add Subcontractor"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </Dialog>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project" description="Add details about your project. Only the name is required.">
         <form onSubmit={handleCreate} className="space-y-4 mt-2">
