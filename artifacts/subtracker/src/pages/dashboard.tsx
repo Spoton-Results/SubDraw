@@ -25,6 +25,7 @@ export default function Dashboard() {
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
   const isGC = user?.role === "GC";
+  const isOwner = isGC && (user as any)?.gcTeamRole !== "project_manager";
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
 
   usePageTitle("Projects");
@@ -46,7 +47,7 @@ export default function Dashboard() {
   const { data: subStatus } = useQuery({
     queryKey: ["subscription-status"],
     queryFn: getSubscriptionStatus,
-    enabled: isGC,
+    enabled: isOwner,
   });
 
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -197,7 +198,7 @@ export default function Dashboard() {
               {insuranceAlerts!.expiringSoon} Insurance Expiring Soon
             </Badge>
           )}
-          {isGC && (
+          {isOwner && (
             <Button onClick={() => setIsCreateOpen(true)} className="gap-2 min-h-[44px]">
               <Plus className="h-5 w-5" />
               <span className="hidden sm:inline">New Project</span>

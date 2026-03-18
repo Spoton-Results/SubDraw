@@ -10,6 +10,7 @@ import storageRouter from "./storage.js";
 import contactsRouter from "./contacts.js";
 import profileRouter from "./profile.js";
 import stripeRouter from "./stripe.js";
+import teamRouter from "./team.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/storage", storageRouter);
 router.use("/contacts", contactsRouter);
 router.use("/profile", profileRouter);
 router.use("/stripe", stripeRouter);
+router.use("/team", teamRouter);
 
 export default router;

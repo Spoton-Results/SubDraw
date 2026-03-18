@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
+import { requireAuth, requireGCOwner, requireGCOwner } from "../middlewares/requireAuth.js";
 import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import {
   getSubscriptionForUser,
@@ -25,7 +25,7 @@ function getAppUrl(req: any) {
 
 // ── GET /billing ─────────────────────────────────────────────────────────────
 
-router.get("/billing", requireAuth, requireGC, async (req, res) => {
+router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
 
   if (user.isDemo) {
@@ -63,7 +63,7 @@ router.get("/billing", requireAuth, requireGC, async (req, res) => {
 
 // ── POST /checkout ────────────────────────────────────────────────────────────
 
-router.post("/checkout", requireAuth, requireGC, async (req, res) => {
+router.post("/checkout", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const { planName } = req.body;
 
@@ -102,7 +102,7 @@ router.post("/checkout", requireAuth, requireGC, async (req, res) => {
 
 // ── POST /upgrade ─────────────────────────────────────────────────────────────
 
-router.post("/upgrade", requireAuth, requireGC, async (req, res) => {
+router.post("/upgrade", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const { planName } = req.body;
 
@@ -137,7 +137,7 @@ router.post("/upgrade", requireAuth, requireGC, async (req, res) => {
 
 // ── POST /cancel-subscription ─────────────────────────────────────────────────
 
-router.post("/cancel-subscription", requireAuth, requireGC, async (req, res) => {
+router.post("/cancel-subscription", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
 
@@ -156,7 +156,7 @@ router.post("/cancel-subscription", requireAuth, requireGC, async (req, res) => 
 
 // ── POST /reactivate-subscription ────────────────────────────────────────────
 
-router.post("/reactivate-subscription", requireAuth, requireGC, async (req, res) => {
+router.post("/reactivate-subscription", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
 

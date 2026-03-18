@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getAuthUser } from "../lib/auth.js";
+import { getAuthUser, isGCOwner } from "../lib/auth.js";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const user = getAuthUser(req);
@@ -15,6 +15,20 @@ export function requireGC(req: Request, res: Response, next: NextFunction): void
   const user = (req as any).user;
   if (!user || user.role !== "GC") {
     res.status(403).json({ error: "Forbidden: GC only" });
+    return;
+  }
+  next();
+}
+
+/** Only the GC account owner (not Project Managers) may pass this middleware. */
+export function requireGCOwner(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as any).user;
+  if (!user || user.role !== "GC") {
+    res.status(403).json({ error: "Forbidden: GC only" });
+    return;
+  }
+  if (!isGCOwner(user)) {
+    res.status(403).json({ error: "Forbidden: only the account owner can perform this action" });
     return;
   }
   next();

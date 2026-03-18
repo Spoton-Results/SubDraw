@@ -19,12 +19,44 @@ export interface TokenPayload {
   email: string;
   role: string;
   companyName: string;
+  displayName?: string | null;
+  gcParentId?: string | null;
+  gcTeamRole?: string | null;
   isDemo?: boolean;
+}
+
+/** Returns the GC owner ID: if the user is a PM, this is their gcParentId; otherwise their own ID. */
+export function getEffectiveGcId(user: TokenPayload): string {
+  return user.gcParentId ?? user.id;
+}
+
+/** Returns true if this GC user is a Project Manager (not the account owner). */
+export function isProjectManager(user: TokenPayload): boolean {
+  return user.role === "GC" && user.gcTeamRole === "project_manager";
+}
+
+/** Returns true if this GC user is the account Owner (or a legacy GC with no gcTeamRole). */
+export function isGCOwner(user: TokenPayload): boolean {
+  return user.role === "GC" && (user.gcTeamRole === "owner" || user.gcTeamRole == null);
+}
+
+/** Returns the display name for activity logs: personal name for PMs, company name for owners/subs. */
+export function getActorName(user: TokenPayload): string {
+  return user.displayName || user.companyName;
 }
 
 export function generateToken(user: TokenPayload): string {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, companyName: user.companyName, isDemo: user.isDemo ?? false },
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      companyName: user.companyName,
+      displayName: user.displayName ?? null,
+      gcParentId: user.gcParentId ?? null,
+      gcTeamRole: user.gcTeamRole ?? null,
+      isDemo: user.isDemo ?? false,
+    },
     JWT_SECRET,
     { expiresIn: "7d" }
   );

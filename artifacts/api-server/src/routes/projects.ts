@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import archiver from "archiver";
-import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
-import { hashPassword } from "../lib/auth.js";
+import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
+import { hashPassword, getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js";
 import { sendInviteEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
@@ -113,10 +113,29 @@ router.get("/", requireAuth, async (req, res) => {
   let projects: any[];
 
   if (user.role === "GC") {
-    // Exclude archived projects from the main list
-    const gcProjects = await db.select().from(projectsTable)
-      .where(and(eq(projectsTable.gcId, user.id), isNull(projectsTable.archivedAt)));
-    projects = await Promise.all(gcProjects.map(async (p) => {
+    const effectiveGcId = getEffectiveGcId(user);
+
+    let gcProjectsList;
+    if (isProjectManager(user)) {
+      // PMs only see projects they are explicitly assigned to
+      const assignments = await db
+        .select({ projectId: gcProjectAssignmentsTable.projectId })
+        .from(gcProjectAssignmentsTable)
+        .where(eq(gcProjectAssignmentsTable.teamMemberUserId, user.id));
+      const assignedIds = assignments.map((a) => a.projectId);
+      if (assignedIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      gcProjectsList = await db.select().from(projectsTable)
+        .where(and(inArray(projectsTable.id, assignedIds), isNull(projectsTable.archivedAt)));
+    } else {
+      // Account owner sees all their projects
+      gcProjectsList = await db.select().from(projectsTable)
+        .where(and(eq(projectsTable.gcId, effectiveGcId), isNull(projectsTable.archivedAt)));
+    }
+
+    projects = await Promise.all(gcProjectsList.map(async (p) => {
       const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, p.gcId)).limit(1);
       const financialSummary = await getProjectFinancialSummary(p.id);
       return { ...p, gc, financialSummary };
@@ -143,10 +162,11 @@ router.get("/", requireAuth, async (req, res) => {
 // GC: get archived projects with optional search
 router.get("/archived", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const search = (req.query.search as string | undefined)?.trim() ?? "";
 
   let query = db.select().from(projectsTable)
-    .where(and(eq(projectsTable.gcId, user.id), isNotNull(projectsTable.archivedAt)));
+    .where(and(eq(projectsTable.gcId, effectiveGcId), isNotNull(projectsTable.archivedAt)));
 
   const archivedProjects = await query;
 
@@ -170,8 +190,9 @@ router.get("/archived", requireAuth, requireGC, async (req, res) => {
   res.json(result);
 });
 
-router.post("/", requireAuth, requireGC, async (req, res) => {
+router.post("/", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const { name, address, description, estimatedStartDate } = req.body;
   if (!name) {
     res.status(400).json({ error: "name is required" });
@@ -182,7 +203,7 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
     res.status(403).json({ error: "Demo accounts cannot create new projects. Sign up to create your own projects." });
     return;
   }
-  const planInfo = await getGCPlanInfo(user.id);
+  const planInfo = await getGCPlanInfo(effectiveGcId);
   // First project is always free
   if (planInfo.activeCount >= 1) {
     if (!planInfo.subscribed) {
@@ -208,18 +229,19 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
 
   const [project] = await db.insert(projectsTable).values({
     name,
-    gcId: user.id,
+    gcId: effectiveGcId,
     address: address || null,
     description: description || null,
     estimatedStartDate: estimatedStartDate || null,
   }).returning();
-  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+  const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, effectiveGcId)).limit(1);
   res.status(201).json({ ...project, gc });
 });
 
 router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => {
   const gcUser = (req as any).user;
-  const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, gcUser.id));
+  const effectiveGcId = getEffectiveGcId(gcUser);
+  const gcProjects = await db.select().from(projectsTable).where(eq(projectsTable.gcId, effectiveGcId));
   if (gcProjects.length === 0) { res.json([]); return; }
 
   const projectIds = gcProjects.map(p => p.id);
@@ -257,8 +279,9 @@ router.get("/:projectId", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  // Strip notes for non-GC users
-  if (user.role !== "GC" || user.id !== detail.gcId) {
+  const effectiveGcId = getEffectiveGcId(user);
+  // Strip notes for non-GC users; GC (owner or PM with access) gets full detail
+  if (user.role !== "GC" || effectiveGcId !== detail.gcId) {
     const { notes: _notes, ...rest } = detail as any;
     res.json(rest);
     return;
@@ -269,9 +292,10 @@ router.get("/:projectId", requireAuth, async (req, res) => {
 // GC: mark a CONSTRUCTION project as COMPLETE
 router.post("/:projectId/complete", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (project.status === "COMPLETE") { res.status(400).json({ error: "Project is already marked complete" }); return; }
   if (project.archivedAt) { res.status(400).json({ error: "Archived projects cannot be modified" }); return; }
   const [updated] = await db.update(projectsTable)
@@ -282,11 +306,12 @@ router.post("/:projectId/complete", requireAuth, requireGC, async (req, res) => 
 });
 
 // GC: archive a COMPLETE project
-router.post("/:projectId/archive", requireAuth, requireGC, async (req, res) => {
+router.post("/:projectId/archive", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (project.status !== "COMPLETE") {
     res.status(400).json({ error: "Only completed projects can be archived. Mark the project as complete first." });
     return;
@@ -303,11 +328,12 @@ router.post("/:projectId/archive", requireAuth, requireGC, async (req, res) => {
 });
 
 // GC: unarchive a project — moves it back to COMPLETE
-router.post("/:projectId/unarchive", requireAuth, requireGC, async (req, res) => {
+router.post("/:projectId/unarchive", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (!project.archivedAt) {
     res.status(400).json({ error: "Project is not archived" });
     return;
@@ -321,12 +347,13 @@ router.post("/:projectId/unarchive", requireAuth, requireGC, async (req, res) =>
 
 router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  if (project.gcId !== user.id) {
+  if (project.gcId !== effectiveGcId) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -398,10 +425,11 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
   await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
 
   const gcUser = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(gcUser);
   const existingContact = await db.select().from(gcContactsTable)
-    .where(and(eq(gcContactsTable.gcId, gcUser.id), eq(gcContactsTable.subId, invitedUser.id))).limit(1);
+    .where(and(eq(gcContactsTable.gcId, effectiveGcId), eq(gcContactsTable.subId, invitedUser.id))).limit(1);
   if (existingContact.length === 0) {
-    await db.insert(gcContactsTable).values({ gcId: gcUser.id, subId: invitedUser.id }).onConflictDoNothing();
+    await db.insert(gcContactsTable).values({ gcId: effectiveGcId, subId: invitedUser.id }).onConflictDoNothing();
   }
 
   if (isNewUser && temporaryPassword) {
@@ -424,13 +452,14 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
 router.delete("/:projectId/members/:userId", requireAuth, requireGC, async (req, res) => {
   const { projectId, userId } = req.params;
   const gcUser = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(gcUser);
 
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  if (project.gcId !== gcUser.id) {
+  if (project.gcId !== effectiveGcId) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }

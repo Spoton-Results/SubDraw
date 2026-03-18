@@ -519,6 +519,29 @@ export async function sendInsuranceUrgentExpiryEmail(opts: {
 }
 
 // ─── 16. Password reset email ──────────────────────────────────────────────────
+
+// ─── 17. Team member invite ────────────────────────────────────────────────────
+export async function sendTeamMemberInviteEmail(opts: {
+  toEmail: string;
+  fullName: string;
+  companyName: string;
+  tempPassword: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading(`You've been added to the ${opts.companyName} team`)}
+    ${subtext(`Hi <strong>${opts.fullName}</strong>, you have been added to the <strong>${opts.companyName}</strong> team on SubTracker. Use the credentials below to log in.`)}
+    ${infoBox([
+      { label: "Login Email", value: opts.toEmail },
+      { label: "Temporary Password", value: `<code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:15px;font-family:monospace;">${opts.tempPassword}</code>` },
+      { label: "Company", value: opts.companyName },
+    ])}
+    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">You will be asked to set a new password when you first log in.</p>
+    ${ctaButton("Log in to SubTracker", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `You have been added to ${opts.companyName} team on SubTracker`, html);
+}
+
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   companyName: string;

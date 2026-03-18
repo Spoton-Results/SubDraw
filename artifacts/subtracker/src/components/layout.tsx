@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import {
@@ -21,10 +21,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const logout = useLogout();
 
+  const isOwner = user?.role === "GC" && (user as any).gcTeamRole !== "project_manager";
+  const isPM = user?.role === "GC" && (user as any).gcTeamRole === "project_manager";
+  const displayName = isPM ? ((user as any).displayName || user?.companyName) : user?.companyName;
+
   const { data: subStatus } = useQuery({
     queryKey: ["subscription-status"],
     queryFn: getSubscriptionStatus,
-    enabled: user?.role === "GC",
+    enabled: isOwner,
     staleTime: 60_000,
   });
 
@@ -54,7 +58,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Allow access to /billing so they can manage/reactivate a subscription.
   // Never show the gate to demo accounts.
   const showTrialGate =
-    user.role === "GC" &&
+    isOwner &&
     !(user as any).isDemo &&
     subStatus?.trialExpired === true &&
     !subStatus?.subscribed &&
@@ -100,24 +104,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-3 px-2">Menu</div>
           <nav className="space-y-1">
             {navItem("/", <LayoutDashboard className="h-5 w-5" />, "Projects")}
-            {user.role === "GC" && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
+            {isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
-            {user.role === "GC" && navItem("/billing", <CreditCard className="h-5 w-5" />, "Billing")}
+            {isOwner && navItem("/team", <Users className="h-5 w-5" />, "Team")}
+            {isOwner && navItem("/billing", <CreditCard className="h-5 w-5" />, "Billing")}
           </nav>
         </div>
 
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3 px-2 mb-4">
             <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-base shrink-0">
-              {user.companyName.charAt(0).toUpperCase()}
+              {(displayName || user.companyName).charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="font-semibold text-sm block truncate">{user.companyName}</span>
+              <span className="font-semibold text-sm block truncate">{displayName}</span>
               <span className="text-xs text-muted-foreground block truncate">{user.email}</span>
             </div>
             <Badge variant={user.role === "GC" ? "default" : "secondary"} className="text-[10px] shrink-0">
-              {user.role}
+              {isPM ? "PM" : user.role}
             </Badge>
           </div>
           <button
@@ -144,11 +149,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 hover:bg-secondary rounded-xl px-2 py-1.5 transition-colors min-h-[44px]">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                  {user.companyName.charAt(0).toUpperCase()}
+                  {(displayName || user.companyName).charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-semibold leading-tight">{user.companyName}</span>
-                  <span className="text-xs text-muted-foreground leading-tight">{user.role}</span>
+                  <span className="text-sm font-semibold leading-tight">{displayName}</span>
+                  <span className="text-xs text-muted-foreground leading-tight">{isPM ? "Project Manager" : user.role}</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
               </button>
@@ -160,7 +165,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Account Settings
                 </Link>
               </DropdownMenuItem>
-              {user.role === "GC" && (
+              {isOwner && (
+                <DropdownMenuItem asChild>
+                  <Link href="/team" className="flex items-center gap-2 cursor-pointer">
+                    <Users className="h-4 w-4" />
+                    Team
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {isOwner && (
                 <DropdownMenuItem asChild>
                   <Link href="/billing" className="flex items-center gap-2 cursor-pointer">
                     <CreditCard className="h-4 w-4" />
@@ -212,7 +225,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <LayoutDashboard className={`h-5 w-5 ${isActive("/") ? "text-primary" : ""}`} />
           Projects
         </Link>
-        {user.role === "GC" && (
+        {isOwner && (
           <Link
             href="/contacts"
             className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
@@ -221,6 +234,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <BookUser className={`h-5 w-5 ${isActive("/contacts") ? "text-primary" : ""}`} />
             Contacts
+          </Link>
+        )}
+        {isOwner && (
+          <Link
+            href="/team"
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+              isActive("/team") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <Users className={`h-5 w-5 ${isActive("/team") ? "text-primary" : ""}`} />
+            Team
           </Link>
         )}
         <Link

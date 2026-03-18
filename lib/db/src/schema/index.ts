@@ -4,3 +4,4 @@ export * from "./bids";
 export * from "./subcontracts";
 export * from "./plan-files";
 export * from "./contacts";
+export * from "./gc-team";

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
+import { getEffectiveGcId, getActorName } from "../lib/auth.js";
 import {
   sendChangeOrderCreatedEmail,
   sendChangeOrderSubmittedBySubEmail,
@@ -90,13 +91,27 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
   };
 }
 
-async function canAccessSubcontract(userId: string, userRole: string, subcontractId: string): Promise<boolean> {
+async function canAccessSubcontract(user: any, subcontractId: string): Promise<boolean> {
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) return false;
-  if (userRole === "SUB") return sc.subId === userId;
-  if (userRole === "GC") {
+  if (user.role === "SUB") return sc.subId === user.id;
+  if (user.role === "GC") {
+    const effectiveGcId = getEffectiveGcId(user);
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
-    return project?.gcId === userId;
+    if (!project || project.gcId !== effectiveGcId) return false;
+    // If PM, also check they are assigned to this project
+    if (user.gcParentId) {
+      const [assignment] = await db
+        .select()
+        .from(gcProjectAssignmentsTable)
+        .where(and(
+          eq(gcProjectAssignmentsTable.projectId, sc.projectId),
+          eq(gcProjectAssignmentsTable.teamMemberUserId, user.id)
+        ))
+        .limit(1);
+      return !!assignment;
+    }
+    return true;
   }
   return false;
 }
@@ -171,7 +186,7 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
   const { subcontractId } = req.params;
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
-  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+  if (!await canAccessSubcontract(user, subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   const base = await getSubcontractWithRelations(sc);
@@ -184,7 +199,7 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
 
 router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+  if (!await canAccessSubcontract(user, req.params.subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   const logs = await db
@@ -197,7 +212,7 @@ router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
 
 router.get("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+  if (!await canAccessSubcontract(user, req.params.subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, req.params.subcontractId));
@@ -211,7 +226,7 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     res.status(400).json({ error: "description and amount are required" });
     return;
   }
-  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+  if (!await canAccessSubcontract(user, req.params.subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   if (await isSubcontractProjectArchived(req.params.subcontractId)) {
@@ -233,7 +248,7 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     req.params.subcontractId,
     "CO_CREATED",
     `Change order "${description}" for $${Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2 })} created`,
-    user.role === "GC" ? sc.project.gc.companyName : sc.sub.companyName,
+    user.role === "GC" ? getActorName(user) : sc.sub.companyName,
     user.role
   );
 
@@ -325,7 +340,7 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
 
 router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  if (!await canAccessSubcontract(user.id, user.role, req.params.subcontractId)) {
+  if (!await canAccessSubcontract(user, req.params.subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   const invs = await db.select().from(invoicesTable).where(eq(invoicesTable.subcontractId, req.params.subcontractId));
@@ -335,7 +350,7 @@ router.get("/:subcontractId/invoices", requireAuth, async (req, res) => {
 router.get("/:subcontractId/invoices/:invoiceId/pdf", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { subcontractId, invoiceId } = req.params;
-  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+  if (!await canAccessSubcontract(user, subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, invoiceId)).limit(1);
@@ -364,7 +379,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     res.status(400).json({ error: "invoiceNumber is required" });
     return;
   }
-  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+  if (!await canAccessSubcontract(user, subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
   if (await isSubcontractProjectArchived(subcontractId)) {
@@ -395,7 +410,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const scWithRelations = await getSubcontractWithRelations(sc);
   const appUrl = getAppUrl(req);
 
-  const actorName = user.role === "GC" ? scWithRelations.project.gc.companyName : scWithRelations.sub.companyName;
+  const actorName = user.role === "GC" ? getActorName(user) : scWithRelations.sub.companyName;
   const flagNote = status === "FLAGGED" ? " (flagged — exceeds contract balance)" : "";
   await logActivity(
     subcontractId,
@@ -470,6 +485,7 @@ router.delete("/:subcontractId/invoices/:invoiceId", requireAuth, requireSub, as
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
   const { subcontractId, invoiceId } = req.params;
 
   // Load invoice and subcontract first to compute retention
@@ -494,7 +510,7 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
     subcontractId,
     "INVOICE_APPROVED",
     `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} approved`,
-    sc.project.gc.companyName,
+    getActorName(user),
     "GC"
   );
 
@@ -522,6 +538,7 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
   const [invoice] = await db.update(invoicesTable).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
 
   const sc = await getSubcontractWithRelations(
@@ -532,7 +549,7 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
     req.params.subcontractId,
     "INVOICE_REJECTED",
     `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} rejected`,
-    sc.project.gc.companyName,
+    getActorName(user),
     "GC"
   );
 
@@ -549,6 +566,7 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
 });
 
 router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
   const { subcontractId, invoiceId } = req.params;
   const { overrideReason } = req.body;
   if (!overrideReason) {
@@ -575,7 +593,7 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
     subcontractId,
     "INVOICE_OVERRIDDEN",
     `Invoice #${invoice.invoiceNumber} overridden and approved — ${overrideReason}`,
-    sc.project.gc.companyName,
+    getActorName(user),
     "GC"
   );
 
@@ -629,7 +647,7 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
 
   const rawSc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
   const sc = await getSubcontractWithRelations(rawSc);
-  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, gcUser.companyName, "GC");
+  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, getActorName(gcUser), "GC");
 
   sendPaymentRecordedEmail({
     toEmail: sc.sub.email,
@@ -705,7 +723,7 @@ router.get("/:subcontractId/invoices/:invoiceId/lien-waiver/pdf", requireAuth, a
   const { subcontractId, invoiceId } = req.params;
   const user = (req as any).user;
 
-  if (!await canAccessSubcontract(user.id, user.role, subcontractId)) {
+  if (!await canAccessSubcontract(user, subcontractId)) {
     res.status(403).json({ error: "Forbidden" }); return;
   }
 
@@ -875,7 +893,7 @@ router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res)
     subcontractId,
     "INSURANCE_UPDATED",
     `Insurance certificate updated — ${insuranceCompany ?? "N/A"} | Expires: ${expirationDate ?? "N/A"}`,
-    scWithRelations.project.gc.companyName,
+    getActorName(user),
     "GC"
   );
 
@@ -890,9 +908,9 @@ router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
 
-  // Verify GC owns the project
+  // Verify GC (or PM on behalf of GC) owns the project
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
-  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   if (project.status !== "CLOSED") {
     res.status(400).json({ error: "Retention can only be released when the project is CLOSED." });
@@ -933,7 +951,7 @@ router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (
     subcontractId,
     "RETENTION_RELEASED",
     `Retention balance of $${scoreboard.retentionBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })} released — Invoice #${invoiceNumber} created`,
-    scWithRelations.project.gc.companyName,
+    getActorName(user),
     "GC"
   );
 

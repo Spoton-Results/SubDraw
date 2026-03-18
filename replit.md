@@ -38,7 +38,8 @@ artifacts-monorepo/
 
 ## Database Schema (PostgreSQL)
 
-- `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires, `isDemo` boolean)
+- `users` — GC and SUB accounts (role, companyName, passwordHash, passwordResetToken, passwordResetExpires, `isDemo` boolean, `displayName` for PMs, `gcParentId` FK to owner userId for team members, `gcTeamRole`: "owner" | "project_manager" for GC team members)
+- `gc_project_assignments` — Maps GC team members (PMs) to specific projects they can access: (teamMemberUserId, projectId)
 - `projects` — GC creates, status: BIDDING | ACTIVE | CLOSED; optional fields: address, description, estimatedStartDate (text), notes (GC-only, stripped from API response for non-GC users)
 - `project_members` — Which subs are invited to a project
 - `bids` — Subs submit bids; GC awards one → creates a subcontract
@@ -53,7 +54,13 @@ artifacts-monorepo/
 
 - Cookie-based JWT auth via `/api/auth/*` routes
 - bcryptjs password hashing
-- `requireAuth`, `requireGC`, `requireSub` middleware in `artifacts/api-server/src/middlewares/requireAuth.ts`
+- `requireAuth`, `requireGC`, `requireSub`, `requireGCOwner` middleware in `artifacts/api-server/src/middlewares/requireAuth.ts`
+  - `requireGCOwner` — blocks GC team members (PMs) from owner-only routes (billing, team management, project creation, etc.)
+- Auth helpers in `artifacts/api-server/src/lib/auth.ts`:
+  - `getEffectiveGcId(user)` — returns owner's userId for PMs, own userId for owners
+  - `isProjectManager(user)` — returns true for PM team members
+  - `isGCOwner(user)` — returns true for GC owners (not PMs)
+  - `getActorName(user)` — returns `displayName` for PMs, `companyName` for owners (used in activity logs)
 - Password reset: `POST /auth/forgot-password` → generates token + sends email; `POST /auth/reset-password` → verifies token, sets new password
 - Profile update: `PATCH /auth/update-profile` → updates companyName
 - Force-change flow: `mustChangePassword` flag on users; `ProtectedRoute` renders inline `<ChangePassword>` if set
@@ -86,13 +93,17 @@ Change order flow: GC creates (status: PENDING_GC) → Sub approves/rejects (`re
 
 - `/login` — Login
 - `/register` — Register (GC or SUB)
-- `/` — Dashboard (projects list)
-- `/projects/new` — Create project (GC only)
+- `/` — Dashboard (projects list; "New Project" button hidden from PMs)
 - `/projects/:id` — Project detail (members, bids, subcontracts)
 - `/subcontracts/:id` — Subcontract detail (scoreboard, change orders, invoices)
-- `/contacts` — GC Contact Book (GC-only; lists all subs ever invited, with trade profiles, notes, and "Add to Project" action)
-- `/billing` — GC Billing page (GC-only; shows current plan, next billing date, cancel/reactivate, billing history; integrates with Stripe)
+- `/contacts` — GC Contact Book (owner-only; lists all subs ever invited)
+- `/team` — GC Team Management (owner-only; invite/edit/remove PMs, assign projects)
+- `/billing` — GC Billing page (owner-only; shows current plan, cancel/reactivate, billing history; Stripe)
 - Profile setup — inline in ProtectedRoute; shown to SUB users with `subProfile === null` before any protected page
+
+### ProtectedRoute Props
+- `gcOnly` — redirects non-GC users to `/`
+- `ownerOnly` — redirects GC team members (PMs) AND non-GC users to `/`
 
 ## API Routes
 
@@ -120,12 +131,19 @@ All prefixed with `/api`
 - `POST /contacts/:subId/invite/:projectId` — Add existing contact to a project
 - `GET /profile/me` — Get sub's own profile (SUB-only)
 - `PUT /profile/me` — Upsert sub's trade profile (SUB-only)
-- `GET /stripe/billing` — Get billing info (subscription + invoices) for GC
-- `POST /stripe/checkout` — Create Stripe checkout session (returns URL)
-- `POST /stripe/cancel-subscription` — Cancel subscription at period end
-- `POST /stripe/reactivate-subscription` — Reactivate a cancelling subscription
+- `GET /stripe/billing` — Get billing info (subscription + invoices) for GC owner only (`requireGCOwner`)
+- `POST /stripe/checkout` — Create Stripe checkout session (returns URL) — owner only
+- `POST /stripe/cancel-subscription` — Cancel subscription at period end — owner only
+- `POST /stripe/reactivate-subscription` — Reactivate a cancelling subscription — owner only
 - `GET /stripe/subscription-status` — Check if GC is subscribed (returns bypass response for demo accounts)
 - `POST /auth/demo-login` — Log in as demo GC or SUB (no password required; body: `{role: "GC"|"SUB"}`)
+- `GET /team` — List all GC team members with assigned projects (owner only)
+- `POST /team/invite` — Invite new PM: body `{email, fullName, gcTeamRole}` → creates user, sends email with temp password (owner only)
+- `PATCH /team/:memberId` — Update PM's name or role (owner only)
+- `DELETE /team/:memberId` — Remove PM and all their project assignments (owner only)
+- `GET /team/projects/:projectId/members` — List PMs assigned to a project (owner only)
+- `POST /team/projects/:projectId/assign` — Assign PM to a project; body: `{teamMemberUserId}` (owner only)
+- `DELETE /team/projects/:projectId/assign/:teamMemberUserId` — Unassign PM from a project (owner only)
 
 ## TypeScript & Composite Projects
 

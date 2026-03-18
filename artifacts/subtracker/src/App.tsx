@@ -18,6 +18,7 @@ import Account from "./pages/account";
 import Contacts from "./pages/contacts";
 import ProfileSetup from "./pages/profile-setup";
 import Billing from "./pages/billing";
+import Team from "./pages/team";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,7 +37,15 @@ function RedirectTo({ path }: { path: string }) {
   return null;
 }
 
-function ProtectedRoute({ component: Component, gcOnly }: { component: React.ComponentType; gcOnly?: boolean }) {
+function ProtectedRoute({
+  component: Component,
+  gcOnly,
+  ownerOnly,
+}: {
+  component: React.ComponentType;
+  gcOnly?: boolean;
+  ownerOnly?: boolean;
+}) {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
 
   if (isLoading) return null;
@@ -64,6 +73,9 @@ function ProtectedRoute({ component: Component, gcOnly }: { component: React.Com
 
   if (gcOnly && user.role !== "GC") return <RedirectTo path="/" />;
 
+  const isOwner = user.role === "GC" && (user as any).gcTeamRole !== "project_manager";
+  if (ownerOnly && !isOwner) return <RedirectTo path="/" />;
+
   return <Component />;
 }
 
@@ -76,8 +88,9 @@ function Router() {
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
       <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
-      <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} gcOnly />} />
-      <Route path="/billing" component={() => <ProtectedRoute component={Billing} gcOnly />} />
+      <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} ownerOnly />} />
+      <Route path="/team" component={() => <ProtectedRoute component={Team} ownerOnly />} />
+      <Route path="/billing" component={() => <ProtectedRoute component={Billing} ownerOnly />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />
