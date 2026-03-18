@@ -49,6 +49,8 @@ export interface InvoicePDFData {
     disputeReason?: string | null;
     retentionAmount?: number | null;
     isRetentionRelease?: boolean;
+    paymentTermsDays?: number;
+    paymentDueDate?: Date | string | null;
   };
   subcontract: {
     id: string;
@@ -174,11 +176,15 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     doc.fontSize(7).font("Helvetica-Bold").fillColor(MUTED).text("INVOICE DETAILS", detailLabelX, detailY, { characterSpacing: 1 });
     detailY += 12;
 
-    const metaRows = [
+    const paymentTermsLabel = `Net ${invoice.paymentTermsDays ?? 30}`;
+    const metaRows: [string, string][] = [
       ["Invoice Number:", `#${invoice.invoiceNumber}`],
       ["Date Issued:", formatDate(invoice.createdAt)],
-      ["Payment Terms:", "Net 30"],
+      ["Payment Terms:", paymentTermsLabel],
     ];
+    if (invoice.paymentDueDate) {
+      metaRows.push(["Payment Due:", formatDate(invoice.paymentDueDate)]);
+    }
 
     for (const [label, val] of metaRows) {
       doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(label, detailLabelX, detailY);
@@ -326,9 +332,13 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     }
 
     doc.fontSize(9).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.7)")
-      .text("Payment Terms", PAGE_W - MARGIN - 130, y + 12, { width: 120, align: "right" });
+      .text("Payment Terms", PAGE_W - MARGIN - 130, y + 10, { width: 120, align: "right" });
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#ffffff")
-      .text("Net 30", PAGE_W - MARGIN - 130, y + 26, { width: 120, align: "right" });
+      .text(paymentTermsLabel, PAGE_W - MARGIN - 130, y + 23, { width: 120, align: "right" });
+    if (invoice.paymentDueDate) {
+      doc.fontSize(8).font("Helvetica").fillColor("rgba(200,220,255,0.65)")
+        .text(`Due ${formatDate(invoice.paymentDueDate)}`, PAGE_W - MARGIN - 130, y + 39, { width: 120, align: "right" });
+    }
 
     y += amtBoxH + 16;
 

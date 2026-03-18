@@ -110,6 +110,8 @@ export default function SubcontractDetail() {
   const [signContractOpen, setSignContractOpen] = React.useState(false);
   const [signContractLoading, setSignContractLoading] = React.useState(false);
 
+  const [paymentTermsSaving, setPaymentTermsSaving] = React.useState(false);
+
   const [insDialogOpen, setInsDialogOpen] = React.useState(false);
   const [insCompany, setInsCompany] = React.useState("");
   const [insPolicy, setInsPolicy] = React.useState("");
@@ -138,6 +140,26 @@ export default function SubcontractDetail() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
     queryClient.invalidateQueries({ queryKey: getGetSubcontractActivityQueryKey(subcontractId) });
+  };
+
+  const handlePaymentTermsChange = async (newTerms: number) => {
+    setPaymentTermsSaving(true);
+    try {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/payment-terms`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentTermsDays: newTerms }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success(`Payment terms updated to Net ${newTerms}`);
+      invalidate();
+    } catch {
+      toast.error("Failed to update payment terms");
+    } finally {
+      setPaymentTermsSaving(false);
+    }
   };
 
   const handleMarkPaid = async (e: React.FormEvent) => {
@@ -467,6 +489,19 @@ export default function SubcontractDetail() {
     return <Badge variant="warning">Pending</Badge>;
   };
 
+  const getDueDateInfo = (paymentDueDate: string | Date | null | undefined): { label: string; className: string } | null => {
+    if (!paymentDueDate) return null;
+    const due = new Date(paymentDueDate);
+    const now = new Date();
+    const diffMs = due.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+    const label = `Due: ${format(due, "MMM d, yyyy")}`;
+    if (diffDays < 0) return { label: `Overdue: ${format(due, "MMM d, yyyy")}`, className: "text-red-600 dark:text-red-400 font-semibold" };
+    if (diffDays <= 7) return { label, className: "text-orange-600 dark:text-orange-400 font-semibold" };
+    if (diffDays <= 14) return { label, className: "text-amber-600 dark:text-amber-400 font-semibold" };
+    return { label, className: "text-muted-foreground" };
+  };
+
   const getActivityIcon = (type: string) => {
     if (type === "SUBCONTRACT_CREATED") return <FileSignature className="h-4 w-4 text-primary" />;
     if (type === "SUBCONTRACT_SIGNED") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
@@ -774,6 +809,41 @@ export default function SubcontractDetail() {
           )}
         </div>
       </div>
+
+      {/* PAYMENT TERMS SETTING — GC only */}
+      {isGC && (
+        <div className="mb-6 bg-card border border-border/50 rounded-2xl px-5 py-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Payment Terms</p>
+              <p className="text-xs text-muted-foreground">Net days applied to approved invoices</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {[15, 30, 45].map((terms) => {
+              const currentTerms = (sub as any).paymentTermsDays ?? 30;
+              const isActive = currentTerms === terms;
+              return (
+                <button
+                  key={terms}
+                  disabled={paymentTermsSaving}
+                  onClick={() => !isActive && handlePaymentTermsChange(terms)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-sm font-semibold border transition-all",
+                    isActive
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground",
+                    paymentTermsSaving && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  Net {terms}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* PROGRESS BAR */}
       <div className="bg-card border border-border/50 rounded-2xl p-5 mb-6 space-y-4 shadow-sm">
@@ -1168,7 +1238,44 @@ export default function SubcontractDetail() {
                         {inv.description && (
                           <p className="text-sm text-muted-foreground mt-1 truncate">{inv.description}</p>
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">{format(new Date(inv.createdAt), "MMM d, yyyy")}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <p className="text-xs text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</p>
+                          {(inv as any).paymentDueDate && ["APPROVED", "PAYMENT_UNCONFIRMED"].includes(inv.status) && (() => {
+                            const dueDateInfo = getDueDateInfo((inv as any).paymentDueDate);
+                            return dueDateInfo ? (
+                              <p className={cn("text-xs flex items-center gap-1", dueDateInfo.className)}>
+                                <CalendarDays className="h-3 w-3 shrink-0" />
+                                {dueDateInfo.label}
+                              </p>
+                            ) : null;
+                          })()}
+                        </div>
+                        {/* 7-day reminder banner for subs — approved invoice with due date within 7 days */}
+                        {!isGC && inv.status === "APPROVED" && (inv as any).paymentDueDate && (() => {
+                          const due = new Date((inv as any).paymentDueDate);
+                          const diffDays = Math.ceil((due.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+                          if (diffDays <= 7 && diffDays >= 0) {
+                            return (
+                              <div className="mt-2 flex items-start gap-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2">
+                                <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                                <p className="text-sm text-orange-700 dark:text-orange-300 font-semibold">
+                                  Payment due in {diffDays} day{diffDays !== 1 ? "s" : ""} — your GC has not yet recorded a payment.
+                                </p>
+                              </div>
+                            );
+                          }
+                          if (diffDays < 0) {
+                            return (
+                              <div className="mt-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                                <p className="text-sm text-red-700 dark:text-red-300 font-semibold">
+                                  Payment overdue — this invoice was due {format(due, "MMM d, yyyy")} with no payment recorded yet.
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                         {/* REJECTION REASON — shown in red to both GC and sub */}
                         {inv.status === "REJECTED" && (inv as any).rejectionReason && (
                           <div className="mt-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">

@@ -23,6 +23,7 @@ The project is built as a pnpm monorepo using Node.js 24 and TypeScript 5.9. The
 -   **Demo System:** Includes a fully functional demo environment with seeded data that resets daily, allowing users to explore the platform's capabilities without registration.
 -   **Free Trial:** Offers a 14-day free trial for GCs, providing full access to features before requiring a subscription.
 -   **Action Required Dashboard:** A consolidated action panel at the top of the GC dashboard aggregating all items needing attention across every active project — flagged invoices, pending approvals, disputed payments, past-due invoices, unsigned subcontracts, and expiring insurance. Groups items by urgency (URGENT/PENDING/UPCOMING) with direct clickable links to each item. Shows a zero-state green banner when all is clear.
+-   **Payment Terms & Due Dates:** Configurable Net 15/30/45 payment terms per subcontract (GC-only pill-button selector). Approved invoices automatically get a `paymentDueDate` computed as `approvedAt + paymentTermsDays`. Due dates are displayed inline in the invoice list with color-coded urgency (gray >14d, amber ≤14d, orange ≤7d, red overdue). Sub-facing 7-day and overdue reminder banners appear on approved invoices nearing or past due. PDF invoices display dynamic "Net X" and "Due [date]" in both the INVOICE DETAILS section and the Amount Due box.
 
 ## External Dependencies
 

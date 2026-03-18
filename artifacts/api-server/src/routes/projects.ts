@@ -365,10 +365,14 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
       });
     }
 
-    // URGENT: Approved invoices past Net-30 due date
+    // URGENT: Approved invoices past their payment due date
     if (inv.status === "APPROVED") {
-      const dueDate = new Date(inv.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-      if (dueDate < now) {
+      const paymentDueDate = (inv as any).paymentDueDate
+        ? new Date((inv as any).paymentDueDate)
+        : null;
+      if (paymentDueDate && paymentDueDate < now) {
+        const sc2 = scMap[inv.subcontractId];
+        const terms = sc2 ? ((sc2 as any).paymentTermsDays ?? 30) : 30;
         items.push({
           id: `pastdue-${inv.id}`,
           type: "PAST_DUE_INVOICE",
@@ -377,7 +381,7 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
           projectName: project.name,
           subcontractId: sc.id,
           subCompanyName: subName,
-          description: `Invoice #${inv.invoiceNumber} for ${subName} was approved but payment is overdue (Net 30)`,
+          description: `Invoice #${inv.invoiceNumber} for ${subName} was approved but payment is overdue (Net ${terms})`,
           amount: inv.amount,
           href,
         });

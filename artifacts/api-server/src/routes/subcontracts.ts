@@ -148,6 +148,8 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       disputeReason: invoice.disputeReason ?? null,
       retentionAmount: invoice.retentionAmount ?? null,
       isRetentionRelease: invoice.isRetentionRelease ?? false,
+      paymentTermsDays: sc.paymentTermsDays ?? 30,
+      paymentDueDate: invoice.paymentDueDate ?? null,
     },
     subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null, retentionPercentage: sc.retentionPercentage ?? 0 },
     project: {
@@ -210,6 +212,38 @@ router.patch("/:subcontractId/sign", requireAuth, requireSub, async (req, res) =
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
   await logActivity(subcontractId, "SUBCONTRACT_SIGNED", `Subcontract signed electronically by ${user.companyName}`, user.companyName, "SUB");
+  res.json(updated);
+});
+
+// GC: update payment terms (Net 15, 30, or 45)
+router.patch("/:subcontractId/payment-terms", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const { paymentTermsDays } = req.body;
+
+  if (![15, 30, 45].includes(Number(paymentTermsDays))) {
+    res.status(400).json({ error: "paymentTermsDays must be 15, 30, or 45" });
+    return;
+  }
+
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ paymentTermsDays: Number(paymentTermsDays), updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(
+    subcontractId,
+    "PAYMENT_TERMS_UPDATED",
+    `Payment terms updated to Net ${paymentTermsDays}`,
+    (user as any).companyName ?? "GC",
+    "GC"
+  );
+
   res.json(updated);
 });
 
@@ -514,8 +548,13 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
     ? Math.round(existingInv.amount * (retPct / 100) * 100) / 100
     : null;
 
+  // Compute payment due date based on subcontract payment terms
+  const paymentTermsDays = rawSc?.paymentTermsDays ?? 30;
+  const approvedAt = new Date();
+  const paymentDueDate = new Date(approvedAt.getTime() + paymentTermsDays * 24 * 60 * 60 * 1000);
+
   const [invoice] = await db.update(invoicesTable)
-    .set({ status: "APPROVED", retentionAmount: retentionAmt, updatedAt: new Date() })
+    .set({ status: "APPROVED", retentionAmount: retentionAmt, approvedAt, paymentDueDate, updatedAt: new Date() })
     .where(eq(invoicesTable.id, invoiceId))
     .returning();
 
@@ -608,8 +647,12 @@ router.post("/:subcontractId/invoices/:invoiceId/override", requireAuth, require
     ? Math.round(existingInv2.amount * (retPct2 / 100) * 100) / 100
     : null;
 
+  const overrideApprovedAt = new Date();
+  const overridePaymentTermsDays = rawSc?.paymentTermsDays ?? 30;
+  const overridePaymentDueDate = new Date(overrideApprovedAt.getTime() + overridePaymentTermsDays * 24 * 60 * 60 * 1000);
+
   const [invoice] = await db.update(invoicesTable)
-    .set({ status: "APPROVED", overrideReason, retentionAmount: retentionAmt2, updatedAt: new Date() })
+    .set({ status: "APPROVED", overrideReason, retentionAmount: retentionAmt2, approvedAt: overrideApprovedAt, paymentDueDate: overridePaymentDueDate, updatedAt: new Date() })
     .where(eq(invoicesTable.id, invoiceId))
     .returning();
 
