@@ -62,8 +62,17 @@ artifacts-monorepo/
   - `isGCOwner(user)` — returns true for GC owners (not PMs)
   - `getActorName(user)` — returns `displayName` for PMs, `companyName` for owners (used in activity logs)
 - Password reset: `POST /auth/forgot-password` → generates token + sends email; `POST /auth/reset-password` → verifies token, sets new password
+- Magic link: `POST /auth/magic-link/request` → creates 72-hour single-use token, sends email; `GET /auth/magic-link/verify?token=XXX` → validates, sets permanent cookie, redirects to app
+- Set password (no current password required): `POST /auth/set-password` — for magic-link-only users (passwordHash is non-bcrypt placeholder)
 - Profile update: `PATCH /auth/update-profile` → updates companyName
-- Force-change flow: `mustChangePassword` flag on users; `ProtectedRoute` renders inline `<ChangePassword>` if set
+
+**Permanent sessions**: JWT expiry set to 100 years; cookie maxAge set to 10 years. Sessions only invalidated by explicit logout or password change on another device.
+
+**Password change session invalidation**: `passwordChangedAt` timestamp on users table. `requireAuth` middleware does a fast DB query per request to check if the token was issued before `passwordChangedAt` — if so, returns 401 to force re-login on all other devices.
+
+**Magic-link-only users**: New subs invited via project invite, and new GC team members, get a random non-bcrypt `passwordHash` placeholder. `hasPassword` field (computed from hash prefix in `/api/auth/me`) tells the frontend whether to show "Set Password" or "Change Password" in Account Settings.
+
+**Invitation emails now use magic links**: Both `sendInviteEmail` and `sendTeamMemberInviteEmail` send a 72-hour magic link instead of a temporary password.
 
 ## Sub Privacy Model
 

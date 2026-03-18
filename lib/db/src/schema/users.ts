@@ -18,6 +18,7 @@ export const usersTable = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   trialStartedAt: timestamp("trial_started_at").defaultNow().notNull(),
   isDemo: boolean("is_demo").notNull().default(false),
+  passwordChangedAt: timestamp("password_changed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable, magicLinkTokensTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
+import crypto from "crypto";
 import archiver from "archiver";
 import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
-import { hashPassword, getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js";
-import { sendInviteEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
+import { getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js";
+import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 
@@ -401,21 +402,20 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
 
   let [invitedUser] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   let isNewUser = false;
-  let temporaryPassword: string | undefined;
 
   if (!invitedUser) {
     if (!companyName) {
       res.status(400).json({ error: "companyName is required for new subcontractors" });
       return;
     }
-    temporaryPassword = generateTempPassword();
-    const passwordHash = await hashPassword(temporaryPassword);
+    // New magic-link-only users get a random non-bcrypt placeholder — they can't log in with a password
+    const passwordHash = crypto.randomBytes(32).toString("hex");
     const [created] = await db.insert(usersTable).values({
       email,
       passwordHash,
       role: "SUB",
       companyName,
-      mustChangePassword: true,
+      mustChangePassword: false,
     }).returning();
     invitedUser = created;
     isNewUser = true;
@@ -444,20 +444,33 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
     await db.insert(gcContactsTable).values({ gcId: effectiveGcId, subId: invitedUser.id }).onConflictDoNothing();
   }
 
-  if (isNewUser && temporaryPassword) {
-    const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+  const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+
+  // Generate a magic link token for the invited user
+  const magicToken = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  await db.insert(magicLinkTokensTable).values({ userId: invitedUser.id, token: magicToken, expiresAt });
+  const magicUrl = `${appUrl}/api/auth/magic-link/verify?token=${magicToken}`;
+
+  if (isNewUser) {
     sendInviteEmail({
       toEmail: email,
-      temporaryPassword,
       projectName: project.name,
+      magicUrl,
       appUrl,
     }).catch((err) => console.error("[email] Failed to send invite email:", err));
+  } else {
+    sendAddedToProjectEmail({
+      toEmail: invitedUser.email,
+      subCompanyName: invitedUser.companyName,
+      projectName: project.name,
+      appUrl: magicUrl,
+    }).catch((err) => console.error("[email] Failed to send added-to-project email:", err));
   }
 
   res.status(201).json({
     message: isNewUser ? "Subcontractor account created and invited" : "Subcontractor invited",
     isNewUser,
-    ...(temporaryPassword ? { temporaryPassword } : {}),
   });
 });
 

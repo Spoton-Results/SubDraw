@@ -6,12 +6,19 @@ import type { Request, Response } from "express";
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-change-in-prod";
 const COOKIE_NAME = "auth_token";
 
+// Ten years in seconds — effectively permanent
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 10;
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
 export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch {
+    return false;
+  }
 }
 
 export interface TokenPayload {
@@ -23,6 +30,7 @@ export interface TokenPayload {
   gcParentId?: string | null;
   gcTeamRole?: string | null;
   isDemo?: boolean;
+  iat?: number;
 }
 
 /** Returns the GC owner ID: if the user is a PM, this is their gcParentId; otherwise their own ID. */
@@ -58,7 +66,7 @@ export function generateToken(user: TokenPayload): string {
       isDemo: user.isDemo ?? false,
     },
     JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: "100y" }
   );
 }
 
@@ -77,7 +85,7 @@ export function setAuthCookie(res: Response, token: string): void {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: COOKIE_MAX_AGE,
       path: "/",
     })
   );

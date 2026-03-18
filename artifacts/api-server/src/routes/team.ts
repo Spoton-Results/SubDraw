@@ -1,22 +1,13 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, gcProjectAssignmentsTable, projectsTable } from "@workspace/db/schema";
+import { usersTable, gcProjectAssignmentsTable, projectsTable, magicLinkTokensTable } from "@workspace/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
+import crypto from "crypto";
 import { requireAuth, requireGCOwner } from "../middlewares/requireAuth.js";
-import { hashPassword } from "../lib/auth.js";
 import { sendTeamMemberInviteEmail } from "../lib/email.js";
 import { getEffectiveGcId } from "../lib/auth.js";
 
 const router = Router();
-
-function generateTempPassword(length = 10): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let password = "";
-  for (let i = 0; i < length; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
-}
 
 // GET /team — list all team members for this GC account (owner only)
 router.get("/", requireAuth, requireGCOwner, async (req, res) => {
@@ -102,8 +93,8 @@ router.post("/invite", requireAuth, requireGCOwner, async (req, res) => {
     return;
   }
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await hashPassword(tempPassword);
+  // New team member uses a random non-bcrypt placeholder — they log in via magic link
+  const passwordHash = crypto.randomBytes(32).toString("hex");
 
   const [newMember] = await db
     .insert(usersTable)
@@ -115,16 +106,23 @@ router.post("/invite", requireAuth, requireGCOwner, async (req, res) => {
       displayName: fullName.trim(),
       gcParentId: user.id,
       gcTeamRole,
-      mustChangePassword: true,
+      mustChangePassword: false,
     })
     .returning();
 
   const appUrl = process.env.APP_URL || "https://subtrackers.replit.app";
+
+  // Generate a magic link for the new team member
+  const magicToken = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  await db.insert(magicLinkTokensTable).values({ userId: newMember.id, token: magicToken, expiresAt });
+  const magicUrl = `${appUrl}/api/auth/magic-link/verify?token=${magicToken}`;
+
   sendTeamMemberInviteEmail({
     toEmail: newMember.email,
     fullName: fullName.trim(),
     companyName: user.companyName,
-    tempPassword,
+    magicUrl,
     appUrl,
   }).catch((err) => console.error("[email] Failed to send team invite email:", err));
 

@@ -1,13 +1,35 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, subProfilesTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { usersTable, subProfilesTable, magicLinkTokensTable } from "@workspace/db/schema";
+import { eq, and, isNull, lt } from "drizzle-orm";
 import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { sendPasswordResetEmail } from "../lib/email.js";
+import { sendPasswordResetEmail, sendMagicLinkEmail } from "../lib/email.js";
 
 const router = Router();
+
+function generateMagicToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+async function createMagicToken(userId: string): Promise<string> {
+  // Clean up any expired unused tokens for this user first
+  await db
+    .delete(magicLinkTokensTable)
+    .where(
+      and(
+        eq(magicLinkTokensTable.userId, userId),
+        isNull(magicLinkTokensTable.usedAt),
+        lt(magicLinkTokensTable.expiresAt, new Date())
+      )
+    );
+
+  const token = generateMagicToken();
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+  await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
+  return token;
+}
 
 router.post("/register", async (req, res) => {
   const { email, password, role, companyName } = req.body;
@@ -72,7 +94,9 @@ router.get("/me", requireAuth, async (req, res) => {
     const [profile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, user.id)).limit(1);
     subProfile = profile ?? null;
   }
-  res.json({ ...safeUser, subProfile });
+  // hasPassword: true if the stored hash is a bcrypt hash
+  const hasPassword = user.passwordHash.startsWith("$2b$") || user.passwordHash.startsWith("$2a$");
+  res.json({ ...safeUser, subProfile, hasPassword });
 });
 
 router.post("/change-password", requireAuth, async (req, res) => {
@@ -101,16 +125,58 @@ router.post("/change-password", requireAuth, async (req, res) => {
   }
 
   const newHash = await hashPassword(newPassword);
+  const passwordChangedAt = new Date();
   const [updated] = await db
     .update(usersTable)
-    .set({ passwordHash: newHash, mustChangePassword: false, updatedAt: new Date() })
+    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id))
+    .returning();
+
+  // Issue a fresh token so the current session stays valid
+  const token = generateToken(updated);
+  setAuthCookie(res, token);
+
+  res.json({ message: "Password changed successfully" });
+});
+
+// Set password for users who don't have one (magic-link-only users)
+router.post("/set-password", requireAuth, async (req, res) => {
+  const userPayload = (req as any).user;
+  const { newPassword } = req.body;
+
+  if (!newPassword) {
+    res.status(400).json({ error: "newPassword is required" });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userPayload.id)).limit(1);
+  if (!user) {
+    res.status(401).json({ error: "User not found" });
+    return;
+  }
+
+  const hasExistingPassword = user.passwordHash.startsWith("$2b$") || user.passwordHash.startsWith("$2a$");
+  if (hasExistingPassword) {
+    res.status(400).json({ error: "You already have a password. Use Change Password instead." });
+    return;
+  }
+
+  const newHash = await hashPassword(newPassword);
+  const passwordChangedAt = new Date();
+  const [updated] = await db
+    .update(usersTable)
+    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, updatedAt: new Date() })
     .where(eq(usersTable.id, user.id))
     .returning();
 
   const token = generateToken(updated);
   setAuthCookie(res, token);
 
-  res.json({ message: "Password changed successfully" });
+  res.json({ message: "Password set successfully" });
 });
 
 router.patch("/update-profile", requireAuth, async (req, res) => {
@@ -149,6 +215,89 @@ router.post("/forgot-password", async (req, res) => {
     }).catch(err => console.error("[email] sendPasswordResetEmail failed:", err));
   }
   res.json({ message: "If that email exists, a reset link has been sent." });
+});
+
+// Request a magic login link — anyone can request one for their own email
+router.post("/magic-link/request", async (req, res) => {
+  const { email } = req.body;
+  // Always 200 to prevent email enumeration
+  if (!email) {
+    res.json({ message: "If that email is registered, a login link has been sent." });
+    return;
+  }
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, String(email).toLowerCase().trim()))
+    .limit(1);
+
+  if (user) {
+    const token = await createMagicToken(user.id);
+    const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
+    const magicUrl = `${appUrl}/api/auth/magic-link/verify?token=${token}`;
+    sendMagicLinkEmail({
+      toEmail: user.email,
+      companyName: user.companyName,
+      magicUrl,
+    }).catch(err => console.error("[email] sendMagicLinkEmail failed:", err));
+  }
+
+  res.json({ message: "If that email is registered, a login link has been sent." });
+});
+
+// Verify a magic link token — GET so it works as a direct email link
+router.get("/magic-link/verify", async (req, res) => {
+  const { token } = req.query;
+  const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
+
+  if (!token || typeof token !== "string") {
+    res.redirect(`${appUrl}/login?error=invalid_link`);
+    return;
+  }
+
+  const [record] = await db
+    .select()
+    .from(magicLinkTokensTable)
+    .where(eq(magicLinkTokensTable.token, token))
+    .limit(1);
+
+  if (!record) {
+    res.redirect(`${appUrl}/login?error=invalid_link`);
+    return;
+  }
+
+  if (record.usedAt) {
+    res.redirect(`${appUrl}/login?error=link_used`);
+    return;
+  }
+
+  if (record.expiresAt < new Date()) {
+    res.redirect(`${appUrl}/login?error=link_expired`);
+    return;
+  }
+
+  // Mark token as used
+  await db
+    .update(magicLinkTokensTable)
+    .set({ usedAt: new Date() })
+    .where(eq(magicLinkTokensTable.id, record.id));
+
+  // Load user and set permanent auth cookie
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, record.userId))
+    .limit(1);
+
+  if (!user) {
+    res.redirect(`${appUrl}/login?error=invalid_link`);
+    return;
+  }
+
+  const jwt = generateToken(user);
+  setAuthCookie(res, jwt);
+
+  res.redirect(`${appUrl}/`);
 });
 
 router.post("/demo-login", async (req, res) => {
@@ -190,11 +339,13 @@ router.post("/reset-password", async (req, res) => {
     return;
   }
   const newHash = await hashPassword(String(newPassword));
+  const passwordChangedAt = new Date();
   await db.update(usersTable).set({
     passwordHash: newHash,
     passwordResetToken: null,
     passwordResetExpires: null,
     mustChangePassword: false,
+    passwordChangedAt,
     updatedAt: new Date(),
   }).where(eq(usersTable.id, user.id));
   res.json({ message: "Password reset successfully. You can now log in with your new password." });

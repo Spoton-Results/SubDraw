@@ -138,23 +138,42 @@ function pdfAttachment(buffer: Buffer, invoiceNumber: string): Attachment {
   };
 }
 
+// ─── 0. Magic link login email ────────────────────────────────────────────────
+export async function sendMagicLinkEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  magicUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Your one-click login link")}
+    ${subtext(`Hi <strong>${opts.companyName}</strong>, click the button below to log in instantly — no password needed.`)}
+    <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#1e40af;">This link expires in <strong>72 hours</strong> and can only be used once. If you didn't request this, you can safely ignore this email.</p>
+    </div>
+    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
+    <p style="margin-top:20px;font-size:12px;color:#94a3b8;">Or copy this link: <span style="color:#1e3a5f;">${opts.magicUrl}</span></p>
+  `);
+  await send(opts.toEmail, "Your SubTracker login link — click to enter", html);
+}
+
 // ─── 1. Sub invited to project ────────────────────────────────────────────────
 export async function sendInviteEmail(opts: {
   toEmail: string;
-  temporaryPassword: string;
   projectName: string;
+  magicUrl: string;
   appUrl: string;
 }) {
   const html = layout(`
     ${heading("You've been invited to a project")}
-    ${subtext(`You've been added as a subcontractor on <strong>${opts.projectName}</strong>. Use the credentials below to log in.`)}
+    ${subtext(`You've been added as a subcontractor on <strong>${opts.projectName}</strong>. Click below to log in instantly — no password needed.`)}
     ${infoBox([
       { label: "Login Email", value: opts.toEmail },
-      { label: "Temporary Password", value: `<code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:15px;font-family:monospace;">${opts.temporaryPassword}</code>` },
       { label: "Project", value: opts.projectName },
     ])}
-    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">You will be asked to set a new password when you first log in.</p>
-    ${ctaButton("Log in to SubTracker", opts.appUrl)}
+    <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
+    </div>
+    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
   `);
   await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
 }
@@ -525,19 +544,20 @@ export async function sendTeamMemberInviteEmail(opts: {
   toEmail: string;
   fullName: string;
   companyName: string;
-  tempPassword: string;
+  magicUrl: string;
   appUrl: string;
 }) {
   const html = layout(`
     ${heading(`You've been added to the ${opts.companyName} team`)}
-    ${subtext(`Hi <strong>${opts.fullName}</strong>, you have been added to the <strong>${opts.companyName}</strong> team on SubTracker. Use the credentials below to log in.`)}
+    ${subtext(`Hi <strong>${opts.fullName}</strong>, you have been added to the <strong>${opts.companyName}</strong> team on SubTracker. Click below to log in instantly — no password needed.`)}
     ${infoBox([
       { label: "Login Email", value: opts.toEmail },
-      { label: "Temporary Password", value: `<code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:15px;font-family:monospace;">${opts.tempPassword}</code>` },
       { label: "Company", value: opts.companyName },
     ])}
-    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">You will be asked to set a new password when you first log in.</p>
-    ${ctaButton("Log in to SubTracker", opts.appUrl)}
+    <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
+    </div>
+    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
   `);
   await send(opts.toEmail, `You have been added to ${opts.companyName} team on SubTracker`, html);
 }

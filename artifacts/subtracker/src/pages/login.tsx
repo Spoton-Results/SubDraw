@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -8,7 +8,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { HardHat, HardHat as HardHatIcon, Building2, Loader2 } from "lucide-react";
+import { HardHat, HardHat as HardHatIcon, Building2, Loader2, Mail, CheckCircle2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 const BASE = import.meta.env.BASE_URL;
@@ -23,14 +23,32 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function Login() {
   usePageTitle("Sign In");
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const login = useLogin();
   const [demoLoading, setDemoLoading] = React.useState<"GC" | "SUB" | null>(null);
 
+  const [magicEmail, setMagicEmail] = React.useState("");
+  const [magicSent, setMagicSent] = React.useState(false);
+  const [magicLoading, setMagicLoading] = React.useState(false);
+
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
+
+  // Show error messages from magic link redirect query params
+  React.useEffect(() => {
+    const params = new URLSearchParams(search);
+    const error = params.get("error");
+    if (error === "link_expired") {
+      toast.error("That login link has expired. Request a new one below.");
+    } else if (error === "link_used") {
+      toast.error("That login link has already been used. Request a new one below.");
+    } else if (error === "invalid_link") {
+      toast.error("Invalid login link. Please request a new one.");
+    }
+  }, [search]);
 
   React.useEffect(() => {
     if (user && !isLoading) setLocation("/");
@@ -68,6 +86,29 @@ export default function Login() {
       toast.error("Demo login failed. Please try again.");
     } finally {
       setDemoLoading(null);
+    }
+  };
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!magicEmail.trim()) return;
+    setMagicLoading(true);
+    try {
+      const res = await fetch(`${BASE}api/auth/magic-link/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: magicEmail.trim() }),
+      });
+      if (res.ok) {
+        setMagicSent(true);
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setMagicLoading(false);
     }
   };
 
@@ -134,9 +175,43 @@ export default function Login() {
             </div>
           </div>
 
+          {/* Magic link section */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-sm font-semibold text-foreground">Get a login link — no password needed</p>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">Enter your email and we'll send you a one-click login link.</p>
+            {magicSent ? (
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-300">Check your email</p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                    If <strong>{magicEmail}</strong> is registered, a login link is on its way. It's valid for 72 hours.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleMagicLink} className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={magicEmail}
+                  onChange={e => setMagicEmail(e.target.value)}
+                  required
+                  className="flex-1"
+                />
+                <Button type="submit" isLoading={magicLoading} className="shrink-0 whitespace-nowrap">
+                  Send link
+                </Button>
+              </form>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 mb-6">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground">or sign in to your account</span>
+            <span className="text-xs text-muted-foreground">or sign in with password</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
@@ -175,7 +250,11 @@ export default function Login() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            You only need to log in once — we remember you on this device.
+          </p>
+
+          <p className="mt-4 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
             <Link href="/register" className="text-primary font-semibold hover:underline">
               Start your free 14-day trial

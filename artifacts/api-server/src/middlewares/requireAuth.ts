@@ -1,13 +1,34 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuthUser, isGCOwner } from "../lib/auth.js";
+import { db } from "@workspace/db";
+import { usersTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const user = getAuthUser(req);
-  if (!user) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const decoded = getAuthUser(req);
+  if (!decoded) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  (req as any).user = user;
+
+  // Check if the session was issued before a password change (invalidates old sessions)
+  if (decoded.iat !== undefined) {
+    const [user] = await db
+      .select({ passwordChangedAt: usersTable.passwordChangedAt })
+      .from(usersTable)
+      .where(eq(usersTable.id, decoded.id))
+      .limit(1);
+
+    if (user?.passwordChangedAt) {
+      const tokenIssuedMs = decoded.iat * 1000;
+      if (user.passwordChangedAt.getTime() > tokenIssuedMs) {
+        res.status(401).json({ error: "Session expired. Please log in again." });
+        return;
+      }
+    }
+  }
+
+  (req as any).user = decoded;
   next();
 }
 
