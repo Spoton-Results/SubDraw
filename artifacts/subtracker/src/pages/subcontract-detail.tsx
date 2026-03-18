@@ -17,13 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
   Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
-  HelpCircle, Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
+  Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
   Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
 } from "lucide-react";
@@ -514,122 +513,130 @@ export default function SubcontractDetail() {
         </div>
       )}
 
-      {/* SCOREBOARD */}
+      {/* SCOREBOARD — calculator tape layout */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-xl font-bold font-display flex items-center gap-2">
           <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
         </h2>
         {retPct > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">
-            <Percent className="h-3.5 w-3.5" /> {retPct}% Retention Rate
+          <span className="text-sm font-semibold text-muted-foreground">
+            <Percent className="h-3.5 w-3.5 inline-block mr-0.5 align-text-top" />{retPct}% Retention Rate
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-        <ScoreCard
-          title="Base Contract"
-          amount={sb.base}
-          tooltip="The original awarded contract amount before any changes."
-        />
-        <ScoreCard
-          title="Approved COs"
-          amount={sb.coTotal}
-          tooltip="Total dollar value of all approved change orders added to this contract."
-        />
-        <ScoreCard
-          title="Current Total"
-          amount={sb.currentApprovedTotal}
-          highlight
-          tooltip="Base contract plus all approved change orders — the current maximum the sub can invoice."
-        />
-        <ScoreCard
-          title="Gross Invoiced"
-          amount={grossInvoiced}
-          tooltip="Total billed by the sub before retention is withheld."
-        />
-        <ScoreCard
-          title="Net Paid to Sub"
-          amount={netPaid}
-          className="border-green-500/50 bg-green-50/50 dark:bg-green-950/10"
-          tooltip="Gross invoiced minus all retention held — the actual economic value transferred to the sub."
-        />
-        <ScoreCard
-          title="Remaining Balance"
-          amount={sb.remaining}
-          danger={isOverBudget}
-          className={isOverBudget ? "border-red-500 bg-red-50 dark:bg-red-950/20" : "border-green-500/50 bg-green-50/50 dark:bg-green-950/10"}
-          tooltip="Current contract total minus net paid — amount still to be invoiced."
-        />
-      </div>
+      <div className="border border-border rounded-2xl overflow-hidden bg-white dark:bg-card mb-6 shadow-sm">
 
-      {/* RETENTION SCOREBOARD — only if retention is active */}
-      {retPct > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="rounded-2xl border border-orange-200 dark:border-orange-800 bg-orange-50/60 dark:bg-orange-950/20 p-4">
-            <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wide mb-1">Total Retention Held</p>
-            <p className="text-2xl font-bold font-mono text-orange-700 dark:text-orange-300">{formatCurrency(totalRetentionHeld)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Withheld across all approved invoices</p>
+        {/* CONTRACT BUILD-UP */}
+        <div className="px-6 pt-5 pb-4 space-y-2.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-muted-foreground">Base Contract</span>
+            <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(sb.base)}</span>
           </div>
-          <div className={cn(
-            "rounded-2xl border p-4",
-            retentionBalance > 0
-              ? "border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20"
-              : "border-green-300 dark:border-green-700 bg-green-50/60 dark:bg-green-950/10"
-          )}>
-            <p className={cn("text-xs font-semibold uppercase tracking-wide mb-1", retentionBalance > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400")}>Retention Balance</p>
-            <p className={cn("text-2xl font-bold font-mono", retentionBalance > 0 ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-300")}>{formatCurrency(retentionBalance)}</p>
-            <p className="text-xs text-muted-foreground mt-1">{retentionBalance > 0 ? "Still owed to sub upon project close" : "All retention released"}</p>
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-muted-foreground">
+              <span className="text-primary font-bold mr-1">+</span>Approved Change Orders
+            </span>
+            <span className={cn("font-mono text-base tabular-nums", sb.coTotal > 0 ? "text-primary" : "text-muted-foreground")}>
+              {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal)}
+            </span>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4 flex flex-col justify-center gap-2">
-            {canReleaseRetention && !alreadyReleasedInvoice ? (
-              <>
-                <p className="text-xs text-muted-foreground">Project is CLOSED — release remaining retention to the sub.</p>
-                {releaseRetentionConfirm ? (
+          <div className="border-t border-border pt-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm font-semibold text-foreground">
+                <span className="text-muted-foreground font-normal mr-1">=</span>Current Approved Total
+              </span>
+              <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-dashed border-border/70" />
+
+        {/* INVOICE DEDUCTIONS */}
+        <div className="px-6 pt-4 pb-5 space-y-2.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-muted-foreground">Total Invoiced</span>
+            <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
+          </div>
+          {retPct > 0 && totalRetentionHeld > 0 && (
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-muted-foreground">
+                <span className="text-orange-500 font-bold mr-1">−</span>Retention Held ({retPct}%)
+              </span>
+              <span className="font-mono text-base tabular-nums text-orange-600 dark:text-orange-400">−{formatCurrency(totalRetentionHeld)}</span>
+            </div>
+          )}
+
+          {/* REMAINING BALANCE — hero number */}
+          <div className="border-t-2 border-foreground/15 dark:border-foreground/20 pt-4 mt-1">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-base font-bold text-foreground">
+                <span className="text-muted-foreground font-normal text-sm mr-1">=</span>Remaining Balance
+              </span>
+              <span className={cn(
+                "font-mono font-bold tabular-nums text-4xl",
+                sb.remaining < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+              )}>
+                {sb.remaining < 0 ? `−${formatCurrency(Math.abs(sb.remaining))}` : formatCurrency(sb.remaining)}
+              </span>
+            </div>
+            {isOverBudget && (
+              <p className="text-xs font-semibold text-red-500 mt-1.5 text-right tracking-wide uppercase">Over budget</p>
+            )}
+          </div>
+        </div>
+
+        {/* RETENTION RELEASE STRIP — only if retention is active */}
+        {retPct > 0 && (
+          <div className="border-t border-border bg-muted/30 dark:bg-muted/10 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Retention Balance</p>
+              <p className={cn("text-xl font-bold font-mono tabular-nums", retentionBalance > 0 ? "text-foreground" : "text-green-600 dark:text-green-400")}>
+                {formatCurrency(retentionBalance)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {retentionBalance > 0 ? "Owed to sub upon project close" : "All retention released"}
+              </p>
+            </div>
+            <div>
+              {canReleaseRetention && !alreadyReleasedInvoice ? (
+                releaseRetentionConfirm ? (
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-1.5"
+                      className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
                       isLoading={releaseRetentionLoading}
                       onClick={handleReleaseRetention}
                     >
                       <Unlock className="h-4 w-4" /> Confirm Release
                     </Button>
-                    <Button size="sm" variant="ghost" className="min-h-[44px]" onClick={() => setReleaseRetentionConfirm(false)}>Cancel</Button>
+                    <Button size="sm" variant="ghost" className="min-h-[36px]" onClick={() => setReleaseRetentionConfirm(false)}>Cancel</Button>
                   </div>
                 ) : (
                   <Button
                     size="sm"
-                    className="w-full bg-green-600 hover:bg-green-700 text-white min-h-[44px] gap-1.5"
+                    className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
                     onClick={() => setReleaseRetentionConfirm(true)}
                   >
                     <Unlock className="h-4 w-4" /> Release Retention ({formatCurrency(retentionBalance)})
                   </Button>
-                )}
-              </>
-            ) : alreadyReleasedInvoice ? (
-              <div className="text-center">
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5 justify-center">
-                  <Unlock className="h-4 w-4" /> Retention Release Pending
+                )
+              ) : alreadyReleasedInvoice ? (
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
+                  <Unlock className="h-4 w-4" /> Release Pending — Invoice #{alreadyReleasedInvoice.invoiceNumber}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Invoice #{alreadyReleasedInvoice.invoiceNumber} created</p>
-              </div>
-            ) : !isGC && retentionBalance > 0 ? (
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Retention will be released by the GC when this project closes.</p>
-              </div>
-            ) : retentionBalance === 0 && totalRetentionHeld > 0 ? (
-              <div className="text-center">
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400">All retention released</p>
-              </div>
-            ) : (
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Retention release available when project closes.</p>
-              </div>
-            )}
+              ) : retentionBalance === 0 && totalRetentionHeld > 0 ? (
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
+                  <Unlock className="h-4 w-4" /> All retention released
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Available when project closes</p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* PROGRESS BAR */}
       <div className="bg-card border border-border/50 rounded-2xl p-5 mb-6 space-y-4 shadow-sm">
@@ -1475,43 +1482,5 @@ export default function SubcontractDetail() {
         </form>
       </Dialog>
     </Layout>
-  );
-}
-
-function ScoreCard({
-  title, amount, highlight, danger, className, tooltip,
-}: {
-  title: string;
-  amount: number;
-  highlight?: boolean;
-  danger?: boolean;
-  className?: string;
-  tooltip: string;
-}) {
-  return (
-    <Card className={cn("overflow-hidden border-border/50", highlight && "border-primary shadow-primary/10", className)}>
-      <CardContent className={cn("p-3 md:p-4", highlight ? "bg-primary/5" : "bg-card")}>
-        <div className="flex items-center gap-1 mb-1 md:mb-2">
-          <p className={cn(
-            "text-xs font-semibold uppercase tracking-wider",
-            highlight ? "text-primary" : danger ? "text-red-600" : "text-muted-foreground"
-          )}>{title}</p>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground transition-colors shrink-0">
-                <HelpCircle className="h-3 w-3" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px] text-center">
-              {tooltip}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className={cn(
-          "text-base md:text-xl font-bold font-mono tracking-tight break-all leading-tight",
-          danger ? "text-red-600" : "text-foreground"
-        )}>{formatCurrency(amount)}</p>
-      </CardContent>
-    </Card>
   );
 }
