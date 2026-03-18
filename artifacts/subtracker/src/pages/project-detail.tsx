@@ -671,8 +671,8 @@ export default function ProjectDetail() {
         );
       })()}
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className={isGC ? "grid lg:grid-cols-3 gap-8" : "space-y-8"}>
+        <div className={isGC ? "lg:col-span-2 space-y-8" : "space-y-8"}>
 
           {/* PLAN FILES SECTION */}
           <Card>
@@ -1202,45 +1202,47 @@ export default function ProjectDetail() {
 
         </div>
 
-        {/* MEMBERS SIDEBAR */}
-        <div className="space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Building className="h-5 w-5 text-primary" /> Project Members
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {project.members?.map(member => {
-                  const canRemove = isGC && project.status === "BIDDING" && member.roleOnProject === "SUB";
-                  return (
-                    <div key={member.id} className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm shrink-0">
-                        {member.user?.companyName?.charAt(0) ?? "?"}
+        {/* MEMBERS SIDEBAR — GC only; subs must never see other subs on the project */}
+        {isGC && (
+          <div className="space-y-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Building className="h-5 w-5 text-primary" /> Project Members
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {project.members?.map(member => {
+                    const canRemove = isGC && project.status === "BIDDING" && member.roleOnProject === "SUB";
+                    return (
+                      <div key={member.id} className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm shrink-0">
+                          {member.user?.companyName?.charAt(0) ?? "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{member.user?.companyName}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{member.roleOnProject}</p>
+                        </div>
+                        {canRemove && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="min-h-[36px] min-w-[36px] p-0 text-muted-foreground hover:text-destructive shrink-0"
+                            title={`Remove ${member.user?.companyName}`}
+                            onClick={() => setRemoveMemberConfirm({ open: true, userId: member.userId, companyName: member.user?.companyName ?? "this subcontractor" })}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm truncate">{member.user?.companyName}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{member.roleOnProject}</p>
-                      </div>
-                      {canRemove && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="min-h-[36px] min-w-[36px] p-0 text-muted-foreground hover:text-destructive shrink-0"
-                          title={`Remove ${member.user?.companyName}`}
-                          onClick={() => setRemoveMemberConfirm({ open: true, userId: member.userId, companyName: member.user?.companyName ?? "this subcontractor" })}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* GC Private Notes */}

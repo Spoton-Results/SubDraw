@@ -12,7 +12,7 @@ async function getBidWithSub(bid: any) {
   return { ...bid, sub };
 }
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireGC, async (req, res) => {
   const { projectId } = req.params as any;
   const bids = await db.select().from(bidsTable).where(eq(bidsTable.projectId, projectId));
   const bidsWithSubs = await Promise.all(bids.map(getBidWithSub));

@@ -65,6 +65,14 @@ artifacts-monorepo/
 - Profile update: `PATCH /auth/update-profile` → updates companyName
 - Force-change flow: `mustChangePassword` flag on users; `ProtectedRoute` renders inline `<ChangePassword>` if set
 
+## Sub Privacy Model
+
+Subs have strict data isolation — they must never see other subs on the same project:
+- `GET /api/projects/:id` — for SUB users, the response omits the `members` array entirely and filters `bids` and `subcontracts` to only the requesting sub's own records
+- `GET /api/projects/:id/bids` — requires `requireGC`; returns 403 to subs
+- `GET /api/users` — requires `requireGC`; returns 403 to subs
+- Project detail UI: "Project Members" sidebar is wrapped in `{isGC && (...)}` so it never renders for subs; the layout grid collapses to full-width for subs
+
 ## Key Features
 
 - **Scoreboard**: Live financial summary per subcontract (base + approved COs vs. invoiced)

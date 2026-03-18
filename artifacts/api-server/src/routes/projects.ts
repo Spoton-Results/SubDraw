@@ -280,8 +280,20 @@ router.get("/:projectId", requireAuth, async (req, res) => {
     return;
   }
   const effectiveGcId = getEffectiveGcId(user);
-  // Strip notes for non-GC users; GC (owner or PM with access) gets full detail
-  if (user.role !== "GC" || effectiveGcId !== detail.gcId) {
+  const isGC = user.role === "GC" && effectiveGcId === (detail as any).gcId;
+
+  if (!isGC) {
+    if (user.role === "SUB") {
+      // Subs only see their own bid and their own subcontract — never other subs' data
+      const { notes: _notes, members: _members, bids, subcontracts, ...rest } = detail as any;
+      res.json({
+        ...rest,
+        bids: (bids ?? []).filter((b: any) => b.subId === user.id),
+        subcontracts: (subcontracts ?? []).filter((s: any) => s.subId === user.id),
+      });
+      return;
+    }
+    // Non-owner GC (shouldn't normally hit this but strip notes to be safe)
     const { notes: _notes, ...rest } = detail as any;
     res.json(rest);
     return;

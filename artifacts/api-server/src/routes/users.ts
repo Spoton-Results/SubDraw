@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
-import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 
 const router = Router();
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireGC, async (req, res) => {
   const users = await db.select({
     id: usersTable.id,
     email: usersTable.email,
