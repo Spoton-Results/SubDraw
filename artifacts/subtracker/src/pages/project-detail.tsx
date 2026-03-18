@@ -32,6 +32,7 @@ import {
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
+  Eye, BadgeCheck, ChevronDown, ChevronUp, Users,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -143,6 +144,51 @@ export default function ProjectDetail() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [deletePlanConfirm, setDeletePlanConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
+
+  const [expandedPlanViews, setExpandedPlanViews] = React.useState<Set<string>>(new Set());
+  const [showNoPlanWarning, setShowNoPlanWarning] = React.useState(false);
+
+  const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  const isGC_for_views = user?.role === "GC";
+
+  const { data: myPlanViews = [] } = useQuery<{ planFileId: string }[]>({
+    queryKey: ["plan-file-my-views", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/plan-files/my-views`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && !isGC_for_views,
+    staleTime: 0,
+  });
+
+  const { data: allPlanViews = [] } = useQuery<{ id: string; planFileId: string; subId: string; subName: string; companyName: string; viewedAt: string }[]>({
+    queryKey: ["plan-file-all-views", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/plan-files/all-views`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && isGC_for_views,
+    staleTime: 30000,
+  });
+
+  const viewedPlanFileIds = React.useMemo(() => new Set(myPlanViews.map(v => v.planFileId)), [myPlanViews]);
+
+  const queryClient_ref = queryClient;
+
+  const handlePlanFileDownload = React.useCallback(async (planFileId: string) => {
+    if (isGC_for_views) return;
+    try {
+      await fetch(`${BASE_URL}/api/projects/${projectId}/plan-files/${planFileId}/view`, {
+        method: "POST",
+        credentials: "include",
+      });
+      queryClient_ref.invalidateQueries({ queryKey: ["plan-file-my-views", projectId] });
+    } catch {
+    }
+  }, [projectId, isGC_for_views, BASE_URL, queryClient_ref]);
   const [awardBidConfirm, setAwardBidConfirm] = React.useState<{ open: boolean; id: string; company: string; amount: number }>({ open: false, id: "", company: "", amount: 0 });
   const [awardTradeCategory, setAwardTradeCategory] = React.useState("");
   const [awardRetentionPct, setAwardRetentionPct] = React.useState("10");
@@ -408,8 +454,7 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleBidSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doBidSubmit = async () => {
     const amount = parseFloat(bidAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Invalid bid amount");
     try {
@@ -426,10 +471,20 @@ export default function ProjectDetail() {
       setBidAmount("");
       setBidNotes("");
       setBidScopeFile(null);
+      setShowNoPlanWarning(false);
     } catch {
       toast.error("Failed to submit bid");
       setBidScopeUploading(false);
     }
+  };
+
+  const handleBidSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (planFiles.length > 0 && viewedPlanFileIds.size === 0) {
+      setShowNoPlanWarning(true);
+      return;
+    }
+    await doBidSubmit();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -971,43 +1026,95 @@ export default function ProjectDetail() {
                 <p className="text-muted-foreground text-sm py-2">No plan files uploaded yet.</p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {planFiles.map((plan) => (
-                    <li key={plan.id} className="flex items-start justify-between py-4 gap-4">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                          <FileText className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{plan.fileName ?? "Unnamed file"}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{plan.description}</p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <Calendar className="h-3 w-3" />
-                            {format(new Date(plan.createdAt), "MMM d, yyyy")}
+                  {planFiles.map((plan) => {
+                    const isViewed = viewedPlanFileIds.has(plan.id);
+                    const fileViews = allPlanViews.filter(v => v.planFileId === plan.id);
+                    const isExpanded = expandedPlanViews.has(plan.id);
+                    return (
+                      <li key={plan.id} className="py-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className={cn(
+                              "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
+                              !isGC && isViewed ? "bg-green-100 dark:bg-green-950/30" : "bg-primary/10"
+                            )}>
+                              {!isGC && isViewed
+                                ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                : <FileText className="h-4 w-4 text-primary" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold truncate">{plan.fileName ?? "Unnamed file"}</p>
+                                {!isGC && isViewed && (
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                                    <Check className="h-3 w-3" /> Downloaded
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{plan.description}</p>
+                              <div className="flex items-center gap-2 flex-wrap mt-1">
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Calendar className="h-3 w-3" />
+                                  {format(new Date(plan.createdAt), "MMM d, yyyy")}
+                                </div>
+                                {isGC && fileViews.length > 0 && (
+                                  <button
+                                    onClick={() => setExpandedPlanViews(prev => {
+                                      const next = new Set(prev);
+                                      next.has(plan.id) ? next.delete(plan.id) : next.add(plan.id);
+                                      return next;
+                                    })}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Viewed by {fileViews.length} sub{fileViews.length !== 1 ? "s" : ""}
+                                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  </button>
+                                )}
+                                {isGC && fileViews.length === 0 && (
+                                  <span className="text-xs text-muted-foreground italic">No subs have downloaded this file</span>
+                                )}
+                              </div>
+                              {isGC && isExpanded && fileViews.length > 0 && (
+                                <div className="mt-2 ml-1 space-y-1 border-l-2 border-primary/20 pl-3">
+                                  {fileViews.map(v => (
+                                    <div key={v.id} className="text-xs text-muted-foreground">
+                                      <span className="font-semibold text-foreground">{v.subName}</span>
+                                      {v.companyName && ` · ${v.companyName}`}
+                                      <span className="ml-1.5 text-muted-foreground">
+                                        {format(new Date(v.viewedAt), "MMM d, yyyy 'at' h:mm a")}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={getFileUrl(plan)}
+                              download={plan.fileName ?? true}
+                              onClick={() => handlePlanFileDownload(plan.id)}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Download
+                            </a>
+                            {isGC && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => setDeletePlanConfirm({ open: true, id: plan.id, name: plan.fileName ?? plan.description })}
+                                disabled={deletePlanFileMutation.isPending}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <a
-                          href={getFileUrl(plan)}
-                          download={plan.fileName ?? true}
-                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
-                        >
-                          <Download className="h-3.5 w-3.5" /> Download
-                        </a>
-                        {isGC && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setDeletePlanConfirm({ open: true, id: plan.id, name: plan.fileName ?? plan.description })}
-                            disabled={deletePlanFileMutation.isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </CardContent>
@@ -1367,15 +1474,35 @@ export default function ProjectDetail() {
                     <p className="text-muted-foreground py-4 text-center">No bids submitted yet.</p>
                   ) : (
                     <div className="space-y-4">
-                      {project.bids?.map(bid => (
+                      {project.bids?.map(bid => {
+                        const bidSubViews = allPlanViews.filter(v => v.subId === bid.subId);
+                        const bidViewedFileIds = new Set(bidSubViews.map(v => v.planFileId));
+                        const allPlansReviewed = planFiles.length > 0 && planFiles.every(p => bidViewedFileIds.has(p.id));
+                        const somePlansReviewed = planFiles.length > 0 && bidSubViews.length > 0 && !allPlansReviewed;
+                        return (
                         <div key={bid.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-secondary/50 border border-border gap-4">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <p className="font-bold">{bid.sub?.companyName}</p>
                               <Badge variant={
                                 bid.status === "AWARDED" ? "success" :
                                 bid.status === "REJECTED" ? "destructive" : "warning"
                               }>{bid.status}</Badge>
+                              {allPlansReviewed && (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                                  <BadgeCheck className="h-3 w-3" /> Plans Reviewed
+                                </span>
+                              )}
+                              {somePlansReviewed && (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">
+                                  <Eye className="h-3 w-3" /> {bidSubViews.length}/{planFiles.length} Plans Downloaded
+                                </span>
+                              )}
+                              {planFiles.length > 0 && bidSubViews.length === 0 && (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800">
+                                  <AlertTriangle className="h-3 w-3" /> No Plans Downloaded
+                                </span>
+                              )}
                             </div>
                             <p className="text-2xl font-bold font-display text-primary">{formatCurrency(bid.amount)}</p>
                             {bid.notes && (
@@ -1401,12 +1528,58 @@ export default function ProjectDetail() {
                             </Button>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )
                 ) : !myBid ? (
                   <form onSubmit={handleBidSubmit} className="space-y-5">
                     <p className="text-sm text-muted-foreground">Submit your proposed bid for this project. You may only submit one bid per project.</p>
+
+                    {/* PLAN FILE REVIEW STATUS — shown in bid form so subs know what they've downloaded */}
+                    {planFiles.length > 0 && (
+                      <div className={cn(
+                        "rounded-xl border p-4",
+                        viewedPlanFileIds.size === planFiles.length
+                          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                          : viewedPlanFileIds.size > 0
+                          ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                          : "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800"
+                      )}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className={cn(
+                            "h-4 w-4 shrink-0",
+                            viewedPlanFileIds.size === planFiles.length ? "text-green-600 dark:text-green-400"
+                              : viewedPlanFileIds.size > 0 ? "text-amber-600 dark:text-amber-400"
+                              : "text-orange-600 dark:text-orange-400"
+                          )} />
+                          <p className={cn(
+                            "text-sm font-semibold",
+                            viewedPlanFileIds.size === planFiles.length ? "text-green-800 dark:text-green-300"
+                              : viewedPlanFileIds.size > 0 ? "text-amber-800 dark:text-amber-300"
+                              : "text-orange-800 dark:text-orange-300"
+                          )}>
+                            {viewedPlanFileIds.size === planFiles.length
+                              ? "All plan files downloaded — your review is on record"
+                              : viewedPlanFileIds.size > 0
+                              ? `${viewedPlanFileIds.size} of ${planFiles.length} plan files downloaded`
+                              : "No plan files downloaded yet — review plans before bidding"}
+                          </p>
+                        </div>
+                        <ul className="space-y-1">
+                          {planFiles.map(p => (
+                            <li key={p.id} className="flex items-center gap-2 text-xs">
+                              {viewedPlanFileIds.has(p.id)
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                                : <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />}
+                              <span className={viewedPlanFileIds.has(p.id) ? "text-green-800 dark:text-green-300" : "text-orange-800 dark:text-orange-300"}>
+                                {p.description || p.fileName}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div>
                       <label className="text-sm font-semibold mb-1.5 block">Bid Amount ($)</label>
                       <Input
@@ -1490,7 +1663,14 @@ export default function ProjectDetail() {
                     <div className="p-4 rounded-xl bg-secondary/50 border border-border">
                       <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Submitted Bid</p>
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Submitted Bid</p>
+                            {planFiles.length > 0 && viewedPlanFileIds.size === planFiles.length && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                                <BadgeCheck className="h-3 w-3" /> Plans Reviewed
+                              </span>
+                            )}
+                          </div>
                           <p className="text-3xl font-bold font-display text-primary">{formatCurrency(myBid.amount)}</p>
                           {myBid.notes && (
                             <div className="mt-3">
@@ -2430,6 +2610,48 @@ export default function ProjectDetail() {
               onClick={handleRemoveMember}
             >
               <Trash2 className="h-4 w-4 mr-2" /> Remove Subcontractor
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* No Plans Downloaded Warning — shown when sub tries to bid without downloading any plan files */}
+      <Dialog
+        open={showNoPlanWarning}
+        onOpenChange={(open) => !open && setShowNoPlanWarning(false)}
+        title="Plans Not Downloaded"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">
+                  You haven't downloaded any plan files
+                </p>
+                <p className="text-sm text-orange-700 dark:text-orange-400 mt-1 leading-relaxed">
+                  The GC has uploaded plan files for this project. By submitting a bid without reviewing them, you may miss critical scope information that could affect your pricing.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            We recommend downloading and reviewing all plan files before submitting. Do you want to continue anyway?
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button
+              variant="ghost"
+              className="min-h-[44px]"
+              onClick={() => setShowNoPlanWarning(false)}
+            >
+              Go Back &amp; Review Plans
+            </Button>
+            <Button
+              className="min-h-[44px] bg-orange-600 hover:bg-orange-700 text-white gap-2"
+              isLoading={submitBid.isPending}
+              onClick={() => { setShowNoPlanWarning(false); doBidSubmit(); }}
+            >
+              Submit Anyway
             </Button>
           </div>
         </div>

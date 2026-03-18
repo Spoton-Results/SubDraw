@@ -17,3 +17,14 @@ export const planFilesTable = pgTable("plan_files", {
 export const insertPlanFileSchema = createInsertSchema(planFilesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPlanFile = z.infer<typeof insertPlanFileSchema>;
 export type PlanFile = typeof planFilesTable.$inferSelect;
+
+export const planFileViewsTable = pgTable("plan_file_views", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  planFileId: text("plan_file_id").notNull().references(() => planFilesTable.id, { onDelete: "cascade" }),
+  subId: text("sub_id").notNull(),
+  subName: text("sub_name").notNull(),
+  companyName: text("company_name").notNull(),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+});
+
+export type PlanFileView = typeof planFileViewsTable.$inferSelect;

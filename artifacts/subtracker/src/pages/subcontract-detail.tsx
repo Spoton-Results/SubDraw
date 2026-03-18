@@ -503,6 +503,7 @@ export default function SubcontractDetail() {
   };
 
   const getActivityIcon = (type: string) => {
+    if (type === "PLAN_FILE_VIEWED") return <FileDown className="h-4 w-4 text-blue-500" />;
     if (type === "SUBCONTRACT_CREATED") return <FileSignature className="h-4 w-4 text-primary" />;
     if (type === "SUBCONTRACT_SIGNED") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (type === "CO_CREATED") return <PlusCircle className="h-4 w-4 text-blue-500" />;
