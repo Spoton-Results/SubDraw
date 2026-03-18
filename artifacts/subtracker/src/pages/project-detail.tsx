@@ -31,7 +31,7 @@ import {
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
-  Shield, ShieldCheck, ShieldX,
+  Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -192,6 +192,37 @@ export default function ProjectDetail() {
       return res.json();
     },
     enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+
+  // Draw Schedule — GC only
+  const [activeSection, setActiveSection] = React.useState<"overview" | "draw-schedule">("overview");
+  const [dsAddDescription, setDsAddDescription] = React.useState("");
+  const [dsAddBudget, setDsAddBudget] = React.useState("");
+  const [dsAddLoading, setDsAddLoading] = React.useState(false);
+  const [dsInputMode, setDsInputMode] = React.useState<"manual" | "paste">("manual");
+  const [dsPasteText, setDsPasteText] = React.useState("");
+  const [dsParsedItems, setDsParsedItems] = React.useState<{ description: string; budgetAmount: number }[]>([]);
+  const [dsParsing, setDsParsing] = React.useState(false);
+  const [dsEditItemId, setDsEditItemId] = React.useState<string | null>(null);
+  const [dsEditDescription, setDsEditDescription] = React.useState("");
+  const [dsEditBudget, setDsEditBudget] = React.useState("");
+  const [dsEditLoading, setDsEditLoading] = React.useState(false);
+  const [dsLinkItemId, setDsLinkItemId] = React.useState<string | null>(null);
+  const [dsLinkSubId, setDsLinkSubId] = React.useState("");
+  const [dsLinkLoading, setDsLinkLoading] = React.useState(false);
+  const [awardDrawScheduleItemId, setAwardDrawScheduleItemId] = React.useState("");
+
+  const { data: drawScheduleItems = [], refetch: refetchDrawSchedule } = useQuery<any[]>({
+    queryKey: ["draw-schedule", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC",
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
@@ -422,12 +453,20 @@ export default function ProjectDetail() {
   const handleAward = async () => {
     const retPct = Math.min(15, Math.max(0, parseFloat(awardRetentionPct) || 10));
     try {
-      await awardBid.mutateAsync({ projectId, bidId: awardBidConfirm.id, data: { tradeCategory: awardTradeCategory || null, retentionPercentage: retPct } });
+      const result = await awardBid.mutateAsync({ projectId, bidId: awardBidConfirm.id, data: { tradeCategory: awardTradeCategory || null, retentionPercentage: retPct } });
+      if (awardDrawScheduleItemId && result?.id) {
+        await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/link-subcontract`, {
+          method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subcontractId: result.id, drawScheduleItemId: awardDrawScheduleItemId }),
+        }).catch(() => null);
+        refetchDrawSchedule();
+      }
       toast.success("Bid awarded and subcontract created!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 });
       setAwardTradeCategory("");
       setAwardRetentionPct("10");
+      setAwardDrawScheduleItemId("");
     } catch {
       toast.error("Failed to award bid");
     }
@@ -554,6 +593,138 @@ export default function ProjectDetail() {
   const uploadStatusText = uploadStep === "uploading" ? `Uploading… ${progress}%` : uploadStep === "saving" ? "Saving…" : "";
   const isSubmitting = uploadStep !== "idle";
 
+  const handleDsAddItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dsAddDescription.trim()) return toast.error("Description is required");
+    const amount = parseFloat(dsAddBudget.replace(/[$,]/g, ""));
+    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid budget amount");
+    setDsAddLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: dsAddDescription.trim(), budgetAmount: amount }),
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Failed to add item"); }
+      toast.success("Line item added");
+      setDsAddDescription(""); setDsAddBudget("");
+      refetchDrawSchedule();
+    } catch (err: any) { toast.error(err.message || "Failed to add item"); }
+    finally { setDsAddLoading(false); }
+  };
+
+  const handleDsParse = async () => {
+    if (!dsPasteText.trim()) return toast.error("Paste some text first");
+    setDsParsing(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/parse`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: dsPasteText }),
+      });
+      const parsed = await res.json();
+      if (!res.ok) throw new Error(parsed.error || "Failed to parse");
+      if (parsed.length === 0) toast.error("No line items could be parsed. Try: 'Framing, $85,000' or 'Electrical $45,000'");
+      else { setDsParsedItems(parsed); toast.success(`Parsed ${parsed.length} line item${parsed.length !== 1 ? "s" : ""}`); }
+    } catch (err: any) { toast.error(err.message || "Parse failed"); }
+    finally { setDsParsing(false); }
+  };
+
+  const handleDsImport = async () => {
+    if (dsParsedItems.length === 0) return;
+    setDsAddLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/import`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: dsParsedItems }),
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Import failed"); }
+      toast.success(`${dsParsedItems.length} items imported`);
+      setDsParsedItems([]); setDsPasteText(""); setDsInputMode("manual");
+      refetchDrawSchedule();
+    } catch (err: any) { toast.error(err.message || "Import failed"); }
+    finally { setDsAddLoading(false); }
+  };
+
+  const handleDsEdit = async (itemId: string) => {
+    if (!dsEditDescription.trim()) return toast.error("Description is required");
+    const amount = parseFloat(dsEditBudget.replace(/[$,]/g, ""));
+    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid budget amount");
+    setDsEditLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/${itemId}`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: dsEditDescription.trim(), budgetAmount: amount }),
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Update failed"); }
+      toast.success("Item updated");
+      setDsEditItemId(null);
+      refetchDrawSchedule();
+    } catch (err: any) { toast.error(err.message || "Update failed"); }
+    finally { setDsEditLoading(false); }
+  };
+
+  const handleDsDelete = async (itemId: string, description: string) => {
+    if (!confirm(`Delete "${description}"? Any linked subcontracts will be unlinked.`)) return;
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/${itemId}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Delete failed"); }
+      toast.success("Item deleted");
+      refetchDrawSchedule();
+    } catch (err: any) { toast.error(err.message || "Delete failed"); }
+  };
+
+  const handleDsLinkSub = async () => {
+    if (!dsLinkItemId) return;
+    setDsLinkLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/link-subcontract`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subcontractId: dsLinkSubId || null, drawScheduleItemId: dsLinkItemId }),
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Failed to link"); }
+      toast.success("Subcontract linked");
+      setDsLinkItemId(null); setDsLinkSubId("");
+      refetchDrawSchedule();
+    } catch (err: any) { toast.error(err.message || "Failed to link"); }
+    finally { setDsLinkLoading(false); }
+  };
+
+  const handleDsUnlinkSub = async (subcontractId: string) => {
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-schedule/link-subcontract`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subcontractId, drawScheduleItemId: null }),
+      });
+      if (!res.ok) throw new Error("Failed to unlink");
+      toast.success("Subcontract unlinked");
+      refetchDrawSchedule();
+    } catch { toast.error("Failed to unlink subcontract"); }
+  };
+
+  const handleDsExportCSV = () => {
+    if (drawScheduleItems.length === 0) { toast.error("No items to export"); return; }
+    const header = "Line Item,Budget Amount,Committed,Variance,% Used,Linked Subcontracts";
+    const rows = drawScheduleItems.map((item: any) => {
+      const committed = item.committed ?? 0;
+      const variance = item.budgetAmount - committed;
+      const pct = item.budgetAmount > 0 ? ((committed / item.budgetAmount) * 100).toFixed(1) : "0.0";
+      const subs = (item.linkedSubcontracts ?? []).map((s: any) => s.companyName).join("; ");
+      return `"${item.description}",${item.budgetAmount},${committed},${variance},${pct}%,"${subs}"`;
+    });
+    const totalBudget = drawScheduleItems.reduce((s: number, i: any) => s + i.budgetAmount, 0);
+    const totalCommitted = drawScheduleItems.reduce((s: number, i: any) => s + (i.committed ?? 0), 0);
+    const totalVariance = totalBudget - totalCommitted;
+    const totalPct = totalBudget > 0 ? ((totalCommitted / totalBudget) * 100).toFixed(1) : "0.0";
+    rows.push(`"TOTAL",${totalBudget},${totalCommitted},${totalVariance},${totalPct}%,""`);
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `draw-schedule-${project?.name?.replace(/[^a-z0-9]/gi, "-").toLowerCase() ?? "project"}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Layout>
       <div className="mb-8 bg-card p-6 rounded-2xl border border-border/50 shadow-sm">
@@ -630,6 +801,33 @@ export default function ProjectDetail() {
         </div>
       </div>
 
+      {/* SECTION TABS — GC only */}
+      {isGC && (
+        <div className="flex border-b border-border mb-6">
+          <button
+            onClick={() => setActiveSection("overview")}
+            className={cn("flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+              activeSection === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" /> Overview
+          </button>
+          <button
+            onClick={() => setActiveSection("draw-schedule")}
+            className={cn("flex items-center gap-2 px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+              activeSection === "draw-schedule" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <TableProperties className="h-4 w-4" /> Draw Schedule
+            {drawScheduleItems.length > 0 && (
+              <span className="ml-1 text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">{drawScheduleItems.length}</span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {activeSection === "overview" && (
+      <>
       {/* ARCHIVED READ-ONLY BANNER */}
       {isArchived && (
         <div className="mb-6 rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-start gap-3">
@@ -1348,6 +1546,343 @@ export default function ProjectDetail() {
         </Card>
       )}
 
+      </>
+      )}
+
+      {/* DRAW SCHEDULE SECTION */}
+      {isGC && activeSection === "draw-schedule" && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold font-display">Bank Draw Schedule</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Track your budgeted cost categories vs. committed subcontract amounts</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" variant="outline" onClick={handleDsExportCSV} className="gap-1.5">
+                <FileDown className="h-4 w-4" /> Export CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.open(`${BASE}/api/projects/${projectId}/draw-schedule/pdf`, "_blank")}
+                className="gap-1.5"
+              >
+                <Download className="h-4 w-4" /> Download PDF
+              </Button>
+            </div>
+          </div>
+
+          {/* Add Line Items Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Plus className="h-4 w-4 text-primary" /> Add Line Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex rounded-xl border border-border overflow-hidden mb-4">
+                <button
+                  type="button"
+                  className={cn("flex-1 py-2 text-sm font-medium transition-colors", dsInputMode === "manual" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary")}
+                  onClick={() => setDsInputMode("manual")}
+                >
+                  Add Manually
+                </button>
+                <button
+                  type="button"
+                  className={cn("flex-1 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-2", dsInputMode === "paste" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary")}
+                  onClick={() => setDsInputMode("paste")}
+                >
+                  <Clipboard className="h-3.5 w-3.5" /> Paste from Bank Doc
+                </button>
+              </div>
+
+              {dsInputMode === "manual" ? (
+                <form onSubmit={handleDsAddItem} className="flex flex-col sm:flex-row gap-3">
+                  <Input
+                    placeholder="e.g. Framing, Electrical, Plumbing…"
+                    value={dsAddDescription}
+                    onChange={e => setDsAddDescription(e.target.value)}
+                    className="flex-1"
+                    required
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Budget amount, e.g. $85,000"
+                    value={dsAddBudget}
+                    onChange={e => setDsAddBudget(e.target.value)}
+                    className="w-full sm:w-48 font-mono"
+                    required
+                  />
+                  <Button type="submit" isLoading={dsAddLoading} className="gap-1.5 shrink-0">
+                    <Plus className="h-4 w-4" /> Add
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-3">
+                  <textarea
+                    className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y min-h-[120px]"
+                    placeholder={"Paste your bank draw schedule here — CSV or plain text:\n\nFraming, $85,000\nElectrical, 45000\nPlumbing $28,000\nHVAC,$32,500"}
+                    value={dsPasteText}
+                    onChange={e => setDsPasteText(e.target.value)}
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="button" variant="outline" isLoading={dsParsing} onClick={handleDsParse} className="gap-1.5">
+                      <Clipboard className="h-4 w-4" /> Parse Items
+                    </Button>
+                    {dsParsedItems.length > 0 && (
+                      <span className="text-sm text-muted-foreground">{dsParsedItems.length} items detected — review below and import</span>
+                    )}
+                  </div>
+                  {dsParsedItems.length > 0 && (
+                    <div className="border border-border rounded-xl overflow-hidden">
+                      <div className="bg-muted/50 px-4 py-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Parsed Preview</span>
+                        <Button size="sm" onClick={handleDsImport} isLoading={dsAddLoading} className="gap-1.5 h-7 px-3 text-xs">
+                          <Plus className="h-3 w-3" /> Import {dsParsedItems.length} Items
+                        </Button>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {dsParsedItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-3 px-4 py-2.5">
+                            <span className="flex-1 text-sm font-medium">{item.description}</span>
+                            <span className="text-sm font-mono text-muted-foreground">{formatCurrency(item.budgetAmount)}</span>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              onClick={() => setDsParsedItems(prev => prev.filter((_, i) => i !== idx))}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Draw Schedule Table */}
+          {drawScheduleItems.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <TableProperties className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                <p className="text-muted-foreground font-medium">No line items yet</p>
+                <p className="text-sm text-muted-foreground/70 mt-1">Add items manually above or paste your bank draw schedule</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Line Item</th>
+                        <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Budget</th>
+                        <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Committed</th>
+                        <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Variance</th>
+                        <th className="text-right px-4 py-3 font-semibold text-muted-foreground hidden sm:table-cell">% Used</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Linked Subcontracts</th>
+                        <th className="px-4 py-3 w-24"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {drawScheduleItems.map((item: any) => {
+                        const committed = item.committed ?? 0;
+                        const variance = item.budgetAmount - committed;
+                        const pct = item.budgetAmount > 0 ? (committed / item.budgetAmount) * 100 : 0;
+                        const isEditing = dsEditItemId === item.id;
+                        const varColor = variance < 0
+                          ? "text-red-600 dark:text-red-400"
+                          : pct >= 90
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-green-600 dark:text-green-400";
+                        const varBg = variance < 0
+                          ? "bg-red-50 dark:bg-red-950/20"
+                          : pct >= 90
+                          ? "bg-amber-50 dark:bg-amber-950/20"
+                          : "bg-green-50 dark:bg-green-950/20";
+
+                        const linkedSubs = item.linkedSubcontracts ?? [];
+                        const unlinkedSubs = (project.subcontracts ?? []).filter(
+                          (sc: any) => !drawScheduleItems.some((di: any) =>
+                            (di.linkedSubcontracts ?? []).some((ls: any) => ls.id === sc.id)
+                          )
+                        );
+
+                        return (
+                          <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3">
+                              {isEditing ? (
+                                <Input
+                                  value={dsEditDescription}
+                                  onChange={e => setDsEditDescription(e.target.value)}
+                                  className="h-8 text-sm"
+                                  autoFocus
+                                />
+                              ) : (
+                                <span className="font-semibold">{item.description}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono">
+                              {isEditing ? (
+                                <Input
+                                  value={dsEditBudget}
+                                  onChange={e => setDsEditBudget(e.target.value)}
+                                  className="h-8 text-sm text-right font-mono w-32 ml-auto"
+                                />
+                              ) : (
+                                formatCurrency(item.budgetAmount)
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono">{formatCurrency(committed)}</td>
+                            <td className={cn("px-4 py-3 text-right font-mono font-semibold rounded-sm", varColor)}>
+                              <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold", varBg, varColor)}>
+                                {variance >= 0 ? "+" : ""}{formatCurrency(variance)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono hidden sm:table-cell">
+                              <span className={cn("text-xs font-semibold", pct > 100 ? "text-red-600" : pct >= 90 ? "text-amber-600" : "text-muted-foreground")}>
+                                {pct.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 hidden md:table-cell">
+                              <div className="flex flex-wrap gap-1.5 items-center">
+                                {linkedSubs.map((ls: any) => (
+                                  <span key={ls.id} className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+                                    {ls.companyName}
+                                    <button
+                                      type="button"
+                                      title="Unlink"
+                                      onClick={() => handleDsUnlinkSub(ls.id)}
+                                      className="hover:text-destructive transition-colors ml-0.5"
+                                    >
+                                      <Link2Off className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                                {dsLinkItemId === item.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <select
+                                      className="text-xs rounded-lg border border-border bg-background px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                      value={dsLinkSubId}
+                                      onChange={e => setDsLinkSubId(e.target.value)}
+                                    >
+                                      <option value="">— select sub —</option>
+                                      {unlinkedSubs.map((sc: any) => (
+                                        <option key={sc.id} value={sc.id}>{sc.sub?.companyName ?? "Unknown"}</option>
+                                      ))}
+                                    </select>
+                                    <Button
+                                      size="sm"
+                                      className="h-7 px-2 text-xs gap-1"
+                                      disabled={!dsLinkSubId}
+                                      isLoading={dsLinkLoading}
+                                      onClick={handleDsLinkSub}
+                                    >
+                                      <Link2 className="h-3 w-3" /> Link
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setDsLinkItemId(null); setDsLinkSubId(""); }}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : unlinkedSubs.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setDsLinkItemId(item.id); setDsLinkSubId(""); }}
+                                    className="text-xs text-primary/70 hover:text-primary flex items-center gap-1 transition-colors"
+                                  >
+                                    <Link2 className="h-3 w-3" /> Link sub
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1">
+                                {isEditing ? (
+                                  <>
+                                    <Button size="sm" className="h-7 px-2 text-xs" isLoading={dsEditLoading} onClick={() => handleDsEdit(item.id)}>
+                                      <Save className="h-3 w-3" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setDsEditItemId(null)}>
+                                      <XCircle className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                      onClick={() => { setDsEditItemId(item.id); setDsEditDescription(item.description); setDsEditBudget(String(item.budgetAmount)); }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                      onClick={() => handleDsDelete(item.id, item.description)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/60 font-bold">
+                        <td className="px-4 py-3 text-sm">TOTAL</td>
+                        <td className="px-4 py-3 text-right font-mono text-sm">
+                          {formatCurrency(drawScheduleItems.reduce((s: number, i: any) => s + i.budgetAmount, 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-sm">
+                          {formatCurrency(drawScheduleItems.reduce((s: number, i: any) => s + (i.committed ?? 0), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          {(() => {
+                            const totalBudget = drawScheduleItems.reduce((s: number, i: any) => s + i.budgetAmount, 0);
+                            const totalCommitted = drawScheduleItems.reduce((s: number, i: any) => s + (i.committed ?? 0), 0);
+                            const totalVariance = totalBudget - totalCommitted;
+                            const varColor = totalVariance < 0 ? "text-red-600" : totalVariance / totalBudget < 0.1 ? "text-amber-600" : "text-green-600";
+                            return <span className={cn("font-mono font-bold", varColor)}>{totalVariance >= 0 ? "+" : ""}{formatCurrency(totalVariance)}</span>;
+                          })()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm hidden sm:table-cell">
+                          {(() => {
+                            const totalBudget = drawScheduleItems.reduce((s: number, i: any) => s + i.budgetAmount, 0);
+                            const totalCommitted = drawScheduleItems.reduce((s: number, i: any) => s + (i.committed ?? 0), 0);
+                            const pct = totalBudget > 0 ? (totalCommitted / totalBudget) * 100 : 0;
+                            return <span className="font-mono">{pct.toFixed(1)}%</span>;
+                          })()}
+                        </td>
+                        <td className="hidden md:table-cell"></td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Color key */}
+                <div className="px-4 py-3 border-t border-border flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-100 border border-green-300 dark:bg-green-950/40 inline-block"></span> Under budget</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-100 border border-amber-300 dark:bg-amber-950/40 inline-block"></span> Within 10% of budget</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-100 border border-red-300 dark:bg-red-950/40 inline-block"></span> Over budget</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* Edit Project Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen} title="Edit Project" description="Update the project details. Changes are visible to all members.">
         <form onSubmit={handleEditSave} className="space-y-4 mt-2">
@@ -1655,11 +2190,26 @@ export default function ProjectDetail() {
               Percentage withheld from each invoice until project close. Default is 10%.
             </p>
           </div>
+          {drawScheduleItems.length > 0 && (
+            <div>
+              <label className="text-sm font-semibold mb-1.5 block">Link to Draw Schedule Item <span className="font-normal text-muted-foreground">(optional)</span></label>
+              <select
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                value={awardDrawScheduleItemId}
+                onChange={e => setAwardDrawScheduleItemId(e.target.value)}
+              >
+                <option value="">— No draw schedule link —</option>
+                {drawScheduleItems.map((item: any) => (
+                  <option key={item.id} value={item.id}>{item.description} ({formatCurrency(item.budgetAmount)})</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <Button
               variant="ghost"
               className="min-h-[44px]"
-              onClick={() => { setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 }); setAwardTradeCategory(""); }}
+              onClick={() => { setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 }); setAwardTradeCategory(""); setAwardDrawScheduleItemId(""); }}
             >
               Cancel
             </Button>

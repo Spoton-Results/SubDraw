@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable, magicLinkTokensTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -9,6 +9,7 @@ import { getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
+import { generateDrawSchedulePDF } from "../lib/pdfDrawSchedule.js";
 
 const router = Router();
 
@@ -845,6 +846,185 @@ router.get("/:projectId/insurance-summary", requireAuth, requireGC, async (req, 
   });
 
   res.json(result);
+});
+
+// ── Draw Schedule ────────────────────────────────────────────────────────────
+
+async function computeCommittedForItem(itemId: string) {
+  const scs = await db.select().from(subcontractsTable).where(eq(subcontractsTable.drawScheduleItemId, itemId));
+  let committed = 0;
+  const linkedSubcontracts: { id: string; companyName: string; currentApprovedTotal: number }[] = [];
+  for (const sc of scs) {
+    const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, sc.id));
+    const coTotal = cos.filter(c => c.status === "APPROVED").reduce((s, c) => s + c.amount, 0);
+    const approvedTotal = sc.baseContractAmount + coTotal;
+    committed += approvedTotal;
+    const [sub] = await db.select({ companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    linkedSubcontracts.push({ id: sc.id, companyName: sub?.companyName ?? "Unknown", currentApprovedTotal: approvedTotal });
+  }
+  return { committed, linkedSubcontracts };
+}
+
+function parseDrawScheduleText(text: string): { description: string; budgetAmount: number }[] {
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  const results: { description: string; budgetAmount: number }[] = [];
+  for (const line of lines) {
+    // Match a number (with optional $ and thousands commas) at the END of the line,
+    // preceded by whitespace or a comma separator. This handles:
+    //   "Framing, $85,000"  →  description=Framing,  amount=85000
+    //   "HVAC $32,500"      →  description=HVAC,      amount=32500
+    //   "Electrical,45000"  →  description=Electrical, amount=45000
+    const m = line.match(/^(.*?)[\s,]+\$?([\d,]+(?:\.\d{1,2})?)\s*$/);
+    if (!m) continue;
+    const description = m[1].trim().replace(/,\s*$/, "").trim();
+    const amountStr = m[2];
+    const amount = parseFloat(amountStr.replace(/,/g, ""));
+    if (description && !isNaN(amount) && amount > 0) {
+      results.push({ description, budgetAmount: amount });
+    }
+  }
+  return results;
+}
+
+router.get("/:projectId/draw-schedule", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const items = await db.select().from(drawScheduleItemsTable)
+    .where(eq(drawScheduleItemsTable.projectId, projectId))
+    .orderBy(drawScheduleItemsTable.sortOrder, drawScheduleItemsTable.createdAt);
+  const result = await Promise.all(items.map(async (item) => {
+    const { committed, linkedSubcontracts } = await computeCommittedForItem(item.id);
+    return { ...item, committed, linkedSubcontracts };
+  }));
+  res.json(result);
+});
+
+router.post("/:projectId/draw-schedule", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const { description, budgetAmount } = req.body;
+  if (!description?.trim()) { res.status(400).json({ error: "description is required" }); return; }
+  const amount = Number(budgetAmount);
+  if (isNaN(amount) || amount <= 0) { res.status(400).json({ error: "budgetAmount must be a positive number" }); return; }
+  const existing = await db.select({ sortOrder: drawScheduleItemsTable.sortOrder }).from(drawScheduleItemsTable)
+    .where(eq(drawScheduleItemsTable.projectId, projectId));
+  const maxOrder = existing.length > 0 ? Math.max(...existing.map(e => e.sortOrder)) : -1;
+  const [item] = await db.insert(drawScheduleItemsTable).values({
+    projectId, description: description.trim(), budgetAmount: amount, sortOrder: maxOrder + 1,
+  }).returning();
+  res.status(201).json({ ...item, committed: 0, linkedSubcontracts: [] });
+});
+
+router.post("/:projectId/draw-schedule/parse", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const { text } = req.body;
+  if (!text?.trim()) { res.status(400).json({ error: "text is required" }); return; }
+  const parsed = parseDrawScheduleText(text);
+  res.json(parsed);
+});
+
+router.post("/:projectId/draw-schedule/import", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "items array is required" }); return; }
+  const existing = await db.select({ sortOrder: drawScheduleItemsTable.sortOrder }).from(drawScheduleItemsTable)
+    .where(eq(drawScheduleItemsTable.projectId, projectId));
+  const maxOrder = existing.length > 0 ? Math.max(...existing.map(e => e.sortOrder)) : -1;
+  const toInsert = items.map((item: any, idx: number) => ({
+    projectId,
+    description: String(item.description ?? "").trim(),
+    budgetAmount: Number(item.budgetAmount ?? 0),
+    sortOrder: maxOrder + 1 + idx,
+  })).filter(i => i.description && i.budgetAmount > 0);
+  if (toInsert.length === 0) { res.status(400).json({ error: "No valid items to import" }); return; }
+  const created = await db.insert(drawScheduleItemsTable).values(toInsert).returning();
+  res.status(201).json(created.map(i => ({ ...i, committed: 0, linkedSubcontracts: [] })));
+});
+
+router.patch("/:projectId/draw-schedule/:itemId", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [item] = await db.select().from(drawScheduleItemsTable).where(eq(drawScheduleItemsTable.id, itemId)).limit(1);
+  if (!item || item.projectId !== projectId) { res.status(404).json({ error: "Item not found" }); return; }
+  const { description, budgetAmount } = req.body;
+  const updates: any = { updatedAt: new Date() };
+  if (description !== undefined) updates.description = description.trim();
+  if (budgetAmount !== undefined) {
+    const amount = Number(budgetAmount);
+    if (isNaN(amount) || amount <= 0) { res.status(400).json({ error: "budgetAmount must be a positive number" }); return; }
+    updates.budgetAmount = amount;
+  }
+  const [updated] = await db.update(drawScheduleItemsTable).set(updates).where(eq(drawScheduleItemsTable.id, itemId)).returning();
+  const { committed, linkedSubcontracts } = await computeCommittedForItem(itemId);
+  res.json({ ...updated, committed, linkedSubcontracts });
+});
+
+router.delete("/:projectId/draw-schedule/:itemId", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [item] = await db.select().from(drawScheduleItemsTable).where(eq(drawScheduleItemsTable.id, itemId)).limit(1);
+  if (!item || item.projectId !== projectId) { res.status(404).json({ error: "Item not found" }); return; }
+  await db.update(subcontractsTable).set({ drawScheduleItemId: null }).where(eq(subcontractsTable.drawScheduleItemId, itemId));
+  await db.delete(drawScheduleItemsTable).where(eq(drawScheduleItemsTable.id, itemId));
+  res.json({ success: true });
+});
+
+router.patch("/:projectId/draw-schedule/link-subcontract", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const { subcontractId, drawScheduleItemId } = req.body;
+  if (!subcontractId) { res.status(400).json({ error: "subcontractId is required" }); return; }
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc || sc.projectId !== projectId) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (drawScheduleItemId) {
+    const [dsItem] = await db.select().from(drawScheduleItemsTable).where(eq(drawScheduleItemsTable.id, drawScheduleItemId)).limit(1);
+    if (!dsItem || dsItem.projectId !== projectId) { res.status(404).json({ error: "Draw schedule item not found" }); return; }
+  }
+  await db.update(subcontractsTable).set({ drawScheduleItemId: drawScheduleItemId ?? null, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId));
+  res.json({ success: true });
+});
+
+router.get("/:projectId/draw-schedule/pdf", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const [gc] = await db.select({ companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
+  const items = await db.select().from(drawScheduleItemsTable)
+    .where(eq(drawScheduleItemsTable.projectId, projectId))
+    .orderBy(drawScheduleItemsTable.sortOrder, drawScheduleItemsTable.createdAt);
+  const enriched = await Promise.all(items.map(async (item) => {
+    const { committed, linkedSubcontracts } = await computeCommittedForItem(item.id);
+    return { description: item.description, budgetAmount: item.budgetAmount, committed, linkedSubcontracts };
+  }));
+  const pdf = await generateDrawSchedulePDF({
+    projectName: project.name,
+    projectAddress: (project as any).address ?? null,
+    gcCompanyName: gc?.companyName ?? "General Contractor",
+    generatedAt: new Date(),
+    items: enriched,
+  });
+  const safeName = project.name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+  res.set("Content-Type", "application/pdf");
+  res.set("Content-Disposition", `attachment; filename="draw-schedule-${safeName}.pdf"`);
+  res.send(pdf);
 });
 
 export default router;

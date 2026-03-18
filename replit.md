@@ -88,6 +88,7 @@ Subs have strict data isolation — they must never see other subs on the same p
 - **Invoice auto-flagging**: Invoices over remaining contract amount are auto-flagged
 - **Invoice override**: GC can override a flagged invoice with a reason
 - **Retention tracking**: GC sets a retention rate (0–15%, default 10%) when awarding a bid. `retentionAmount` is computed and stored on each invoice approval. Scoreboard shows Gross Invoiced, Total Retention Held, Net Paid, Retention Balance. On CLOSED projects, GC can click "Release Retention" to create a final retention-release invoice (`isRetentionRelease: true`). PDF invoices show retention line items and net payable. Activity log records `RETENTION_RELEASED` events.
+- **Bank Draw Schedule**: GC-only tab on project detail. GC adds cost categories (line items) with budget amounts, either manually or by pasting/parsing bank draw schedule text or CSV. Table shows: Line Item, Budget, Committed (base + approved COs from linked subcontracts), Variance (color-coded: green under budget, amber within 10%, red over), % Used. GC can link subcontracts to line items (also available in the Award Bid dialog). Export as CSV or download as PDF. Backend: `draw_schedule_items` table, `drawScheduleItemId` FK on `subcontracts` table. Routes: `GET/POST /api/projects/:id/draw-schedule`, `POST .../parse`, `POST .../import`, `PATCH .../link-subcontract`, `DELETE .../:itemId`, `GET .../pdf`.
 
 ## Email Notifications
 

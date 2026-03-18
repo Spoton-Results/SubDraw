@@ -11,6 +11,7 @@ export const subcontractsTable = pgTable("subcontracts", {
   baseContractAmount: doublePrecision("base_contract_amount").notNull(),
   tradeCategory: text("trade_category"),
   retentionPercentage: doublePrecision("retention_percentage").default(10).notNull(),
+  drawScheduleItemId: text("draw_schedule_item_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
