@@ -73,6 +73,10 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
   const sortedInvs = [...invs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastInvoice = sortedInvs[0] ?? null;
 
+  // Latest percentage complete from the most recent non-retention-release, non-rejected invoice that has a percentageComplete
+  const latestPctInv = sortedInvs.find(i => !i.isRetentionRelease && i.status !== "REJECTED" && i.status !== "CANCELLED" && i.percentageComplete != null);
+  const latestPercentageComplete: number | null = latestPctInv?.percentageComplete ?? null;
+
   return {
     base: baseContractAmount,
     coTotal,
@@ -88,6 +92,7 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
     hasFlaggedInvoices,
     lastInvoice,
     retentionPercentage,
+    latestPercentageComplete,
   };
 }
 
@@ -151,6 +156,7 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       isRetentionRelease: invoice.isRetentionRelease ?? false,
       paymentTermsDays: sc.paymentTermsDays ?? 30,
       paymentDueDate: invoice.paymentDueDate ?? null,
+      percentageComplete: invoice.percentageComplete ?? null,
     },
     subcontract: { id: sc.id, baseContractAmount: sc.baseContractAmount, tradeCategory: sc.tradeCategory ?? null, retentionPercentage: sc.retentionPercentage ?? 0 },
     project: {
@@ -421,13 +427,18 @@ router.get("/:subcontractId/invoices/:invoiceId/pdf", requireAuth, async (req, r
 router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { subcontractId } = req.params;
-  const { amount, invoiceNumber, description } = req.body;
+  const { amount, invoiceNumber, description, percentageComplete } = req.body;
   if (!amount || isNaN(Number(amount))) {
     res.status(400).json({ error: "amount is required" });
     return;
   }
   if (!invoiceNumber || !String(invoiceNumber).trim()) {
     res.status(400).json({ error: "invoiceNumber is required" });
+    return;
+  }
+  const pct = Number(percentageComplete);
+  if (!percentageComplete || isNaN(pct) || !Number.isInteger(pct) || pct < 1 || pct > 100) {
+    res.status(400).json({ error: "percentageComplete is required and must be an integer between 1 and 100" });
     return;
   }
   if (!await canAccessSubcontract(user, subcontractId)) {
@@ -456,6 +467,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     description: description ? String(description).trim() : null,
     status,
     flaggedOverAmount,
+    percentageComplete: pct,
   }).returning();
 
   const scWithRelations = await getSubcontractWithRelations(sc);
@@ -466,7 +478,7 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
   await logActivity(
     subcontractId,
     status === "FLAGGED" ? "INVOICE_FLAGGED" : "INVOICE_SUBMITTED",
-    `Invoice #${String(invoiceNumber).trim()} for $${invoiceAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} submitted${flagNote}`,
+    `Invoice #${String(invoiceNumber).trim()} for $${invoiceAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} submitted at ${pct}% scope complete${flagNote}`,
     actorName,
     user.role
   );

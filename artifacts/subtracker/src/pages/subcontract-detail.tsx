@@ -5,7 +5,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   useGetSubcontract, useGetMe,
   useCreateChangeOrder, useApproveChangeOrder, useRejectChangeOrder,
-  useSubmitInvoice, useApproveInvoice, useRejectInvoice, useOverrideInvoice,
+  useApproveInvoice, useRejectInvoice, useOverrideInvoice,
   useDeleteInvoice, useGetSubcontractActivity,
   useMarkInvoicePaid, useConfirmInvoicePayment, useDisputeInvoicePayment,
   getGetSubcontractQueryKey, getGetSubcontractActivityQueryKey,
@@ -62,7 +62,7 @@ export default function SubcontractDetail() {
   const approveCO = useApproveChangeOrder();
   const rejectCO = useRejectChangeOrder();
 
-  const submitInv = useSubmitInvoice();
+  const [submittingInv, setSubmittingInv] = React.useState(false);
   const approveInv = useApproveInvoice();
   const rejectInv = useRejectInvoice();
   const overrideInv = useOverrideInvoice();
@@ -85,6 +85,7 @@ export default function SubcontractDetail() {
   const [invNumber, setInvNumber] = React.useState("");
   const [invAmount, setInvAmount] = React.useState("");
   const [invDescription, setInvDescription] = React.useState("");
+  const [invPercent, setInvPercent] = React.useState("");
 
   const [rejectInvConfirm, setRejectInvConfirm] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
   const [rejectInvReason, setRejectInvReason] = React.useState("");
@@ -280,6 +281,29 @@ export default function SubcontractDetail() {
     : 0;
   const isOverBudget = sb.remaining < 0 || hasFlagged;
 
+  // Scope complete tracking
+  const latestPercentageComplete: number | null = sb.latestPercentageComplete ?? null;
+  const invoicedPercent = sb.currentApprovedTotal > 0
+    ? Math.round((sb.grossInvoiced / sb.currentApprovedTotal) * 100)
+    : 0;
+  const scopeInconsistent = latestPercentageComplete != null && sb.currentApprovedTotal > 0 &&
+    Math.abs(latestPercentageComplete - invoicedPercent) > 20;
+
+  // Build sorted list of non-retention-release, non-rejected invoices for regression detection
+  const scopeInvoices = [...sub.invoices]
+    .filter((i: any) => !i.isRetentionRelease && i.status !== "REJECTED" && (i as any).percentageComplete != null)
+    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const scopeRegressionSet = new Set<string>();
+  const scopeRegressionPrevMap = new Map<string, number>();
+  for (let idx = 1; idx < scopeInvoices.length; idx++) {
+    const prev = scopeInvoices[idx - 1] as any;
+    const curr = scopeInvoices[idx] as any;
+    if (curr.percentageComplete < prev.percentageComplete) {
+      scopeRegressionSet.add(curr.id);
+      scopeRegressionPrevMap.set(curr.id, prev.percentageComplete);
+    }
+  }
+
   const retPct: number = (sub as any).retentionPercentage ?? 0;
   const retentionBalance: number = sb.retentionBalance ?? 0;
   const grossInvoiced: number = sb.grossInvoiced ?? 0;
@@ -337,16 +361,32 @@ export default function SubcontractDetail() {
     const amount = parseFloat(invAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Please enter a valid invoice amount");
     if (!invNumber.trim()) return toast.error("Invoice number is required");
+    const pct = parseInt(invPercent, 10);
+    if (!invPercent || isNaN(pct) || pct < 1 || pct > 100) return toast.error("Please enter a valid percentage complete (1–100)");
     try {
-      await submitInv.mutateAsync({
-        subcontractId,
-        data: { invoiceNumber: invNumber.trim(), amount, description: invDescription.trim() || undefined },
+      setSubmittingInv(true);
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const resp = await fetch(`${base}/api/subcontracts/${subcontractId}/invoices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          invoiceNumber: invNumber.trim(),
+          amount,
+          description: invDescription.trim() || undefined,
+          percentageComplete: pct,
+        }),
       });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        throw new Error(d.error ?? "Failed to submit invoice");
+      }
       toast.success("Invoice submitted successfully");
       invalidate();
       setInvDialogOpen(false);
-      setInvNumber(""); setInvAmount(""); setInvDescription("");
-    } catch (err: any) { toast.error(err?.data?.error || "Failed to submit invoice"); }
+      setInvNumber(""); setInvAmount(""); setInvDescription(""); setInvPercent("");
+    } catch (err: any) { toast.error(err?.message || "Failed to submit invoice"); }
+    finally { setSubmittingInv(false); }
   };
 
   const handleActionInv = async (id: string, action: "approve") => {
@@ -809,6 +849,22 @@ export default function SubcontractDetail() {
               <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
             </div>
 
+            {/* SCOPE COMPLETE — from sub's latest invoice */}
+            {latestPercentageComplete != null && (
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-foreground flex items-center gap-1">
+                  <Percent className="h-3 w-3 text-muted-foreground" />
+                  Scope Complete
+                </span>
+                <span className={cn(
+                  "font-mono text-base tabular-nums font-semibold",
+                  scopeInconsistent ? "text-orange-600 dark:text-orange-400" : "text-primary"
+                )}>
+                  {latestPercentageComplete}%
+                </span>
+              </div>
+            )}
+
             {/* RETENTION HELD — only if retention is active and held */}
             {retPct > 0 && totalRetentionHeld > 0 && (
               <div className="flex items-baseline justify-between gap-4">
@@ -948,6 +1004,36 @@ export default function SubcontractDetail() {
           <span>{formatCurrency(sb.invoicedTotal)} invoiced</span>
           <span>{formatCurrency(sb.currentApprovedTotal)} approved total</span>
         </div>
+        {/* SCOPE COMPLETE — second progress bar / indicator */}
+        {latestPercentageComplete != null && (
+          <>
+            <div className="flex items-center justify-between mb-1 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <Percent className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-muted-foreground">Scope Complete</span>
+              </div>
+              <span className={cn(
+                "text-sm font-bold tabular-nums",
+                scopeInconsistent ? "text-orange-600" : "text-primary"
+              )}>
+                {latestPercentageComplete}%
+              </span>
+            </div>
+            <Progress
+              value={latestPercentageComplete}
+              className={cn("h-3 rounded-full", scopeInconsistent ? "[&>div]:bg-orange-500" : "[&>div]:bg-primary")}
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+              <span>Per sub's last invoice</span>
+              {scopeInconsistent && isGC && (
+                <span className="text-orange-600 dark:text-orange-400 font-semibold flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Claims {latestPercentageComplete}% complete but only {invoicedPercent}% invoiced
+                </span>
+              )}
+            </div>
+          </>
+        )}
         {lastInvoice && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
             <Receipt className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1441,6 +1527,11 @@ export default function SubcontractDetail() {
                               <Unlock className="h-3 w-3" /> Retention Release
                             </span>
                           )}
+                          {!(inv as any).isRetentionRelease && (inv as any).percentageComplete != null && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                              <Percent className="h-3 w-3" />{(inv as any).percentageComplete}% complete
+                            </span>
+                          )}
                         </div>
                         <div className="font-mono text-xl font-bold text-foreground">{formatCurrency(inv.amount)}</div>
                         {!(inv as any).isRetentionRelease && retPct > 0 && (inv as any).retentionAmount != null && (
@@ -1494,6 +1585,24 @@ export default function SubcontractDetail() {
                           }
                           return null;
                         })()}
+                        {/* SCOPE REGRESSION WARNING — GC only */}
+                        {isGC && scopeRegressionSet.has(inv.id) && (
+                          <div className="mt-2 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                            <p className="text-sm text-amber-700 dark:text-amber-300 font-semibold">
+                              Warning: Sub previously reported {scopeRegressionPrevMap.get(inv.id)}% complete but is now reporting {(inv as any).percentageComplete}%
+                            </p>
+                          </div>
+                        )}
+                        {/* SCOPE INCONSISTENCY FLAG — GC only, on the latest invoice */}
+                        {isGC && scopeInconsistent && latestPercentageComplete != null && (inv as any).percentageComplete === latestPercentageComplete && !(inv as any).isRetentionRelease && (
+                          <div className="mt-2 flex items-start gap-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-700 rounded-lg px-3 py-2">
+                            <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                            <p className="text-sm text-orange-700 dark:text-orange-300 font-semibold">
+                              Sub claims {latestPercentageComplete}% complete but has only invoiced {invoicedPercent}% of contract value — verify scope progress
+                            </p>
+                          </div>
+                        )}
                         {/* REJECTION REASON — shown in red to both GC and sub */}
                         {inv.status === "REJECTED" && (inv as any).rejectionReason && (
                           <div className="mt-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
@@ -1829,7 +1938,7 @@ export default function SubcontractDetail() {
         </form>
       </Dialog>
 
-      <Dialog open={invDialogOpen} onOpenChange={setInvDialogOpen} title="Submit Invoice">
+      <Dialog open={invDialogOpen} onOpenChange={(open) => { if (!open) { setInvDialogOpen(false); setInvNumber(""); setInvAmount(""); setInvDescription(""); setInvPercent(""); } }} title="Submit Invoice">
         <form onSubmit={handleSubmitInv} className="space-y-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">
@@ -1845,13 +1954,35 @@ export default function SubcontractDetail() {
           </div>
           <div>
             <label className="text-sm font-semibold mb-1 block">
+              Percentage of Total Scope Complete <span className="text-red-500">*</span>
+            </label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              As of this invoice, what percentage of your total scope of work is complete? (e.g. 65)
+            </p>
+            <div className="relative">
+              <Input
+                required
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                placeholder="e.g. 65"
+                value={invPercent}
+                onChange={e => setInvPercent(e.target.value)}
+                className="pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold pointer-events-none">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
               Description / Notes <span className="text-muted-foreground font-normal text-xs">(optional)</span>
             </label>
             <Input placeholder="e.g. Rough-in electrical work, weeks 3–4" value={invDescription} onChange={e => setInvDescription(e.target.value)} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setInvDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" className="min-h-[44px]" isLoading={submitInv.isPending}>Submit Invoice</Button>
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setInvDialogOpen(false); setInvNumber(""); setInvAmount(""); setInvDescription(""); setInvPercent(""); }}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px]" isLoading={submittingInv}>Submit Invoice</Button>
           </div>
         </form>
       </Dialog>

@@ -1713,7 +1713,11 @@ components:
           type: number
         description:
           type: string
-      required: [invoiceNumber, amount]
+        percentageComplete:
+          type: integer
+          minimum: 1
+          maximum: 100
+      required: [invoiceNumber, amount, percentageComplete]
 
     OverrideInvoiceRequest:
       type: object

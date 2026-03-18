@@ -51,6 +51,7 @@ export interface InvoicePDFData {
     isRetentionRelease?: boolean;
     paymentTermsDays?: number;
     paymentDueDate?: Date | string | null;
+    percentageComplete?: number | null;
   };
   subcontract: {
     id: string;
@@ -189,6 +190,9 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     ];
     if (invoice.paymentDueDate) {
       metaRows.push(["Payment Due:", formatDate(invoice.paymentDueDate)]);
+    }
+    if (invoice.percentageComplete != null) {
+      metaRows.push(["Scope Complete:", `${invoice.percentageComplete}%`]);
     }
 
     for (const [label, val] of metaRows) {

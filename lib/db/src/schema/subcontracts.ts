@@ -48,6 +48,7 @@ export const invoicesTable = pgTable("invoices", {
   disputeReason: text("dispute_reason"),
   retentionAmount: doublePrecision("retention_amount"),
   isRetentionRelease: boolean("is_retention_release").default(false).notNull(),
+  percentageComplete: integer("percentage_complete"),
   approvedAt: timestamp("approved_at"),
   paymentDueDate: timestamp("payment_due_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
