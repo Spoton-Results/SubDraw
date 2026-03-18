@@ -513,129 +513,132 @@ export default function SubcontractDetail() {
         </div>
       )}
 
-      {/* SCOREBOARD — calculator tape layout */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="text-xl font-bold font-display flex items-center gap-2">
-          <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
-        </h2>
-        {retPct > 0 && (
-          <span className="text-sm font-semibold text-muted-foreground">
-            <Percent className="h-3.5 w-3.5 inline-block mr-0.5 align-text-top" />{retPct}% Retention Rate
-          </span>
-        )}
-      </div>
-
-      <div className="border border-border rounded-2xl overflow-hidden bg-white dark:bg-card mb-6 shadow-sm">
-
-        {/* CONTRACT BUILD-UP */}
-        <div className="px-6 pt-5 pb-4 space-y-2.5">
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="text-sm text-muted-foreground">Base Contract</span>
-            <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(sb.base)}</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="text-sm text-muted-foreground">
-              <span className="text-primary font-bold mr-1">+</span>Approved Change Orders
+      {/* SCOREBOARD — receipt / calculator-tape layout */}
+      <div className="mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-xl font-bold font-display flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
+          </h2>
+          {retPct > 0 && (
+            <span className="text-sm font-semibold text-muted-foreground">
+              <Percent className="h-3.5 w-3.5 inline-block mr-0.5 align-text-top" />{retPct}% Retention
             </span>
-            <span className={cn("font-mono text-base tabular-nums", sb.coTotal > 0 ? "text-primary" : "text-muted-foreground")}>
-              {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal)}
-            </span>
-          </div>
-          <div className="border-t border-border pt-3">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm font-semibold text-foreground">
-                <span className="text-muted-foreground font-normal mr-1">=</span>Current Approved Total
-              </span>
-              <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
-            </div>
-          </div>
+          )}
         </div>
 
-        <div className="border-t border-dashed border-border/70" />
+        <div className="border border-border rounded-2xl bg-white dark:bg-card shadow-sm overflow-hidden max-w-[400px] mx-auto w-full">
 
-        {/* INVOICE DEDUCTIONS */}
-        <div className="px-6 pt-4 pb-5 space-y-2.5">
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="text-sm text-muted-foreground">Total Invoiced</span>
-            <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
-          </div>
-          {retPct > 0 && totalRetentionHeld > 0 && (
+          {/* CONTRACT BUILD-UP */}
+          <div className="px-6 pt-5 pb-3 space-y-2.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm text-muted-foreground">
-                <span className="text-orange-500 font-bold mr-1">−</span>Retention Held ({retPct}%)
-              </span>
-              <span className="font-mono text-base tabular-nums text-orange-600 dark:text-orange-400">−{formatCurrency(totalRetentionHeld)}</span>
+              <span className="text-sm text-foreground">Base Contract</span>
+              <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(sb.base)}</span>
             </div>
-          )}
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-foreground">Approved COs</span>
+              <span className="font-mono text-base tabular-nums text-foreground">
+                {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal)}
+              </span>
+            </div>
+          </div>
+
+          <hr className="border-foreground/20" />
+
+          {/* APPROVED TOTAL */}
+          <div className="px-6 py-3.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm font-bold text-foreground uppercase tracking-wide">Approved Total</span>
+              <span className="font-mono text-xl font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
+            </div>
+          </div>
+
+          <hr className="border-foreground/20" />
+
+          {/* INVOICE DEDUCTIONS */}
+          <div className="px-6 pt-3 pb-3 space-y-2.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-foreground">Total Invoiced</span>
+              <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
+            </div>
+            {retPct > 0 && totalRetentionHeld > 0 && (
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-foreground">Retention Held ({retPct}%)</span>
+                <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(totalRetentionHeld)}</span>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-foreground/20" />
 
           {/* REMAINING BALANCE — hero number */}
-          <div className="border-t-2 border-foreground/15 dark:border-foreground/20 pt-4 mt-1">
+          <div className="px-6 pt-4 pb-5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-base font-bold text-foreground">
-                <span className="text-muted-foreground font-normal text-sm mr-1">=</span>Remaining Balance
-              </span>
+              <span className="text-sm font-bold text-foreground uppercase tracking-wide">Remaining Balance</span>
               <span className={cn(
-                "font-mono font-bold tabular-nums text-4xl",
-                sb.remaining < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                "font-mono font-bold tabular-nums text-4xl leading-none",
+                sb.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
               )}>
                 {sb.remaining < 0 ? `−${formatCurrency(Math.abs(sb.remaining))}` : formatCurrency(sb.remaining)}
               </span>
             </div>
             {isOverBudget && (
-              <p className="text-xs font-semibold text-red-500 mt-1.5 text-right tracking-wide uppercase">Over budget</p>
+              <p className="text-xs font-semibold text-red-500 mt-2 text-right tracking-wide uppercase">Over budget</p>
             )}
           </div>
-        </div>
 
-        {/* RETENTION RELEASE STRIP — only if retention is active */}
-        {retPct > 0 && (
-          <div className="border-t border-border bg-muted/30 dark:bg-muted/10 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Retention Balance</p>
-              <p className={cn("text-xl font-bold font-mono tabular-nums", retentionBalance > 0 ? "text-foreground" : "text-green-600 dark:text-green-400")}>
-                {formatCurrency(retentionBalance)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {retentionBalance > 0 ? "Owed to sub upon project close" : "All retention released"}
-              </p>
-            </div>
-            <div>
-              {canReleaseRetention && !alreadyReleasedInvoice ? (
-                releaseRetentionConfirm ? (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
-                      isLoading={releaseRetentionLoading}
-                      onClick={handleReleaseRetention}
-                    >
-                      <Unlock className="h-4 w-4" /> Confirm Release
-                    </Button>
-                    <Button size="sm" variant="ghost" className="min-h-[36px]" onClick={() => setReleaseRetentionConfirm(false)}>Cancel</Button>
-                  </div>
-                ) : (
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
-                    onClick={() => setReleaseRetentionConfirm(true)}
-                  >
-                    <Unlock className="h-4 w-4" /> Release Retention ({formatCurrency(retentionBalance)})
-                  </Button>
-                )
-              ) : alreadyReleasedInvoice ? (
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
-                  <Unlock className="h-4 w-4" /> Release Pending — Invoice #{alreadyReleasedInvoice.invoiceNumber}
-                </p>
-              ) : retentionBalance === 0 && totalRetentionHeld > 0 ? (
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
-                  <Unlock className="h-4 w-4" /> All retention released
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">Available when project closes</p>
-              )}
-            </div>
-          </div>
-        )}
+          {/* RETENTION RELEASE — only if retention is active */}
+          {retPct > 0 && (
+            <>
+              <hr className="border-foreground/20" />
+              <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Retention Balance</p>
+                  <p className={cn("text-xl font-bold font-mono tabular-nums", retentionBalance > 0 ? "text-foreground" : "text-green-600 dark:text-green-400")}>
+                    {formatCurrency(retentionBalance)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {retentionBalance > 0 ? "Owed to sub upon project close" : "All retention released"}
+                  </p>
+                </div>
+                <div>
+                  {canReleaseRetention && !alreadyReleasedInvoice ? (
+                    releaseRetentionConfirm ? (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
+                          isLoading={releaseRetentionLoading}
+                          onClick={handleReleaseRetention}
+                        >
+                          <Unlock className="h-4 w-4" /> Confirm Release
+                        </Button>
+                        <Button size="sm" variant="ghost" className="min-h-[36px]" onClick={() => setReleaseRetentionConfirm(false)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white min-h-[36px] gap-1.5"
+                        onClick={() => setReleaseRetentionConfirm(true)}
+                      >
+                        <Unlock className="h-4 w-4" /> Release Retention ({formatCurrency(retentionBalance)})
+                      </Button>
+                    )
+                  ) : alreadyReleasedInvoice ? (
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
+                      <Unlock className="h-4 w-4" /> Release Pending — Invoice #{alreadyReleasedInvoice.invoiceNumber}
+                    </p>
+                  ) : retentionBalance === 0 && totalRetentionHeld > 0 ? (
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1.5">
+                      <Unlock className="h-4 w-4" /> All retention released
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Available when project closes</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* PROGRESS BAR */}
