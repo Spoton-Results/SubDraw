@@ -32,7 +32,7 @@ import {
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
-  Eye, BadgeCheck, ChevronDown, ChevronUp, Users,
+  Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -1223,6 +1223,11 @@ export default function ProjectDetail() {
                                       {hasFlagged && (
                                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
                                           <AlertTriangle className="h-2.5 w-2.5" /> Flagged
+                                        </span>
+                                      )}
+                                      {((sub as any).unreadCommentCount ?? 0) > 0 && (
+                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+                                          <MessageSquare className="h-2.5 w-2.5" /> {(sub as any).unreadCommentCount}
                                         </span>
                                       )}
                                     </div>

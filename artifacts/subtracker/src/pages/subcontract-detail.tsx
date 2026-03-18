@@ -153,6 +153,64 @@ export default function SubcontractDetail() {
     refetchOnMount: "always",
   });
 
+  const [commentText, setCommentText] = React.useState("");
+  const [sendingComment, setSendingComment] = React.useState(false);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  const { data: comments = [], refetch: refetchComments } = useQuery({
+    queryKey: ["subcontract-comments", subcontractId],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/comments`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: 30000,
+  });
+
+  React.useEffect(() => {
+    if (!subcontractId) return;
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    fetch(`${base}/api/subcontracts/${subcontractId}/comments/mark-read`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+  }, [subcontractId, comments.length]);
+
+  React.useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [comments.length]);
+
+  const handleSendComment = async () => {
+    const msg = commentText.trim();
+    if (!msg) return;
+    setSendingComment(true);
+    try {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/comments`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to send message");
+        return;
+      }
+      setCommentText("");
+      refetchComments();
+    } catch {
+      toast.error("Failed to send message");
+    } finally {
+      setSendingComment(false);
+    }
+  };
+
   const { uploadFile: uploadCert, progress: certProgress, isUploading: certUploading } = useUpload({
     onError: (err) => toast.error(err.message || "Certificate upload failed"),
   });
@@ -1832,6 +1890,63 @@ export default function SubcontractDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* MESSAGES */}
+      <Card className="mb-8">
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" /> Messages
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="flex flex-col gap-3 max-h-[420px] overflow-y-auto pr-1 mb-4">
+            {comments.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">No messages yet. Start the conversation below.</p>
+              </div>
+            ) : (
+              comments.map((c: any) => {
+                const isMe = c.userId === user?.id;
+                return (
+                  <div key={c.id} className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">{c.companyName}</span>
+                      <Badge variant={c.role === "GC" ? "default" : "secondary"} className="text-[10px] py-0 h-4">{c.role}</Badge>
+                    </div>
+                    <div className={`rounded-lg px-4 py-2.5 text-sm max-w-[80%] break-words shadow-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                      {c.message}
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">
+                      {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+          <div className="flex gap-2 items-end border-t pt-4">
+            <Textarea
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              placeholder="Type a message…"
+              className="min-h-[72px] resize-none flex-1 text-sm"
+              maxLength={2000}
+              onKeyDown={e => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSendComment();
+                }
+              }}
+            />
+            <Button onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="h-10 px-5 shrink-0">
+              {sendingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">Press Ctrl+Enter to send</p>
+        </CardContent>
+      </Card>
 
       {/* ACTIVITY LOG */}
       <Card className="mb-8">

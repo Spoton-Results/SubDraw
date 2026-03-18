@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -87,6 +87,25 @@ export const lienWaiversTable = pgTable("lien_waivers", {
 export const insertLienWaiverSchema = createInsertSchema(lienWaiversTable).omit({ id: true, signedAt: true });
 export type InsertLienWaiver = z.infer<typeof insertLienWaiverSchema>;
 export type LienWaiver = typeof lienWaiversTable.$inferSelect;
+
+export const subcontractCommentsTable = pgTable("subcontract_comments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  userId: text("user_id").notNull().references(() => usersTable.id),
+  companyName: text("company_name").notNull(),
+  role: text("role").notNull(), // GC | SUB
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const subcontractCommentReadsTable = pgTable("subcontract_comment_reads", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  userId: text("user_id").notNull().references(() => usersTable.id),
+  lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("sc_comment_reads_unique").on(t.subcontractId, t.userId),
+]);
 
 export const contractorLicensesTable = pgTable("contractor_licenses", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),

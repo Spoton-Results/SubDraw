@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -82,7 +82,7 @@ async function getProjectFinancialSummary(projectId: string) {
   };
 }
 
-async function getProjectWithDetails(projectId: string) {
+async function getProjectWithDetails(projectId: string, requestingUserId?: string) {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
   if (!project) return null;
 
@@ -104,7 +104,15 @@ async function getProjectWithDetails(projectId: string) {
   const subcontractsWithDetails = await Promise.all(subcontracts.map(async (sc) => {
     const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
     const scoreboard = await computeSubcontractScoreboard(sc.id, sc.baseContractAmount);
-    return { ...sc, project: { ...project, gc }, sub, scoreboard };
+    const unreadCommentCount = requestingUserId ? await (async () => {
+      const [readRow] = await db.select().from(subcontractCommentReadsTable)
+        .where(and(eq(subcontractCommentReadsTable.subcontractId, sc.id), eq(subcontractCommentReadsTable.userId, requestingUserId)))
+        .limit(1);
+      const comments = await db.select().from(subcontractCommentsTable)
+        .where(eq(subcontractCommentsTable.subcontractId, sc.id));
+      return comments.filter(c => c.userId !== requestingUserId && (!readRow || c.createdAt > readRow.lastReadAt)).length;
+    })() : 0;
+    return { ...sc, project: { ...project, gc }, sub, scoreboard, unreadCommentCount };
   }));
 
   return { ...project, gc, members: membersWithUsers, bids: bidsWithSubs, subcontracts: subcontractsWithDetails };
@@ -478,7 +486,7 @@ router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => 
 
 router.get("/:projectId", requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const detail = await getProjectWithDetails(req.params.projectId);
+  const detail = await getProjectWithDetails(req.params.projectId, user.id);
   if (!detail) {
     res.status(404).json({ error: "Project not found" });
     return;
@@ -586,7 +594,7 @@ router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
   if (notes !== undefined) updates.notes = notes || null;
 
   await db.update(projectsTable).set(updates).where(eq(projectsTable.id, req.params.projectId));
-  const detail = await getProjectWithDetails(req.params.projectId);
+  const detail = await getProjectWithDetails(req.params.projectId, user.id);
   res.json(detail);
 });
 

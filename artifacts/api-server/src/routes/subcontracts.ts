@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
-import { eq, inArray, desc, and } from "drizzle-orm";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable } from "@workspace/db/schema";
+import { eq, inArray, desc, and, gt, count } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, getActorName } from "../lib/auth.js";
 import {
@@ -14,6 +14,7 @@ import {
   sendPaymentRecordedEmail,
   sendPaymentConfirmedEmail,
   sendPaymentDisputedEmail,
+  sendCommentNotificationEmail,
 } from "../lib/email.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
@@ -1121,6 +1122,107 @@ router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (
   );
 
   res.status(201).json(invoice);
+});
+
+// ── COMMENTS ──────────────────────────────────────────────────────────────────
+
+async function getUnreadCommentCount(subcontractId: string, userId: string): Promise<number> {
+  const [readRow] = await db.select().from(subcontractCommentReadsTable)
+    .where(and(eq(subcontractCommentReadsTable.subcontractId, subcontractId), eq(subcontractCommentReadsTable.userId, userId)))
+    .limit(1);
+  const comments = await db.select().from(subcontractCommentsTable)
+    .where(eq(subcontractCommentsTable.subcontractId, subcontractId));
+  return comments.filter(c =>
+    c.userId !== userId && (!readRow || c.createdAt > readRow.lastReadAt)
+  ).length;
+}
+
+router.get("/:subcontractId/comments", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const comments = await db.select().from(subcontractCommentsTable)
+    .where(eq(subcontractCommentsTable.subcontractId, subcontractId))
+    .orderBy(subcontractCommentsTable.createdAt);
+  res.json(comments);
+});
+
+router.post("/:subcontractId/comments", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const { message } = req.body;
+  if (!message || !String(message).trim()) {
+    res.status(400).json({ error: "Message is required" }); return;
+  }
+  if (String(message).trim().length > 2000) {
+    res.status(400).json({ error: "Message must be 2000 characters or fewer" }); return;
+  }
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const scWithRelations = await getSubcontractWithRelations(sc);
+  const companyName = user.role === "GC" ? scWithRelations.project.gc.companyName : scWithRelations.sub.companyName;
+
+  const [comment] = await db.insert(subcontractCommentsTable).values({
+    subcontractId,
+    userId: user.id,
+    companyName,
+    role: user.role,
+    message: String(message).trim(),
+  }).returning();
+
+  // Mark as read for sender immediately
+  await db.insert(subcontractCommentReadsTable).values({
+    subcontractId,
+    userId: user.id,
+    lastReadAt: new Date(),
+  }).onConflictDoUpdate({
+    target: [subcontractCommentReadsTable.subcontractId, subcontractCommentReadsTable.userId],
+    set: { lastReadAt: new Date() },
+  }).catch(() => {});
+
+  // Send email to the other party asynchronously
+  const appUrl = `${getAppUrl(req)}/subcontracts/${subcontractId}`;
+  (async () => {
+    try {
+      const toEmail = user.role === "GC" ? scWithRelations.sub.email : scWithRelations.project.gc.email;
+      await sendCommentNotificationEmail({
+        toEmail,
+        projectName: scWithRelations.project.name,
+        senderCompanyName: companyName,
+        senderRole: user.role,
+        messagePreview: String(message).trim(),
+        appUrl,
+      });
+    } catch (err) {
+      console.error("[comment] Email notification failed:", err);
+    }
+  })();
+
+  res.status(201).json(comment);
+});
+
+router.post("/:subcontractId/comments/mark-read", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  await db.insert(subcontractCommentReadsTable).values({
+    subcontractId,
+    userId: user.id,
+    lastReadAt: new Date(),
+  }).onConflictDoUpdate({
+    target: [subcontractCommentReadsTable.subcontractId, subcontractCommentReadsTable.userId],
+    set: { lastReadAt: new Date() },
+  });
+  res.json({ ok: true });
 });
 
 export default router;

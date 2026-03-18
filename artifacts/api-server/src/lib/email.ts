@@ -644,3 +644,25 @@ export async function sendPasswordResetEmail(opts: {
   `);
   await send(opts.toEmail, "Reset your SubTracker password", html);
 }
+
+export async function sendCommentNotificationEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  senderCompanyName: string;
+  senderRole: string;
+  messagePreview: string;
+  appUrl: string;
+}) {
+  const roleLabel = opts.senderRole === "GC" ? "your General Contractor" : "your subcontractor";
+  const html = layout(`
+    ${heading("New message on your subcontract")}
+    ${subtext(`<strong>${opts.senderCompanyName}</strong> (${roleLabel}) left a message on <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "From", value: `${opts.senderCompanyName} (${opts.senderRole})` },
+      { label: "Message", value: opts.messagePreview.length > 200 ? opts.messagePreview.substring(0, 200) + "…" : opts.messagePreview },
+    ])}
+    ${ctaButton("View Message", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `New message from ${opts.senderCompanyName} on ${opts.projectName}`, html);
+}
