@@ -65,6 +65,7 @@ export interface InvoicePDFData {
   sub: {
     companyName: string;
     email: string;
+    licenseNumber?: string | null;
   };
   gc: {
     companyName: string;
@@ -168,6 +169,10 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     doc.fontSize(13).font("Helvetica-Bold").fillColor(TEXT).text(sub.companyName, MARGIN, y);
     y += 17;
     doc.fontSize(9).font("Helvetica").fillColor(MUTED).text(sub.email, MARGIN, y);
+    if (sub.licenseNumber) {
+      y += 12;
+      doc.fontSize(8).font("Helvetica").fillColor(MUTED).text(`License: ${sub.licenseNumber}`, MARGIN, y);
+    }
 
     const detailLabelX = midX;
     const detailValueX = PAGE_W - MARGIN - 130;

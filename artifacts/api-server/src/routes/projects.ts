@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -1148,6 +1148,47 @@ router.get("/:projectId/insurance-summary", requireAuth, requireGC, async (req, 
       subcontractId: scId,
       status: calcInsuranceStatus(ins?.expirationDate),
       expirationDate: ins?.expirationDate ?? null,
+    };
+  });
+
+  res.json(result);
+});
+
+// GET /:projectId/license-summary — license status for all subcontracts in a project (GC only)
+router.get("/:projectId/license-summary", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const scs = await db.select({ id: subcontractsTable.id }).from(subcontractsTable)
+    .where(eq(subcontractsTable.projectId, projectId));
+  const scIds = scs.map(s => s.id);
+
+  if (scIds.length === 0) { res.json([]); return; }
+
+  const licenses = await db.select().from(contractorLicensesTable)
+    .where(inArray(contractorLicensesTable.subcontractId, scIds));
+
+  const licMap = new Map(licenses.map(l => [l.subcontractId, l]));
+
+  function calcLicStatus(exp: string | null | undefined): string {
+    if (!exp) return "NO_LICENSE";
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const e = new Date(exp); e.setHours(0, 0, 0, 0);
+    const days = Math.ceil((e.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 0) return "EXPIRED";
+    if (days <= 30) return "EXPIRING_SOON";
+    return "VALID";
+  }
+
+  const result = scIds.map(scId => {
+    const lic = licMap.get(scId);
+    return {
+      subcontractId: scId,
+      status: calcLicStatus(lic?.expirationDate),
+      expirationDate: lic?.expirationDate ?? null,
     };
   });
 

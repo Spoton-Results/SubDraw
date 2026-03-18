@@ -548,7 +548,64 @@ export async function sendInsuranceUrgentExpiryEmail(opts: {
   await send(opts.toEmail, `URGENT: Insurance expiring in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""} — ${opts.subCompanyName}`, html);
 }
 
-// ─── 16. Password reset email ──────────────────────────────────────────────────
+// ─── 16. License expiry warning (30 days) — notify GC ────────────────────────
+export async function sendLicenseExpiryWarningEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  licenseType: string;
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#b45309;">⚠ Contractor License Expiring in ${opts.daysUntilExpiry} Days</p>
+    </div>
+    ${heading("Contractor License Expiring Soon")}
+    ${subtext(`The contractor license for <strong>${opts.subCompanyName}</strong> on <strong>${opts.projectName}</strong> will expire in <strong>${opts.daysUntilExpiry} days</strong>. Please ensure their license is renewed before it expires.`)}
+    ${infoBox([
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Project", value: opts.projectName },
+      { label: "License Type", value: opts.licenseType },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: `${opts.daysUntilExpiry} days` },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Contractor license expiring in ${opts.daysUntilExpiry} days — ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+export async function sendLicenseUrgentExpiryEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  licenseType: string;
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const html = layout(`
+    <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#dc2626;">🚨 URGENT: Contractor License Expiring in ${opts.daysUntilExpiry} Day${opts.daysUntilExpiry !== 1 ? "s" : ""}</p>
+    </div>
+    ${heading("Urgent: Contractor License Expiring")}
+    ${subtext(`The contractor license for <strong>${opts.subCompanyName}</strong> on <strong>${opts.projectName}</strong> is expiring in <strong>${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""}</strong>. Take immediate action to ensure license renewal and protect project compliance.`)}
+    ${warningBox([
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Project", value: opts.projectName },
+      { label: "License Type", value: opts.licenseType },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: `${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""}` },
+    ])}
+    ${ctaButton("View Subcontract Now", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `URGENT: Contractor license expiring in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry !== 1 ? "s" : ""} — ${opts.subCompanyName}`, html);
+}
+
+// ─── 17. Password reset email ──────────────────────────────────────────────────
 
 // ─── 17. Team member invite ────────────────────────────────────────────────────
 export async function sendTeamMemberInviteEmail(opts: {

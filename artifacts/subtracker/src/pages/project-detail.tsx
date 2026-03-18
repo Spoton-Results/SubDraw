@@ -236,6 +236,20 @@ export default function ProjectDetail() {
     refetchOnWindowFocus: false,
   });
 
+  // Fetch license summary for all subcontracts in this project (GC only — must be before early return)
+  const { data: projectLicenses = [] } = useQuery<{ subcontractId: string; status: string; expirationDate: string | null }[]>({
+    queryKey: ["project-license-summary", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/license-summary`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+
   // Fetch lien waivers for this project — must be before early return
   const { data: lienWaivers = [], isLoading: lienWaiversLoading } = useQuery<any[]>({
     queryKey: ["project-lien-waivers", projectId],
@@ -1183,6 +1197,7 @@ export default function ProjectDetail() {
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
                             {isGC && <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Insurance</th>}
+                            {isGC && <th className="hidden xl:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">License</th>}
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
                             <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
@@ -1198,6 +1213,7 @@ export default function ProjectDetail() {
                             const hasFlagged = (sb as any)?.hasFlaggedInvoices as boolean | undefined;
                             const isNeg = remaining < 0 || hasFlagged;
                             const insInfo = projectInsurance.find(i => i.subcontractId === sub.id);
+                            const licInfo = projectLicenses.find(l => l.subcontractId === sub.id);
                             return (
                               <tr key={sub.id} className="hover:bg-muted/30 transition-colors group">
                                 <td className="px-4 py-3">
@@ -1238,6 +1254,27 @@ export default function ProjectDetail() {
                                     )}
                                   </td>
                                 )}
+                                {isGC && (
+                                  <td className="hidden xl:table-cell px-4 py-3">
+                                    {!licInfo || licInfo.status === "NO_LICENSE" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <BadgeCheck className="h-3 w-3" /> None
+                                      </span>
+                                    ) : licInfo.status === "VALID" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-400">
+                                        <BadgeCheck className="h-3.5 w-3.5" /> Valid
+                                      </span>
+                                    ) : licInfo.status === "EXPIRING_SOON" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                                        <BadgeCheck className="h-3.5 w-3.5" /> Expiring
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                        <BadgeCheck className="h-3.5 w-3.5" /> Expired
+                                      </span>
+                                    )}
+                                  </td>
+                                )}
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
                                 <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
@@ -1261,6 +1298,7 @@ export default function ProjectDetail() {
                             <tr className="border-t-2 border-border bg-muted/50 font-bold">
                               <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
                               {isGC && <td className="hidden lg:table-cell"></td>}
+                              {isGC && <td className="hidden xl:table-cell"></td>}
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
                               <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>

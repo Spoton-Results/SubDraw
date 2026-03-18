@@ -87,6 +87,21 @@ export const insertLienWaiverSchema = createInsertSchema(lienWaiversTable).omit(
 export type InsertLienWaiver = z.infer<typeof insertLienWaiverSchema>;
 export type LienWaiver = typeof lienWaiversTable.$inferSelect;
 
+export const contractorLicensesTable = pgTable("contractor_licenses", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().unique().references(() => subcontractsTable.id),
+  licenseNumber: text("license_number"),
+  licenseType: text("license_type"),
+  issuingState: text("issuing_state"),
+  expirationDate: text("expiration_date"),
+  notifiedAt30: timestamp("notified_at_30"),
+  notifiedAt7: timestamp("notified_at_7"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ContractorLicense = typeof contractorLicensesTable.$inferSelect;
+
 export const subcontractInsurancesTable = pgTable("subcontract_insurances", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   subcontractId: text("subcontract_id").notNull().unique().references(() => subcontractsTable.id),

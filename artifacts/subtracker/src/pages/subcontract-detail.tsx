@@ -121,12 +121,31 @@ export default function SubcontractDetail() {
   const [insSaving, setInsSaving] = React.useState(false);
   const [insCertPath, setInsCertPath] = React.useState<string | null>(null);
 
+  const [licDialogOpen, setLicDialogOpen] = React.useState(false);
+  const [licNumber, setLicNumber] = React.useState("");
+  const [licType, setLicType] = React.useState("");
+  const [licState, setLicState] = React.useState("");
+  const [licExpDate, setLicExpDate] = React.useState("");
+  const [licSaving, setLicSaving] = React.useState(false);
+
   const { data: insurance, refetch: refetchInsurance } = useQuery({
     queryKey: ["subcontract-insurance", subcontractId],
     queryFn: async () => {
       const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
       const res = await fetch(`${base}/api/subcontracts/${subcontractId}/insurance`, { credentials: "include" });
       if (!res.ok) return { status: "NO_INSURANCE" } as any;
+      return res.json();
+    },
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const { data: license, refetch: refetchLicense } = useQuery({
+    queryKey: ["subcontract-license", subcontractId],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/license`, { credentials: "include" });
+      if (!res.ok) return { status: "NO_LICENSE" } as any;
       return res.json();
     },
     staleTime: 0,
@@ -473,6 +492,47 @@ export default function SubcontractDetail() {
     }
   };
 
+  const licStatus: string = license?.status ?? "NO_LICENSE";
+
+  const openLicDialog = () => {
+    setLicNumber(license?.licenseNumber ?? "");
+    setLicType(license?.licenseType ?? "");
+    setLicState(license?.issuingState ?? "");
+    setLicExpDate(license?.expirationDate ?? "");
+    setLicDialogOpen(true);
+  };
+
+  const handleSaveLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    setLicSaving(true);
+    try {
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/license`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          licenseNumber: licNumber.trim() || null,
+          licenseType: licType.trim() || null,
+          issuingState: licState.trim() || null,
+          expirationDate: licExpDate || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to save license");
+      }
+      toast.success("Contractor license saved");
+      refetchLicense();
+      invalidate();
+      setLicDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save license");
+    } finally {
+      setLicSaving(false);
+    }
+  };
+
   const getCOStatusBadge = (s: string) => {
     if (s === "APPROVED") return <Badge variant="success">Approved</Badge>;
     if (s === "REJECTED") return <Badge variant="destructive">Rejected</Badge>;
@@ -554,6 +614,26 @@ export default function SubcontractDetail() {
             {insStatus === "NO_INSURANCE" && isGC && (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
                 <Shield className="h-3.5 w-3.5" /> No Insurance on File
+              </span>
+            )}
+            {licStatus === "VALID" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800">
+                <BadgeCheck className="h-3.5 w-3.5" /> License Valid
+              </span>
+            )}
+            {licStatus === "EXPIRING_SOON" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800">
+                <BadgeCheck className="h-3.5 w-3.5" /> License Expiring
+              </span>
+            )}
+            {licStatus === "EXPIRED" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800">
+                <BadgeCheck className="h-3.5 w-3.5" /> License Expired
+              </span>
+            )}
+            {licStatus === "NO_LICENSE" && isGC && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
+                <BadgeCheck className="h-3.5 w-3.5" /> No License on File
               </span>
             )}
           </div>
@@ -962,6 +1042,99 @@ export default function SubcontractDetail() {
         </CardContent>
       </Card>
 
+      {/* CONTRACTOR LICENSE CARD */}
+      <Card className={cn(
+        "mb-6",
+        licStatus === "EXPIRED" && "border-red-400 dark:border-red-700",
+        licStatus === "EXPIRING_SOON" && "border-yellow-400 dark:border-yellow-700",
+      )}>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              {licStatus === "VALID" && <BadgeCheck className="h-5 w-5 text-blue-600" />}
+              {licStatus === "EXPIRING_SOON" && <BadgeCheck className="h-5 w-5 text-yellow-600" />}
+              {licStatus === "EXPIRED" && <BadgeCheck className="h-5 w-5 text-red-600" />}
+              {licStatus === "NO_LICENSE" && <BadgeCheck className="h-5 w-5 text-muted-foreground" />}
+              Contractor License
+            </CardTitle>
+            {isGC && (
+              <Button size="sm" variant="outline" onClick={openLicDialog} className="gap-1.5 min-h-[36px]">
+                <Pencil className="h-3.5 w-3.5" /> {licStatus === "NO_LICENSE" ? "Add License" : "Update"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {licStatus === "NO_LICENSE" ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {isGC ? "No contractor license on file. Click Add License to record their license details." : "No contractor license has been recorded yet. Contact the GC if you believe this is an error."}
+              </p>
+              {(sub as any).subLicenseNumber && (
+                <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1">Sub-Provided License Number</p>
+                  <p className="font-mono font-semibold text-blue-900 dark:text-blue-200">{(sub as any).subLicenseNumber}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {license?.licenseNumber && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">License Number</p>
+                    <p className="font-mono font-semibold">{license.licenseNumber}</p>
+                  </div>
+                )}
+                {license?.licenseType && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">License Type</p>
+                    <p className="font-semibold">{license.licenseType}</p>
+                  </div>
+                )}
+                {license?.issuingState && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Issuing State</p>
+                    <p className="font-semibold">{license.issuingState}</p>
+                  </div>
+                )}
+                {license?.expirationDate && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Expiration Date</p>
+                    <p className={cn("font-semibold flex items-center gap-1.5",
+                      licStatus === "EXPIRED" && "text-red-600",
+                      licStatus === "EXPIRING_SOON" && "text-yellow-700 dark:text-yellow-400",
+                    )}>
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {license.expirationDate}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {(sub as any).subLicenseNumber && (
+                <div className={cn(
+                  "rounded-lg px-4 py-3 border",
+                  license?.licenseNumber && (sub as any).subLicenseNumber === license.licenseNumber
+                    ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                )}>
+                  <p className={cn("text-xs font-semibold uppercase tracking-wide mb-1",
+                    license?.licenseNumber && (sub as any).subLicenseNumber === license.licenseNumber
+                      ? "text-green-700 dark:text-green-400"
+                      : "text-amber-700 dark:text-amber-400"
+                  )}>
+                    {license?.licenseNumber && (sub as any).subLicenseNumber === license.licenseNumber
+                      ? "Sub-Provided License — Matches"
+                      : "Sub-Provided License — Verify Match"}
+                  </p>
+                  <p className="font-mono font-semibold">{(sub as any).subLicenseNumber}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* SIGN CONTRACT DIALOG */}
       <Dialog open={signContractOpen} onOpenChange={setSignContractOpen}>
         <div
@@ -1073,6 +1246,50 @@ export default function SubcontractDetail() {
                   Save Insurance Details
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setInsDialogOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* LICENSE EDIT DIALOG */}
+      <Dialog open={licDialogOpen} onOpenChange={setLicDialogOpen}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setLicDialogOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <BadgeCheck className="h-5 w-5 text-primary" /> Contractor License Details
+              </h3>
+              <button onClick={() => setLicDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleSaveLicense} className="p-6 space-y-4">
+              {(sub as any).subLicenseNumber && (
+                <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1">Sub-Provided License</p>
+                  <p className="font-mono font-semibold text-blue-900 dark:text-blue-200">{(sub as any).subLicenseNumber}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">License Number</label>
+                  <Input value={licNumber} onChange={e => setLicNumber(e.target.value)} placeholder="e.g. C-10-123456" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">License Type</label>
+                  <Input value={licType} onChange={e => setLicType(e.target.value)} placeholder="e.g. General, Electrical" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Issuing State</label>
+                  <Input value={licState} onChange={e => setLicState(e.target.value)} placeholder="e.g. CA" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Expiration Date</label>
+                  <Input type="date" value={licExpDate} onChange={e => setLicExpDate(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1" isLoading={licSaving}>Save License Details</Button>
+                <Button type="button" variant="outline" onClick={() => setLicDialogOpen(false)}>Cancel</Button>
               </div>
             </form>
           </div>

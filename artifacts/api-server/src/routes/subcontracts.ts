@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, getActorName } from "../lib/auth.js";
@@ -131,6 +131,7 @@ async function getSubcontractWithRelations(sc: any) {
 }
 
 async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scoreboard: any): Promise<InvoicePDFData> {
+  const [licRow] = await db.select().from(contractorLicensesTable).where(eq(contractorLicensesTable.subcontractId, sc.id)).limit(1);
   return {
     invoice: {
       invoiceNumber: invoice.invoiceNumber,
@@ -156,7 +157,7 @@ async function buildPdfData(invoice: any, sc: any, scWithRelations: any, scorebo
       name: scWithRelations.project.name,
       address: (scWithRelations.project as any).address ?? null,
     },
-    sub: { companyName: scWithRelations.sub.companyName, email: scWithRelations.sub.email },
+    sub: { companyName: scWithRelations.sub.companyName, email: scWithRelations.sub.email, licenseNumber: licRow?.licenseNumber ?? null },
     gc: { companyName: scWithRelations.project.gc.companyName },
     scoreboard,
   };
@@ -969,6 +970,88 @@ router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res)
 
   const status = calcInsuranceStatus(ins.expirationDate);
   res.json({ ...ins, status });
+});
+
+// ─── Contractor license endpoints ────────────────────────────────────────────
+
+function calcLicenseStatus(expirationDate: string | null | undefined): "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_LICENSE" {
+  if (!expirationDate) return "NO_LICENSE";
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const exp = new Date(expirationDate);
+  exp.setHours(0, 0, 0, 0);
+  const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return "EXPIRED";
+  if (days <= 30) return "EXPIRING_SOON";
+  return "VALID";
+}
+
+// GET /:subcontractId/license — GC or owning sub
+router.get("/:subcontractId/license", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  const isGC = (user.role === "GC" && project?.gcId === user.id) || (user.role === "PM" && project?.gcId === user.managedByGcId);
+  const isSub = user.role === "SUB" && sc.subId === user.id;
+  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [lic] = await db.select().from(contractorLicensesTable).where(eq(contractorLicensesTable.subcontractId, subcontractId)).limit(1);
+  const status = calcLicenseStatus(lic?.expirationDate);
+  res.json(lic ? { ...lic, status } : { status: "NO_LICENSE" });
+});
+
+// PUT /:subcontractId/license — GC only (upsert)
+router.put("/:subcontractId/license", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== getEffectiveGcId(user)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const { licenseNumber, licenseType, issuingState, expirationDate } = req.body;
+
+  const [existing] = await db.select().from(contractorLicensesTable).where(eq(contractorLicensesTable.subcontractId, subcontractId)).limit(1);
+
+  let lic;
+  const expDateChanged = existing?.expirationDate !== expirationDate;
+
+  if (existing) {
+    [lic] = await db.update(contractorLicensesTable).set({
+      licenseNumber: licenseNumber ?? null,
+      licenseType: licenseType ?? null,
+      issuingState: issuingState ?? null,
+      expirationDate: expirationDate ?? null,
+      notifiedAt30: expDateChanged ? null : existing.notifiedAt30,
+      notifiedAt7: expDateChanged ? null : existing.notifiedAt7,
+      updatedAt: new Date(),
+    }).where(eq(contractorLicensesTable.id, existing.id)).returning();
+  } else {
+    [lic] = await db.insert(contractorLicensesTable).values({
+      subcontractId,
+      licenseNumber: licenseNumber ?? null,
+      licenseType: licenseType ?? null,
+      issuingState: issuingState ?? null,
+      expirationDate: expirationDate ?? null,
+    }).returning();
+  }
+
+  await logActivity(
+    subcontractId,
+    "LICENSE_UPDATED",
+    `Contractor license updated — ${licenseNumber ?? "N/A"} | Type: ${licenseType ?? "N/A"} | Expires: ${expirationDate ?? "N/A"}`,
+    getActorName(user),
+    "GC"
+  );
+
+  const status = calcLicenseStatus(lic.expirationDate);
+  res.json({ ...lic, status });
 });
 
 router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (req, res) => {
