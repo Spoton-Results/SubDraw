@@ -105,6 +105,9 @@ export default function SubcontractDetail() {
   const [signedByName, setSignedByName] = React.useState("");
   const [waiverSigning, setWaiverSigning] = React.useState(false);
 
+  const [signContractOpen, setSignContractOpen] = React.useState(false);
+  const [signContractLoading, setSignContractLoading] = React.useState(false);
+
   const [insDialogOpen, setInsDialogOpen] = React.useState(false);
   const [insCompany, setInsCompany] = React.useState("");
   const [insPolicy, setInsPolicy] = React.useState("");
@@ -358,6 +361,28 @@ export default function SubcontractDetail() {
     }
   };
 
+  const handleSignContract = async () => {
+    setSignContractLoading(true);
+    try {
+      const resp = await fetch(`${BASE}/api/subcontracts/${subcontractId}/sign`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        throw new Error(d.error ?? "Failed to sign");
+      }
+      toast.success("Subcontract signed — you can now submit invoices");
+      invalidate();
+      setSignContractOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to sign subcontract");
+    } finally {
+      setSignContractLoading(false);
+    }
+  };
+
   const insStatus: string = insurance?.status ?? "NO_INSURANCE";
 
   const openInsDialog = () => {
@@ -431,6 +456,7 @@ export default function SubcontractDetail() {
 
   const getActivityIcon = (type: string) => {
     if (type === "SUBCONTRACT_CREATED") return <FileSignature className="h-4 w-4 text-primary" />;
+    if (type === "SUBCONTRACT_SIGNED") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
     if (type === "CO_CREATED") return <PlusCircle className="h-4 w-4 text-blue-500" />;
     if (type === "CO_APPROVED") return <BadgeCheck className="h-4 w-4 text-green-600" />;
     if (type === "CO_REJECTED") return <Ban className="h-4 w-4 text-red-500" />;
@@ -484,6 +510,105 @@ export default function SubcontractDetail() {
           </div>
         </div>
       </div>
+
+      {/* CONTRACT SUMMARY HERO CARD — sub-facing, first thing they see */}
+      {!isGC && (
+        <div className="mb-6 rounded-2xl border border-border bg-white dark:bg-card shadow-sm overflow-hidden">
+          {/* Header row: project + company */}
+          <div className="px-6 pt-5 pb-4 border-b border-border/50 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Project</p>
+              <p className="text-sm font-bold text-foreground">{(sub as any).project?.name}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Your Company</p>
+              <p className="text-sm font-bold text-foreground">{(sub as any).sub?.companyName}</p>
+            </div>
+          </div>
+
+          {/* Base contract — the biggest number */}
+          <div className="px-6 pt-5 pb-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Contract</p>
+            <p className="text-5xl font-bold font-mono tabular-nums text-foreground leading-none">{formatCurrency(sb.base)}</p>
+          </div>
+
+          {/* Approved change orders — only if non-zero */}
+          {sb.coTotal !== 0 && (
+            <div className="px-6 pb-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-muted-foreground">Approved Change Orders</span>
+                <span className={cn(
+                  "font-mono text-base tabular-nums font-semibold",
+                  sb.coTotal > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                )}>
+                  {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : `−${formatCurrency(Math.abs(sb.coTotal))}`}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Total contract value */}
+          <div className="px-6 pb-4">
+            <div className="flex items-baseline justify-between gap-4 border-t border-border/50 pt-3 mt-2">
+              <span className="text-sm font-bold text-foreground">Total Contract Value</span>
+              <span className="font-mono text-lg font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
+            </div>
+          </div>
+
+          <hr className="border-border/50" />
+
+          {/* Invoiced so far */}
+          <div className="px-6 pt-4 pb-2">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm text-muted-foreground">Invoiced so far</span>
+              <span className="font-mono text-base tabular-nums text-muted-foreground">{formatCurrency(grossInvoiced)}</span>
+            </div>
+          </div>
+
+          {/* Remaining — hero green/red number */}
+          <div className="px-6 pb-5">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-sm font-bold text-foreground">Still to be paid</span>
+              <span className={cn(
+                "font-mono font-bold tabular-nums text-3xl leading-none",
+                sb.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+              )}>
+                {sb.remaining < 0 ? `−${formatCurrency(Math.abs(sb.remaining))}` : formatCurrency(sb.remaining)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UNSIGNED CONTRACT BANNER — subs must sign before invoicing */}
+      {!isGC && !(sub as any).signedBySubAt && (
+        <div className="mb-6 flex items-center justify-between gap-4 flex-wrap bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded-2xl px-5 py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-yellow-700 dark:text-yellow-300 text-sm">Please sign your subcontract to begin invoicing</p>
+              <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-0.5">Your electronic signature confirms you agree to the contract terms.</p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="bg-yellow-500 hover:bg-yellow-600 text-white shrink-0 gap-1.5"
+            onClick={() => setSignContractOpen(true)}
+          >
+            <FileSignature className="h-4 w-4" /> Sign Now
+          </Button>
+        </div>
+      )}
+
+      {/* SIGNED CONFIRMATION BADGE — shown after signing */}
+      {!isGC && (sub as any).signedBySubAt && (
+        <div className="mb-6 flex items-center gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl px-5 py-3">
+          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+          <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+            Subcontract signed on {format(new Date((sub as any).signedBySubAt), "MMMM d, yyyy")}
+          </p>
+        </div>
+      )}
 
       {/* INSURANCE EXPIRED BANNER */}
       {insStatus === "EXPIRED" && (
@@ -756,6 +881,64 @@ export default function SubcontractDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* SIGN CONTRACT DIALOG */}
+      <Dialog open={signContractOpen} onOpenChange={setSignContractOpen}>
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setSignContractOpen(false)}
+        >
+          <div
+            className="bg-card rounded-2xl border shadow-xl w-full max-w-md"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <FileSignature className="h-5 w-5 text-primary" /> Sign Subcontract
+              </h3>
+              <button onClick={() => setSignContractOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-xl bg-muted/50 border border-border p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Project</span>
+                  <span className="font-semibold">{(sub as any).project?.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Contract Amount</span>
+                  <span className="font-bold font-mono">{formatCurrency(sb.base)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Retention</span>
+                  <span className="font-semibold">{(sub as any).retentionPercentage ?? 0}%</span>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                By clicking <strong>Sign Subcontract</strong>, you confirm that you have reviewed and agree to the contract terms. This is your electronic signature.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setSignContractOpen(false)}
+                  disabled={signContractLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                  isLoading={signContractLoading}
+                  onClick={handleSignContract}
+                >
+                  <FileSignature className="h-4 w-4" /> Sign Subcontract
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
 
       {/* INSURANCE EDIT DIALOG */}
       <Dialog open={insDialogOpen} onOpenChange={setInsDialogOpen}>

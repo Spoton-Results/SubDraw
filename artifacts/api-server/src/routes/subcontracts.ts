@@ -197,6 +197,22 @@ router.get("/:subcontractId", requireAuth, async (req, res) => {
   res.json({ ...base, changeOrders, invoices, lienWaivers, scoreboard });
 });
 
+// Sub signs their subcontract agreement (records timestamp)
+router.patch("/:subcontractId/sign", requireAuth, requireSub, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (sc.subId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (sc.signedBySubAt) { res.status(400).json({ error: "Subcontract already signed" }); return; }
+  const [updated] = await db.update(subcontractsTable)
+    .set({ signedBySubAt: new Date(), updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+  await logActivity(subcontractId, "SUBCONTRACT_SIGNED", `Subcontract signed electronically by ${user.companyName}`, user.companyName, "SUB");
+  res.json(updated);
+});
+
 router.get("/:subcontractId/activity", requireAuth, async (req, res) => {
   const user = (req as any).user;
   if (!await canAccessSubcontract(user, req.params.subcontractId)) {
