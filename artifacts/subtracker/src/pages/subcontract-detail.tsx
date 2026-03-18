@@ -87,6 +87,8 @@ export default function SubcontractDetail() {
   const [invDescription, setInvDescription] = React.useState("");
 
   const [rejectInvConfirm, setRejectInvConfirm] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
+  const [rejectInvReason, setRejectInvReason] = React.useState("");
+  const [resubmitInv, setResubmitInv] = React.useState<{ open: boolean; amount: number } | null>(null);
   const [overrideDialogOpen, setOverrideDialogOpen] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [overrideReason, setOverrideReason] = React.useState("");
 
@@ -315,12 +317,23 @@ export default function SubcontractDetail() {
   };
 
   const handleRejectInv = async () => {
+    if (!rejectInvReason.trim()) return toast.error("Please provide a rejection reason");
     try {
-      await rejectInv.mutateAsync({ subcontractId, invoiceId: rejectInvConfirm.id });
-      toast.success("Invoice rejected");
+      const resp = await fetch(`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api/subcontracts/${subcontractId}/invoices/${rejectInvConfirm.id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ rejectionReason: rejectInvReason.trim() }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        throw new Error(d.error ?? "Failed to reject invoice");
+      }
+      toast.success("Invoice rejected — the subcontractor has been notified");
       invalidate();
       setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 });
-    } catch (err: any) { toast.error(err?.data?.error || "Failed to reject invoice"); }
+      setRejectInvReason("");
+    } catch (err: any) { toast.error(err?.message || "Failed to reject invoice"); }
   };
 
   const handleOverride = async (e: React.FormEvent) => {
@@ -638,53 +651,49 @@ export default function SubcontractDetail() {
         </div>
       )}
 
-      {/* SCOREBOARD — receipt / calculator-tape layout */}
+      {/* SCOREBOARD — receipt / calculator-tape — single vertical column */}
       <div className="mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h2 className="text-xl font-bold font-display flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
-          </h2>
-          {retPct > 0 && (
-            <span className="text-sm font-semibold text-muted-foreground">
-              <Percent className="h-3.5 w-3.5 inline-block mr-0.5 align-text-top" />{retPct}% Retention
-            </span>
-          )}
-        </div>
+        <h2 className="text-xl font-bold font-display flex items-center gap-2 mb-3">
+          <Activity className="h-5 w-5 text-primary" /> Financial Scoreboard
+        </h2>
 
-        <div className="border border-border rounded-2xl bg-white dark:bg-card shadow-sm overflow-hidden max-w-[400px] mx-auto w-full">
+        <div className="border border-border rounded-2xl bg-white dark:bg-card shadow-sm overflow-hidden w-full max-w-[400px] mx-auto">
 
-          {/* CONTRACT BUILD-UP */}
-          <div className="px-6 pt-5 pb-3 space-y-2.5">
+          {/* BASE CONTRACT */}
+          <div className="px-6 pt-5 pb-0 space-y-2.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm text-foreground">Base Contract</span>
+              <span className="text-sm font-bold text-foreground uppercase tracking-wide">Base Contract</span>
               <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(sb.base)}</span>
             </div>
+
+            {/* APPROVED CHANGE ORDERS — always shown */}
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm text-foreground">Approved COs</span>
+              <span className="text-sm text-foreground">Approved Change Orders</span>
               <span className="font-mono text-base tabular-nums text-foreground">
                 {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal)}
               </span>
             </div>
           </div>
 
-          <hr className="border-foreground/20" />
+          <hr className="border-foreground/20 mt-4" />
 
           {/* APPROVED TOTAL */}
           <div className="px-6 py-3.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm font-bold text-foreground uppercase tracking-wide">Approved Total</span>
-              <span className="font-mono text-xl font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
+              <span className="text-base font-bold text-foreground uppercase tracking-wide">Approved Total</span>
+              <span className="font-mono text-lg font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
             </div>
           </div>
 
-          <hr className="border-foreground/20" />
-
-          {/* INVOICE DEDUCTIONS */}
-          <div className="px-6 pt-3 pb-3 space-y-2.5">
+          {/* blank spacer row */}
+          <div className="px-6 pt-1 pb-3 space-y-2.5">
+            {/* TOTAL INVOICED */}
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm text-foreground">Total Invoiced</span>
               <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
             </div>
+
+            {/* RETENTION HELD — only if retention is active and held */}
             {retPct > 0 && totalRetentionHeld > 0 && (
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-sm text-foreground">Retention Held ({retPct}%)</span>
@@ -695,10 +704,10 @@ export default function SubcontractDetail() {
 
           <hr className="border-foreground/20" />
 
-          {/* REMAINING BALANCE — hero number */}
-          <div className="px-6 pt-4 pb-5">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm font-bold text-foreground uppercase tracking-wide">Remaining Balance</span>
+          {/* REMAINING BALANCE — most prominent number on the page */}
+          <div className="px-6 pt-5 pb-6">
+            <div className="flex items-end justify-between gap-4">
+              <span className="text-base font-bold text-foreground uppercase tracking-wide leading-tight">Remaining Balance</span>
               <span className={cn(
                 "font-mono font-bold tabular-nums text-4xl leading-none",
                 sb.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
@@ -1160,6 +1169,16 @@ export default function SubcontractDetail() {
                           <p className="text-sm text-muted-foreground mt-1 truncate">{inv.description}</p>
                         )}
                         <p className="text-xs text-muted-foreground mt-1">{format(new Date(inv.createdAt), "MMM d, yyyy")}</p>
+                        {/* REJECTION REASON — shown in red to both GC and sub */}
+                        {inv.status === "REJECTED" && (inv as any).rejectionReason && (
+                          <div className="mt-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                            <X className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wide block mb-0.5">Rejected</span>
+                              <span className="text-sm text-red-700 dark:text-red-300">{(inv as any).rejectionReason}</span>
+                            </div>
+                          </div>
+                        )}
                         {inv.overrideReason && (
                           <p className="text-xs text-muted-foreground mt-2 italic border-l-2 border-primary pl-2">
                             Override: {inv.overrideReason}
@@ -1216,6 +1235,28 @@ export default function SubcontractDetail() {
                         )}
                       </div>
                     </div>
+
+                    {/* Sub: resubmit banner on rejected invoices */}
+                    {!isGC && inv.status === "REJECTED" && (
+                      <div className="mt-3 rounded-xl border border-border bg-muted/40 p-3 space-y-2">
+                        <p className="text-sm text-muted-foreground flex items-start gap-2">
+                          <Receipt className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+                          Make the necessary corrections and resubmit your invoice.
+                        </p>
+                        <Button
+                          size="sm"
+                          className="gap-1.5 min-h-[44px] w-full sm:w-auto"
+                          onClick={() => {
+                            setInvAmount(String(inv.amount));
+                            setInvNumber("");
+                            setInvDescription(inv.description ?? "");
+                            setInvDialogOpen(true);
+                          }}
+                        >
+                          <PlusCircle className="h-4 w-4" /> Resubmit Invoice
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Sub: yellow payment confirmation banner */}
                     {!isGC && inv.status === "PAYMENT_UNCONFIRMED" && (
@@ -1490,42 +1531,55 @@ export default function SubcontractDetail() {
         </form>
       </Dialog>
 
-      {/* Reject Invoice Confirmation Dialog */}
+      {/* Reject Invoice Dialog — requires a reason */}
       <Dialog
         open={rejectInvConfirm.open}
-        onOpenChange={(open) => !open && setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 })}
+        onOpenChange={(open) => { if (!open) { setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 }); setRejectInvReason(""); } }}
         title="Reject Invoice"
       >
-        <div className="space-y-4">
+        <form onSubmit={e => { e.preventDefault(); handleRejectInv(); }} className="space-y-4">
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
             <p className="text-sm text-foreground">
-              Are you sure you want to reject{" "}
+              Rejecting{" "}
               <span className="font-semibold">Invoice #{rejectInvConfirm.invoiceNumber}</span>
-              {" "}for{" "}
-              <span className="font-mono font-bold">{formatCurrency(rejectInvConfirm.amount)}</span>?
+              {" "}— {" "}
+              <span className="font-mono font-bold">{formatCurrency(rejectInvConfirm.amount)}</span>
             </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              This will notify the subcontractor. The invoice cannot be un-rejected once confirmed.
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-1.5 block">
+              Why are you rejecting this invoice? <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              required
+              placeholder="e.g. Work not completed in section 3 — please resubmit when finished"
+              className="min-h-[100px] resize-none"
+              value={rejectInvReason}
+              onChange={e => setRejectInvReason(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              This reason will be sent to the subcontractor by email and shown on their invoice.
             </p>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <Button
+              type="button"
               variant="ghost"
               className="min-h-[44px]"
-              onClick={() => setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 })}
+              onClick={() => { setRejectInvConfirm({ open: false, id: "", invoiceNumber: "", amount: 0 }); setRejectInvReason(""); }}
             >
               Cancel
             </Button>
             <Button
+              type="submit"
               variant="destructive"
               className="min-h-[44px]"
-              isLoading={rejectInv.isPending}
-              onClick={handleRejectInv}
+              disabled={!rejectInvReason.trim()}
             >
               Reject Invoice
             </Button>
           </div>
-        </div>
+        </form>
       </Dialog>
 
       <Dialog open={overrideDialogOpen.open} onOpenChange={(open) => !open && setOverrideDialogOpen({ open: false, id: "" })} title="Override Flagged Invoice">

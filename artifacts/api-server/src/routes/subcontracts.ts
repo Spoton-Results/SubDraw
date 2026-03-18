@@ -555,16 +555,25 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
 
 router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
-  const [invoice] = await db.update(invoicesTable).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(invoicesTable.id, req.params.invoiceId)).returning();
+  const { rejectionReason } = req.body ?? {};
+  if (!rejectionReason || !String(rejectionReason).trim()) {
+    res.status(400).json({ error: "A rejection reason is required — the subcontractor needs to know what to fix." });
+    return;
+  }
+  const reason = String(rejectionReason).trim();
 
-  const sc = await getSubcontractWithRelations(
-    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
-  );
+  const [invoice] = await db.update(invoicesTable)
+    .set({ status: "REJECTED", rejectionReason: reason, updatedAt: new Date() })
+    .where(eq(invoicesTable.id, req.params.invoiceId))
+    .returning();
+
+  const rawSc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0];
+  const sc = await getSubcontractWithRelations(rawSc);
 
   await logActivity(
     req.params.subcontractId,
     "INVOICE_REJECTED",
-    `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} rejected`,
+    `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} rejected — ${reason}`,
     getActorName(user),
     "GC"
   );
@@ -574,7 +583,9 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
     projectName: sc.project.name,
     gcCompanyName: sc.project.gc.companyName,
     amount: invoice.amount,
+    invoiceNumber: invoice.invoiceNumber,
     decision: "REJECTED",
+    rejectionReason: reason,
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendInvoiceDecisionEmail failed:", err));
 

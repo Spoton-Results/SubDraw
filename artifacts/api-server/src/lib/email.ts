@@ -312,6 +312,7 @@ export async function sendInvoiceDecisionEmail(opts: {
   invoiceNumber: string;
   decision: "APPROVED" | "REJECTED";
   overrideReason?: string;
+  rejectionReason?: string;
   appUrl: string;
   pdfBuffer?: Buffer;
 }) {
@@ -329,11 +330,21 @@ export async function sendInvoiceDecisionEmail(opts: {
   const note = opts.decision === "APPROVED"
     ? " The approved invoice PDF is attached for your records."
     : "";
+
+  const rejectionBlock = opts.rejectionReason
+    ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="font-size:13px;font-weight:700;color:#dc2626;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.05em;">Reason for Rejection</p>
+        <p style="font-size:15px;color:#7f1d1d;margin:0;line-height:1.5;">${opts.rejectionReason}</p>
+      </div>
+      <p style="font-size:13px;color:#64748b;margin-bottom:24px;">Please review the reason above, make the necessary corrections, and resubmit your invoice.</p>`
+    : "";
+
   const html = layout(`
     ${heading(`Your invoice has been ${verb}`)}
     ${subtext(`<strong>${opts.gcCompanyName}</strong> has ${verb} your invoice on <strong>${opts.projectName}</strong>.${note}`)}
     ${opts.decision === "APPROVED" ? infoBox(rows) : warningBox(rows)}
-    ${ctaButton("View Invoice", opts.appUrl)}
+    ${rejectionBlock}
+    ${ctaButton("View Invoice & Resubmit", opts.appUrl)}
   `);
   const attachments = opts.pdfBuffer ? [pdfAttachment(opts.pdfBuffer, opts.invoiceNumber)] : undefined;
   await send(opts.toEmail, `Invoice ${verb} on ${opts.projectName}`, html, attachments);

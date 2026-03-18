@@ -37,6 +37,7 @@ export const invoicesTable = pgTable("invoices", {
   description: text("description"),
   status: text("status").notNull().default("PENDING"), // PENDING | APPROVED | REJECTED | FLAGGED | PAYMENT_UNCONFIRMED | PAYMENT_CONFIRMED | PAYMENT_DISPUTED
   flaggedOverAmount: doublePrecision("flagged_over_amount").notNull().default(0),
+  rejectionReason: text("rejection_reason"),
   overrideReason: text("override_reason"),
   paymentDate: text("payment_date"),
   paymentMethod: text("payment_method"),
