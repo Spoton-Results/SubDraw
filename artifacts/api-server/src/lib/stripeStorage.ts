@@ -27,7 +27,10 @@ export function getNextPlan(currentName: string) {
 // ── Stripe product/price helpers ──────────────────────────────────────────────
 
 export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> {
-  // Try to find from synced Stripe DB first
+  const stripe = await getUncachableStripeClient();
+  const plan = getPlanByName(planName)!;
+
+  // Try the synced DB first, but verify the price is valid in the current Stripe environment
   const result = await db.execute(
     sql`
       SELECT pr.id as price_id
@@ -37,11 +40,33 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
       LIMIT 1
     `
   );
-  if (result.rows[0]) return (result.rows[0] as any).price_id as string;
+  if (result.rows[0]) {
+    const priceId = (result.rows[0] as any).price_id as string;
+    try {
+      await stripe.prices.retrieve(priceId);
+      return priceId; // Price exists and is valid in the current environment
+    } catch {
+      // Price is stale (e.g. from a different Stripe mode) — fall through to find/create
+    }
+  }
 
-  // Create product + price in Stripe
-  const plan = getPlanByName(planName)!;
-  const stripe = await getUncachableStripeClient();
+  // Search Stripe directly for an existing active product+price with this name
+  const products = await stripe.products.search({ query: `name:"${planName}" AND active:"true"` });
+  if (products.data.length > 0) {
+    const existingProduct = products.data[0];
+    const prices = await stripe.prices.list({ product: existingProduct.id, active: true, recurring: { interval: "month" } as any, limit: 1 });
+    if (prices.data.length > 0) return prices.data[0].id;
+    // Product exists but no active price — create a price on the existing product
+    const price = await stripe.prices.create({
+      product: existingProduct.id,
+      unit_amount: plan.monthlyUsd,
+      currency: "usd",
+      recurring: { interval: "month" },
+    });
+    return price.id;
+  }
+
+  // Nothing found — create a new product and price in Stripe
   const product = await stripe.products.create({ name: planName });
   const price = await stripe.prices.create({
     product: product.id,
