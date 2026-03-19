@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -197,6 +197,20 @@ export default function Dashboard() {
   const isGC = user?.role === "GC";
   const isOwner = isGC && (user as any)?.gcTeamRole !== "project_manager";
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
+
+  const BASE_DASH = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  type CompliancePendingItem = { itemId: string; title: string; projectId: string; projectName: string; subcontractId: string };
+  const { data: pendingComplianceItems = [] } = useQuery<CompliancePendingItem[]>({
+    queryKey: ["compliance-pending-sub"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_DASH}/api/subcontracts/compliance-pending`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !isGC,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   usePageTitle("Projects");
 
@@ -699,6 +713,58 @@ export default function Dashboard() {
                   <Link href={`/subcontracts/${inv.subcontractId}`}>
                     <Button size="sm" variant="destructive" className="gap-1.5 min-h-[44px] shrink-0">
                       <ExternalLink className="h-4 w-4" /> View Subcontract
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SUB: Compliance Pending Section */}
+      {!isGC && pendingComplianceItems.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-orange-100 dark:bg-orange-900/40 rounded-xl p-2">
+              <ListChecks className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold font-display text-orange-700 dark:text-orange-400">Compliance Required</h2>
+              <p className="text-sm text-muted-foreground">Complete these required items before you can submit invoices on the following projects.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {Object.entries(
+              pendingComplianceItems.reduce((acc, item) => {
+                const key = item.projectId;
+                if (!acc[key]) acc[key] = { projectName: item.projectName, subcontractId: item.subcontractId, items: [] };
+                acc[key].items.push(item);
+                return acc;
+              }, {} as Record<string, { projectName: string; subcontractId: string; items: CompliancePendingItem[] }>)
+            ).map(([projectId, group]) => (
+              <div key={projectId} className="rounded-2xl border-2 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Briefcase className="h-4 w-4 text-orange-600 shrink-0" />
+                      <span className="font-semibold text-foreground truncate">{group.projectName}</span>
+                      <span className="text-xs font-medium text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/40 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-700">
+                        {group.items.length} pending
+                      </span>
+                    </div>
+                    <ul className="space-y-1">
+                      {group.items.map(item => (
+                        <li key={item.itemId} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                          {item.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <Link href={`/subcontracts/${group.subcontractId}`}>
+                    <Button size="sm" variant="outline" className="gap-1.5 min-h-[44px] shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100">
+                      <ExternalLink className="h-4 w-4" /> Complete Now
                     </Button>
                   </Link>
                 </div>

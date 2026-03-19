@@ -25,6 +25,7 @@ import {
   Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
   Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
+  ListChecks, SquareCheck, Download,
 } from "lucide-react";
 import { useUpload } from "@workspace/object-storage-web";
 import { Textarea } from "@/components/ui/textarea";
@@ -132,6 +133,12 @@ export default function SubcontractDetail() {
   const [licExpDate, setLicExpDate] = React.useState("");
   const [licSaving, setLicSaving] = React.useState(false);
 
+  // Compliance state
+  const [complianceMarkingId, setComplianceMarkingId] = React.useState<string | null>(null);
+  const [complianceUploadingId, setComplianceUploadingId] = React.useState<string | null>(null);
+  const complianceFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [pendingComplianceItemId, setPendingComplianceItemId] = React.useState<string | null>(null);
+
   const { data: insurance, refetch: refetchInsurance } = useQuery({
     queryKey: ["subcontract-insurance", subcontractId],
     queryFn: async () => {
@@ -188,6 +195,55 @@ export default function SubcontractDetail() {
     }
   }, [comments.length]);
 
+  const BASE_URL_SUB = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  type ComplianceCompletionSub = { id: string; checklistItemId: string; subcontractId: string; isComplete: boolean; completedByRole: string | null; completedByName: string | null; completedAt: string | null; documentPath: string | null; documentName: string | null; notes: string | null };
+  type ComplianceItemWithCompletion = { id: string; title: string; description: string | null; required: boolean; allowDocumentUpload: boolean; sortOrder: number; completion: ComplianceCompletionSub | null };
+
+  const { data: complianceItems = [], refetch: refetchCompliance } = useQuery<ComplianceItemWithCompletion[]>({
+    queryKey: ["compliance-subcontract", subcontractId],
+    queryFn: async () => {
+      if (!sub?.projectId) return [];
+      const res = await fetch(`${BASE_URL_SUB}/api/projects/${sub.projectId}/compliance-items/subcontract/${subcontractId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!subcontractId && !!sub?.projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  async function handleMarkComplianceComplete(itemId: string, complete: boolean) {
+    setComplianceMarkingId(itemId);
+    try {
+      const url = `${BASE_URL_SUB}/api/projects/${sub?.projectId}/compliance-items/${itemId}/complete/${subcontractId}`;
+      const res = await fetch(url, { method: complete ? "POST" : "DELETE", credentials: "include" });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || "Failed to update"); return; }
+      refetchCompliance();
+      toast.success(complete ? "Marked complete" : "Marked incomplete");
+    } catch { toast.error("Failed to update"); }
+    finally { setComplianceMarkingId(null); }
+  }
+
+  async function handleUploadComplianceDoc(itemId: string, file: File) {
+    setComplianceUploadingId(itemId);
+    try {
+      const result = await uploadComplianceDoc(file);
+      if (!result?.objectPath) throw new Error("Upload failed");
+      const url = `${BASE_URL_SUB}/api/projects/${sub?.projectId}/compliance-items/${itemId}/document/${subcontractId}`;
+      const res = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentPath: result.objectPath, documentName: file.name }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || "Failed to upload"); return; }
+      refetchCompliance();
+      toast.success("Document uploaded and item marked complete");
+    } catch { toast.error("Upload failed"); }
+    finally { setComplianceUploadingId(null); setPendingComplianceItemId(null); }
+  }
+
   const handleSendComment = async () => {
     const msg = commentText.trim();
     if (!msg) return;
@@ -213,6 +269,10 @@ export default function SubcontractDetail() {
       setSendingComment(false);
     }
   };
+
+  const { uploadFile: uploadComplianceDoc, isUploading: complianceDocIsUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Document upload failed"),
+  });
 
   const { uploadFile: uploadCert, progress: certProgress, isUploading: certUploading } = useUpload({
     onError: (err) => toast.error(err.message || "Certificate upload failed"),
@@ -341,6 +401,7 @@ export default function SubcontractDetail() {
   }
 
   const isGC = user.role === "GC";
+  const isSub = user.role === "SUB";
   const sb = sub.scoreboard as any;
   const hasFlagged = sb.hasFlaggedInvoices as boolean || sub.invoices.some((i: any) => i.status === "PAYMENT_DISPUTED");
   const lastInvoice = sb.lastInvoice as { amount: number; createdAt: string; status: string } | null;
@@ -1523,6 +1584,117 @@ export default function SubcontractDetail() {
           </Card>
         );
       })()}
+
+      {/* COMPLIANCE CHECKLIST CARD */}
+      {complianceItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ListChecks className="h-5 w-5 text-primary" /> Compliance Checklist
+              </CardTitle>
+              <div className="flex items-center gap-1.5">
+                {complianceItems.filter(i => i.required && !i.completion?.isComplete).length > 0 ? (
+                  <span className="text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-2 py-0.5 rounded-full">
+                    {complianceItems.filter(i => i.required && !i.completion?.isComplete).length} required pending
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 className="inline h-3 w-3 mr-0.5 -mt-0.5" /> All required complete
+                  </span>
+                )}
+              </div>
+            </div>
+            {isGC ? (
+              <p className="text-xs text-muted-foreground mt-1">Mark items complete for this subcontractor. Required items must be completed before the sub can submit invoices.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">Complete all required items before submitting invoices. Upload documents if required.</p>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border border border-border rounded-xl overflow-hidden">
+              {complianceItems.map(item => {
+                const completion = item.completion;
+                const isComplete = completion?.isComplete === true;
+                const isMarkingThis = complianceMarkingId === item.id;
+                const isUploadingThis = complianceUploadingId === item.id;
+                return (
+                  <div key={item.id} className={cn("p-3 flex items-start gap-3 transition-colors", isComplete ? "bg-green-50/50 dark:bg-green-950/10" : "bg-card hover:bg-muted/20")}>
+                    <div className="mt-0.5 shrink-0">
+                      {isComplete ? (
+                        <CheckCircle2 className="h-4.5 w-4.5 text-green-600 dark:text-green-400 h-5 w-5" />
+                      ) : (
+                        <SquareCheck className={cn("h-5 w-5", item.required ? "text-orange-400" : "text-muted-foreground/40")} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className={cn("text-sm font-medium leading-snug", isComplete && "line-through text-muted-foreground")}>{item.title}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {item.required ? (
+                              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-1.5 py-0.5 rounded-full">Required</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full border">Optional</span>
+                            )}
+                            {isComplete && completion?.completedByName && (
+                              <span className="text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-1.5 py-0.5 rounded-full border border-green-200 dark:border-green-800">
+                                ✓ {completion.completedByName}
+                              </span>
+                            )}
+                          </div>
+                          {isComplete && completion?.documentName && (
+                            <a
+                              href={`${BASE_URL_SUB}/api/storage${completion.documentPath}`}
+                              download={completion.documentName}
+                              className="inline-flex items-center gap-1 text-xs text-primary mt-1 hover:underline"
+                            >
+                              <Download className="h-3 w-3" /> {completion.documentName}
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {!isComplete && item.allowDocumentUpload && (isSub || isGC) && (
+                            <label className={cn("inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/5 text-primary cursor-pointer hover:bg-primary/10 transition-colors", (isUploadingThis || complianceDocIsUploading) && "opacity-60 pointer-events-none")}>
+                              {isUploadingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                              Upload Doc
+                              <input type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { if (e.target.files?.[0]) { handleUploadComplianceDoc(item.id, e.target.files[0]); e.target.value = ""; } }} disabled={isUploadingThis || complianceDocIsUploading} />
+                            </label>
+                          )}
+                          {!isComplete && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-xs h-7"
+                              disabled={isMarkingThis}
+                              onClick={() => handleMarkComplianceComplete(item.id, true)}
+                            >
+                              {isMarkingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                              Mark Done
+                            </Button>
+                          )}
+                          {isComplete && (isGC || isSub) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 text-xs h-7 text-muted-foreground hover:text-destructive"
+                              disabled={isMarkingThis}
+                              onClick={() => handleMarkComplianceComplete(item.id, false)}
+                            >
+                              {isMarkingThis ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                              Undo
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* DELETE CONTRACT DOCUMENT CONFIRM */}
       {deleteContractConfirmOpen && (

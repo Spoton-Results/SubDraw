@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable, complianceChecklistItemsTable, complianceCompletionsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and, gt, count } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, getActorName } from "../lib/auth.js";
@@ -194,6 +194,40 @@ router.get("/", requireAuth, async (req, res) => {
   }
 
   res.json(subcontracts);
+});
+
+// GET /subcontracts/compliance-pending — pending compliance items for the current sub
+router.get("/compliance-pending", requireAuth, requireSub, async (req, res) => {
+  const user = (req as any).user;
+  const scs = await db.select().from(subcontractsTable).where(eq(subcontractsTable.subId, user.id));
+  if (scs.length === 0) { res.json([]); return; }
+
+  const projectIds = [...new Set(scs.map(s => s.projectId))];
+  const allItems = await db.select().from(complianceChecklistItemsTable)
+    .where(and(inArray(complianceChecklistItemsTable.projectId, projectIds), eq(complianceChecklistItemsTable.required, true)));
+  if (allItems.length === 0) { res.json([]); return; }
+
+  const scIds = scs.map(s => s.id);
+  const allCompletions = await db.select().from(complianceCompletionsTable)
+    .where(inArray(complianceCompletionsTable.subcontractId, scIds));
+
+  const projects = await db.select({ id: projectsTable.id, name: projectsTable.name }).from(projectsTable)
+    .where(inArray(projectsTable.id, projectIds));
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
+
+  const completedSet = new Set(allCompletions.filter(c => c.isComplete).map(c => `${c.subcontractId}:${c.checklistItemId}`));
+
+  const pending: { itemId: string; title: string; projectId: string; projectName: string; subcontractId: string }[] = [];
+  for (const sc of scs) {
+    const projectItems = allItems.filter(i => i.projectId === sc.projectId);
+    for (const item of projectItems) {
+      if (!completedSet.has(`${sc.id}:${item.id}`)) {
+        pending.push({ itemId: item.id, title: item.title, projectId: sc.projectId, projectName: projectMap[sc.projectId] ?? "Unknown", subcontractId: sc.id });
+      }
+    }
+  }
+
+  res.json(pending);
 });
 
 router.get("/:subcontractId", requireAuth, async (req, res) => {
@@ -628,6 +662,26 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Subcontract not found" });
     return;
   }
+
+  // Compliance gate: check all required checklist items are complete
+  if (user.role === "SUB") {
+    const checklistItems = await db.select().from(complianceChecklistItemsTable)
+      .where(and(eq(complianceChecklistItemsTable.projectId, sc.projectId), eq(complianceChecklistItemsTable.required, true)));
+    if (checklistItems.length > 0) {
+      const completions = await db.select().from(complianceCompletionsTable)
+        .where(eq(complianceCompletionsTable.subcontractId, subcontractId));
+      const completionMap = new Set(completions.filter(c => c.isComplete).map(c => c.checklistItemId));
+      const incompleteItems = checklistItems.filter(item => !completionMap.has(item.id));
+      if (incompleteItems.length > 0) {
+        res.status(400).json({
+          error: `Invoice blocked: ${incompleteItems.length} required compliance item${incompleteItems.length > 1 ? "s" : ""} not yet completed: ${incompleteItems.map(i => i.title).join(", ")}`,
+          code: "COMPLIANCE_INCOMPLETE",
+        });
+        return;
+      }
+    }
+  }
+
   const scoreboard = await computeScoreboard(subcontractId, sc.baseContractAmount, sc.retentionPercentage ?? 0);
   const invoiceAmount = Number(amount);
   let status = "PENDING";

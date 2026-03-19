@@ -32,7 +32,7 @@ import {
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
-  Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare,
+  Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare, ListChecks, SquareCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -156,6 +156,18 @@ export default function ProjectDetail() {
   const scopeFileInputRef = React.useRef<HTMLInputElement>(null);
   const [deleteScopeConfirm, setDeleteScopeConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
+  // Compliance checklist state
+  const [newComplianceTitle, setNewComplianceTitle] = React.useState("");
+  const [newComplianceRequired, setNewComplianceRequired] = React.useState(true);
+  const [newComplianceDocAllowed, setNewComplianceDocAllowed] = React.useState(false);
+  const [newComplianceSaving, setNewComplianceSaving] = React.useState(false);
+  const [complianceEditId, setComplianceEditId] = React.useState<string | null>(null);
+  const [complianceEditTitle, setComplianceEditTitle] = React.useState("");
+  const [complianceEditRequired, setComplianceEditRequired] = React.useState(true);
+  const [complianceEditDocAllowed, setComplianceEditDocAllowed] = React.useState(false);
+  const [complianceEditSaving, setComplianceEditSaving] = React.useState(false);
+  const [complianceDeleteConfirm, setComplianceDeleteConfirm] = React.useState<string | null>(null);
+
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
   const isGC_for_views = user?.role === "GC";
@@ -194,6 +206,82 @@ export default function ProjectDetail() {
     enabled: !!projectId,
     staleTime: 30000,
   });
+
+  type ComplianceItem = { id: string; projectId: string; title: string; description: string | null; required: boolean; allowDocumentUpload: boolean; sortOrder: number; createdAt: string };
+  type ComplianceSummaryRow = { subcontractId: string; subId: string; subCompanyName: string; totalRequired: number; completedRequired: number; status: "COMPLIANT" | "INCOMPLETE" | "BLOCKED" };
+
+  const { data: complianceItems = [], refetch: refetchComplianceItems } = useQuery<ComplianceItem[]>({
+    queryKey: ["compliance-items", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/compliance-items`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC",
+    staleTime: 0,
+  });
+
+  const { data: complianceSummary = [], refetch: refetchComplianceSummary } = useQuery<ComplianceSummaryRow[]>({
+    queryKey: ["compliance-summary", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/compliance-items/summary`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC",
+    staleTime: 0,
+  });
+
+  async function handleAddComplianceItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newComplianceTitle.trim()) return;
+    setNewComplianceSaving(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/compliance-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ title: newComplianceTitle.trim(), required: newComplianceRequired, allowDocumentUpload: newComplianceDocAllowed }),
+      });
+      if (!res.ok) { toast.error("Failed to add item"); return; }
+      setNewComplianceTitle("");
+      setNewComplianceRequired(true);
+      setNewComplianceDocAllowed(false);
+      refetchComplianceItems();
+      refetchComplianceSummary();
+      toast.success("Compliance item added");
+    } finally { setNewComplianceSaving(false); }
+  }
+
+  async function handleUpdateComplianceItem(id: string) {
+    setComplianceEditSaving(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/compliance-items/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ title: complianceEditTitle.trim(), required: complianceEditRequired, allowDocumentUpload: complianceEditDocAllowed }),
+      });
+      if (!res.ok) { toast.error("Failed to update item"); return; }
+      setComplianceEditId(null);
+      refetchComplianceItems();
+      refetchComplianceSummary();
+      toast.success("Updated");
+    } finally { setComplianceEditSaving(false); }
+  }
+
+  async function handleDeleteComplianceItem(id: string) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/compliance-items/${id}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (!res.ok) { toast.error("Failed to delete item"); return; }
+      setComplianceDeleteConfirm(null);
+      refetchComplianceItems();
+      refetchComplianceSummary();
+      toast.success("Item removed");
+    } catch { toast.error("Failed to delete item"); }
+  }
 
   const formatFileSize = (bytes: number | null | undefined): string => {
     if (!bytes) return "";
@@ -1305,6 +1393,159 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
 
+          {/* COMPLIANCE CHECKLIST SECTION — GC only */}
+          {isGC && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <ListChecks className="h-5 w-5 text-primary" /> Compliance Checklist
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">{complianceItems.length} item{complianceItems.length !== 1 ? "s" : ""}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Required documents and tasks each subcontractor must complete. Required items block invoice submission until marked complete.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Checklist Items */}
+                {complianceItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No compliance items yet. Add items below to require subs to complete tasks before submitting invoices.</p>
+                ) : (
+                  <div className="divide-y divide-border border border-border rounded-xl overflow-hidden">
+                    {complianceItems.map(item => (
+                      <div key={item.id} className="p-3 bg-card hover:bg-muted/30 transition-colors">
+                        {complianceEditId === item.id ? (
+                          <div className="space-y-2">
+                            <input
+                              className="w-full text-sm rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              value={complianceEditTitle}
+                              onChange={e => setComplianceEditTitle(e.target.value)}
+                              placeholder="Item title"
+                            />
+                            <div className="flex flex-wrap items-center gap-4 text-sm">
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                <input type="checkbox" checked={complianceEditRequired} onChange={e => setComplianceEditRequired(e.target.checked)} className="accent-primary h-3.5 w-3.5" />
+                                <span className="text-xs font-medium">Required (blocks invoices)</span>
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                <input type="checkbox" checked={complianceEditDocAllowed} onChange={e => setComplianceEditDocAllowed(e.target.checked)} className="accent-primary h-3.5 w-3.5" />
+                                <span className="text-xs font-medium">Allow document upload</span>
+                              </label>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" disabled={complianceEditSaving} onClick={() => handleUpdateComplianceItem(item.id)} className="gap-1">
+                                {complianceEditSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setComplianceEditId(null)}>Cancel</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <SquareCheck className={cn("h-4 w-4 mt-0.5 shrink-0", item.required ? "text-orange-500" : "text-muted-foreground")} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium leading-snug">{item.title}</p>
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                  {item.required ? (
+                                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-1.5 py-0.5 rounded-full">Required</span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full border">Optional</span>
+                                  )}
+                                  {item.allowDocumentUpload && (
+                                    <span className="text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">Doc upload</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setComplianceEditId(item.id); setComplianceEditTitle(item.title); setComplianceEditRequired(item.required); setComplianceEditDocAllowed(item.allowDocumentUpload); }}>
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setComplianceDeleteConfirm(item.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new item form */}
+                {!isArchived && (
+                  <form onSubmit={handleAddComplianceItem} className="flex flex-col gap-2 pt-2 border-t border-border">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add Item</p>
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 text-sm rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        placeholder="e.g. Submit W-9 form, Upload insurance certificate…"
+                        value={newComplianceTitle}
+                        onChange={e => setNewComplianceTitle(e.target.value)}
+                      />
+                      <Button type="submit" size="sm" disabled={newComplianceSaving || !newComplianceTitle.trim()} className="gap-1">
+                        {newComplianceSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Add
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
+                        <input type="checkbox" checked={newComplianceRequired} onChange={e => setNewComplianceRequired(e.target.checked)} className="accent-primary h-3.5 w-3.5" />
+                        <span className="text-xs font-medium">Required (blocks invoices if incomplete)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
+                        <input type="checkbox" checked={newComplianceDocAllowed} onChange={e => setNewComplianceDocAllowed(e.target.checked)} className="accent-primary h-3.5 w-3.5" />
+                        <span className="text-xs font-medium">Allow document upload</span>
+                      </label>
+                    </div>
+                  </form>
+                )}
+
+                {/* Per-subcontractor compliance summary */}
+                {complianceSummary.length > 0 && complianceItems.length > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Subcontractor Status</p>
+                    <div className="space-y-1.5">
+                      {complianceSummary.map(row => (
+                        <div key={row.subcontractId} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="font-medium truncate">{row.subCompanyName}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-muted-foreground">{row.completedRequired}/{row.totalRequired} required</span>
+                            {row.status === "COMPLIANT" ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-1.5 py-0.5 rounded-full">
+                                <CheckCircle2 className="h-3 w-3" /> Compliant
+                              </span>
+                            ) : row.status === "BLOCKED" ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
+                                <AlertTriangle className="h-3 w-3" /> Blocked
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-1.5 py-0.5 rounded-full">
+                                <Clock className="h-3 w-3" /> Incomplete
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* COMPLIANCE DELETE CONFIRM */}
+          {complianceDeleteConfirm && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setComplianceDeleteConfirm(null)}>
+              <div className="bg-card rounded-2xl border shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                <h3 className="text-base font-bold font-display text-destructive flex items-center gap-2"><Trash2 className="h-4 w-4" /> Remove Compliance Item</h3>
+                <p className="text-sm text-muted-foreground">This will remove the item and all completion records. This cannot be undone.</p>
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setComplianceDeleteConfirm(null)}>Cancel</Button>
+                  <Button variant="destructive" className="flex-1" onClick={() => handleDeleteComplianceItem(complianceDeleteConfirm)}>Remove</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SUBCONTRACTS SECTION */}
           {(isGC || project.subcontracts?.some(s => s.subId === user.id)) && (
             <Card>
@@ -1369,6 +1610,7 @@ export default function ProjectDetail() {
                             <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
                             {isGC && <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Insurance</th>}
                             {isGC && <th className="hidden xl:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">License</th>}
+                            {isGC && complianceItems.length > 0 && <th className="hidden md:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Compliance</th>}
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
                             <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
                             <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
@@ -1385,6 +1627,7 @@ export default function ProjectDetail() {
                             const isNeg = remaining < 0 || hasFlagged;
                             const insInfo = projectInsurance.find(i => i.subcontractId === sub.id);
                             const licInfo = projectLicenses.find(l => l.subcontractId === sub.id);
+                            const compRow = complianceSummary.find(c => c.subcontractId === sub.id);
                             return (
                               <tr key={sub.id} className="hover:bg-muted/30 transition-colors group">
                                 <td className="px-4 py-3">
@@ -1451,6 +1694,25 @@ export default function ProjectDetail() {
                                     )}
                                   </td>
                                 )}
+                                {isGC && complianceItems.length > 0 && (
+                                  <td className="hidden md:table-cell px-4 py-3">
+                                    {!compRow ? (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    ) : compRow.status === "COMPLIANT" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                                        <CheckCircle2 className="h-3.5 w-3.5" /> Compliant
+                                      </span>
+                                    ) : compRow.status === "BLOCKED" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                        <AlertTriangle className="h-3.5 w-3.5" /> Blocked
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                                        <Clock className="h-3.5 w-3.5" /> Incomplete
+                                      </span>
+                                    )}
+                                  </td>
+                                )}
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
                                 <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
                                 <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
@@ -1475,6 +1737,7 @@ export default function ProjectDetail() {
                               <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
                               {isGC && <td className="hidden lg:table-cell"></td>}
                               {isGC && <td className="hidden xl:table-cell"></td>}
+                              {isGC && complianceItems.length > 0 && <td className="hidden md:table-cell"></td>}
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
                               <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
                               <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>

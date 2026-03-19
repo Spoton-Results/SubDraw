@@ -7,3 +7,4 @@ export * from "./contacts";
 export * from "./gc-team";
 export * from "./magic-link-tokens";
 export * from "./draw-schedule";
+export * from "./compliance";
