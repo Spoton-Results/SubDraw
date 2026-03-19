@@ -35,8 +35,21 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
 
   const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
 
-  const subscription = await getSubscriptionForUser(user.id);
   const planInfo = await getGCPlanInfo(user.id);
+
+  // Clear stale test-mode Stripe IDs that don't exist in the current environment
+  if (dbUser?.stripeCustomerId) {
+    try {
+      const stripe = await getUncachableStripeClient();
+      await stripe.customers.retrieve(dbUser.stripeCustomerId);
+    } catch {
+      await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+      dbUser.stripeCustomerId = null as any;
+      dbUser.stripeSubscriptionId = null as any;
+    }
+  }
+
+  const subscription = await getSubscriptionForUser(user.id);
 
   let invoices: any[] = [];
   if (dbUser?.stripeCustomerId) {
@@ -78,6 +91,16 @@ router.post("/checkout", requireAuth, requireGCOwner, async (req, res) => {
   const appUrl = getAppUrl(req);
 
   let customerId = dbUser?.stripeCustomerId;
+  if (customerId) {
+    // Verify the customer exists in the current Stripe environment (live vs test IDs differ)
+    try {
+      await stripe.customers.retrieve(customerId);
+    } catch {
+      // Customer doesn't exist in this Stripe environment — create a fresh one
+      customerId = null;
+      await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    }
+  }
   if (!customerId) {
     const customer = await stripe.customers.create({
       email: dbUser.email,
