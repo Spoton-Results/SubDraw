@@ -48,9 +48,9 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 const UNSUBSCRIBED_PLANS = [
-  { name: "SubTracker Starter", label: "Starter", monthlyUsd: 39900, limit: 5, icon: Zap, color: "border-blue-200", headerColor: "text-blue-700" },
-  { name: "SubTracker Growth",  label: "Growth",  monthlyUsd: 79900, limit: 15, icon: TrendingUp, color: "border-primary ring-2 ring-primary", headerColor: "text-primary", popular: true },
-  { name: "SubTracker Scale",   label: "Scale",   monthlyUsd: 149900, limit: 40, icon: Rocket, color: "border-violet-200", headerColor: "text-violet-700" },
+  { name: "SubTracker Starter", label: "Starter", monthlyUsd: 39900, limit: 5,  icon: Zap,       color: "border-blue-200",                     headerColor: "text-blue-700"   },
+  { name: "SubTracker Growth",  label: "Growth",  monthlyUsd: 59900, limit: 20, icon: TrendingUp, color: "border-primary ring-2 ring-primary",   headerColor: "text-primary",   popular: true },
+  { name: "SubTracker Scale",   label: "Scale",   monthlyUsd: 79900, limit: 30, icon: Rocket,     color: "border-violet-200",                   headerColor: "text-violet-700" },
 ];
 
 export default function Billing() {

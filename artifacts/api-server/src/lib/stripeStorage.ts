@@ -8,8 +8,8 @@ import { getUncachableStripeClient } from "./stripeClient.js";
 
 export const PLANS = [
   { name: "SubTracker Starter", limit: 5,  monthlyUsd: 39900, label: "Starter" },
-  { name: "SubTracker Growth",  limit: 15, monthlyUsd: 79900, label: "Growth"  },
-  { name: "SubTracker Scale",   limit: 40, monthlyUsd: 149900, label: "Scale"  },
+  { name: "SubTracker Growth",  limit: 20, monthlyUsd: 59900, label: "Growth"  },
+  { name: "SubTracker Scale",   limit: 30, monthlyUsd: 79900, label: "Scale"   },
 ] as const;
 
 export type PlanName = (typeof PLANS)[number]["name"];
@@ -54,9 +54,11 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
   const products = await stripe.products.search({ query: `name:"${planName}" AND active:"true"` });
   if (products.data.length > 0) {
     const existingProduct = products.data[0];
-    const prices = await stripe.prices.list({ product: existingProduct.id, active: true, recurring: { interval: "month" } as any, limit: 1 });
-    if (prices.data.length > 0) return prices.data[0].id;
-    // Product exists but no active price — create a price on the existing product
+    const prices = await stripe.prices.list({ product: existingProduct.id, active: true, recurring: { interval: "month" } as any, limit: 10 });
+    // Only return a price if the amount matches the current plan definition
+    const matchingPrice = prices.data.find(p => p.unit_amount === plan.monthlyUsd);
+    if (matchingPrice) return matchingPrice.id;
+    // Product exists but price amount changed — create a new price with the updated amount
     const price = await stripe.prices.create({
       product: existingProduct.id,
       unit_amount: plan.monthlyUsd,

@@ -18,8 +18,8 @@ const PLANS = [
   {
     name: "SubTracker Growth" as const,
     label: "Growth",
-    monthlyUsd: 79900,
-    limit: 15,
+    monthlyUsd: 59900,
+    limit: 20,
     icon: TrendingUp,
     color: "border-primary ring-2 ring-primary",
     headerColor: "text-primary",
@@ -29,8 +29,8 @@ const PLANS = [
   {
     name: "SubTracker Scale" as const,
     label: "Scale",
-    monthlyUsd: 149900,
-    limit: 40,
+    monthlyUsd: 79900,
+    limit: 30,
     icon: Rocket,
     color: "border-violet-200",
     headerColor: "text-violet-700",
