@@ -31,6 +31,15 @@ import { useUpload } from "@workspace/object-storage-web";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
+const INSURANCE_PRESETS = [
+  { id: "umbrella", label: "Umbrella Policy minimum $2,000,000" },
+  { id: "perf_bond", label: "Performance Bond required" },
+  { id: "pay_bond", label: "Payment Bond required" },
+  { id: "prof_liab", label: "Professional Liability Insurance required" },
+  { id: "auto_liab", label: "Automobile Liability minimum $1,000,000" },
+  { id: "builders_risk", label: "Builder's Risk Insurance required" },
+];
+
 const TRADE_BADGE_COLORS: Record<string, string> = {
   General: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300",
   Electrical: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400",
@@ -125,6 +134,7 @@ export default function SubcontractDetail() {
   const [insExpDate, setInsExpDate] = React.useState("");
   const [insSaving, setInsSaving] = React.useState(false);
   const [insCertPath, setInsCertPath] = React.useState<string | null>(null);
+  const [insAdditional, setInsAdditional] = React.useState("");
 
   const [licDialogOpen, setLicDialogOpen] = React.useState(false);
   const [licNumber, setLicNumber] = React.useState("");
@@ -700,7 +710,18 @@ export default function SubcontractDetail() {
     setInsWC(insurance?.workersCompCoverage?.toString() ?? "");
     setInsExpDate(insurance?.expirationDate ?? "");
     setInsCertPath(insurance?.certificateObjectPath ?? null);
+    setInsAdditional(insurance?.additionalRequirements ?? "");
     setInsDialogOpen(true);
+  };
+
+  const toggleInsPreset = (label: string) => {
+    setInsAdditional(prev => {
+      const lines = prev.split("\n").map(l => l.trim()).filter(Boolean);
+      if (lines.includes(label)) {
+        return lines.filter(l => l !== label).join("\n");
+      }
+      return [...lines, label].join("\n");
+    });
   };
 
   const handleUploadCert = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -729,6 +750,7 @@ export default function SubcontractDetail() {
           workersCompCoverage: insWC ? parseFloat(insWC) : null,
           expirationDate: insExpDate || null,
           certificateObjectPath: insCertPath || null,
+          additionalRequirements: insAdditional.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -1262,13 +1284,13 @@ export default function SubcontractDetail() {
             </CardTitle>
             {isGC && (
               <Button size="sm" variant="outline" onClick={openInsDialog} className="gap-1.5 min-h-[36px]">
-                <Pencil className="h-3.5 w-3.5" /> {insStatus === "NO_INSURANCE" ? "Add Insurance" : "Update"}
+                <Pencil className="h-3.5 w-3.5" /> {!insurance?.id ? "Add Insurance" : "Update"}
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          {insStatus === "NO_INSURANCE" ? (
+          {!insurance?.id ? (
             <p className="text-sm text-muted-foreground">
               {isGC ? "No insurance certificate on file. Click Update to add coverage details." : "No insurance certificate has been recorded yet. Contact the GC if you believe this is an error."}
             </p>
@@ -1323,6 +1345,19 @@ export default function SubcontractDetail() {
                   </a>
                 </div>
               )}
+            </div>
+          )}
+          {insurance?.additionalRequirements && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Additional Insurance Requirements</p>
+              <ul className="space-y-1">
+                {insurance.additionalRequirements.split("\n").map(l => l.trim()).filter(Boolean).map((req, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                    {req}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </CardContent>
@@ -1586,23 +1621,23 @@ export default function SubcontractDetail() {
       })()}
 
       {/* COMPLIANCE CHECKLIST CARD */}
-      {complianceItems.length > 0 && (
+      {(complianceItems.length > 0 || insurance?.generalLiabilityCoverage != null || insurance?.workersCompCoverage != null || insurance?.additionalRequirements) && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
-                <ListChecks className="h-5 w-5 text-primary" /> Compliance Checklist
+                <ListChecks className="h-5 w-5 text-primary" /> Compliance &amp; Insurance Requirements
               </CardTitle>
               <div className="flex items-center gap-1.5">
                 {complianceItems.filter(i => i.required && !i.completion?.isComplete).length > 0 ? (
                   <span className="text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-2 py-0.5 rounded-full">
                     {complianceItems.filter(i => i.required && !i.completion?.isComplete).length} required pending
                   </span>
-                ) : (
+                ) : complianceItems.length > 0 ? (
                   <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2 py-0.5 rounded-full">
                     <CheckCircle2 className="inline h-3 w-3 mr-0.5 -mt-0.5" /> All required complete
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
             {isGC ? (
@@ -1611,7 +1646,35 @@ export default function SubcontractDetail() {
               <p className="text-xs text-muted-foreground mt-1">Complete all required items before submitting invoices. Upload documents if required.</p>
             )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {(insurance?.generalLiabilityCoverage != null || insurance?.workersCompCoverage != null || insurance?.additionalRequirements) && (
+              <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10 p-4">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5" /> Required Insurance Coverage
+                </p>
+                <ul className="space-y-1.5">
+                  {insurance?.generalLiabilityCoverage != null && (
+                    <li className="flex items-center gap-2 text-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                      General Liability — minimum {formatCurrency(insurance.generalLiabilityCoverage)}
+                    </li>
+                  )}
+                  {insurance?.workersCompCoverage != null && (
+                    <li className="flex items-center gap-2 text-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                      Workers Compensation — minimum {formatCurrency(insurance.workersCompCoverage)}
+                    </li>
+                  )}
+                  {insurance?.additionalRequirements && insurance.additionalRequirements.split("\n").map(l => l.trim()).filter(Boolean).map((req, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                      {req}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {complianceItems.length > 0 && (
             <div className="divide-y divide-border border border-border rounded-xl overflow-hidden">
               {complianceItems.map(item => {
                 const completion = item.completion;
@@ -1692,6 +1755,7 @@ export default function SubcontractDetail() {
                 );
               })}
             </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1727,14 +1791,14 @@ export default function SubcontractDetail() {
       {/* INSURANCE EDIT DIALOG */}
       <Dialog open={insDialogOpen} onOpenChange={setInsDialogOpen}>
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setInsDialogOpen(false)}>
-          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b shrink-0">
               <h3 className="text-lg font-bold font-display flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" /> Insurance Certificate Details
               </h3>
               <button onClick={() => setInsDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
-            <form onSubmit={handleSaveInsurance} className="p-6 space-y-4">
+            <form onSubmit={handleSaveInsurance} className="p-6 space-y-4 overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Insurance Company</label>
@@ -1756,6 +1820,34 @@ export default function SubcontractDetail() {
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Certificate Expiration Date</label>
                   <Input type="date" value={insExpDate} onChange={e => setInsExpDate(e.target.value)} />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">Additional Insurance Requirements</label>
+                <p className="text-xs text-muted-foreground">Check common requirements — they'll be added to the text field automatically. You can also type custom requirements directly.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-3 rounded-lg border bg-muted/30">
+                  {INSURANCE_PRESETS.map(preset => {
+                    const lines = insAdditional.split("\n").map(l => l.trim()).filter(Boolean);
+                    const checked = lines.includes(preset.label);
+                    return (
+                      <label key={preset.id} className="flex items-center gap-2 cursor-pointer select-none text-sm py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleInsPreset(preset.label)}
+                          className="rounded border-border accent-primary h-3.5 w-3.5 shrink-0"
+                        />
+                        <span className={cn("leading-snug", checked && "font-medium")}>{preset.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <Textarea
+                  value={insAdditional}
+                  onChange={e => setInsAdditional(e.target.value)}
+                  placeholder="e.g. Umbrella Policy minimum $2,000,000&#10;Performance Bond required&#10;(one requirement per line)"
+                  rows={4}
+                  className="text-sm font-mono"
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">Certificate PDF (optional)</label>

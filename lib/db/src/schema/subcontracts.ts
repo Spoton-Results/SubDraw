@@ -138,6 +138,7 @@ export const subcontractInsurancesTable = pgTable("subcontract_insurances", {
   workersCompCoverage: doublePrecision("workers_comp_coverage"),
   expirationDate: text("expiration_date"),
   certificateObjectPath: text("certificate_object_path"),
+  additionalRequirements: text("additional_requirements"),
   notifiedAt30: timestamp("notified_at_30"),
   notifiedAt7: timestamp("notified_at_7"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

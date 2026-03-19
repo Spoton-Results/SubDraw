@@ -1170,7 +1170,7 @@ router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res)
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
   if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const { insuranceCompany, policyNumber, generalLiabilityCoverage, workersCompCoverage, expirationDate, certificateObjectPath } = req.body;
+  const { insuranceCompany, policyNumber, generalLiabilityCoverage, workersCompCoverage, expirationDate, certificateObjectPath, additionalRequirements } = req.body;
 
   const [existing] = await db.select().from(subcontractInsurancesTable).where(eq(subcontractInsurancesTable.subcontractId, subcontractId)).limit(1);
 
@@ -1185,6 +1185,7 @@ router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res)
       workersCompCoverage: workersCompCoverage ?? null,
       expirationDate: expirationDate ?? null,
       certificateObjectPath: certificateObjectPath ?? existing.certificateObjectPath,
+      additionalRequirements: additionalRequirements ?? null,
       notifiedAt30: expDateChanged ? null : existing.notifiedAt30,
       notifiedAt7: expDateChanged ? null : existing.notifiedAt7,
       updatedAt: new Date(),
@@ -1198,6 +1199,7 @@ router.put("/:subcontractId/insurance", requireAuth, requireGC, async (req, res)
       workersCompCoverage: workersCompCoverage ?? null,
       expirationDate: expirationDate ?? null,
       certificateObjectPath: certificateObjectPath ?? null,
+      additionalRequirements: additionalRequirements ?? null,
     }).returning();
   }
 
