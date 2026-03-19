@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -594,11 +594,51 @@ router.post("/:projectId/complete", requireAuth, requireGC, async (req, res) => 
   if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
   if (project.status === "COMPLETE") { res.status(400).json({ error: "Project is already marked complete" }); return; }
   if (project.archivedAt) { res.status(400).json({ error: "Archived projects cannot be modified" }); return; }
+  const { completionNote, retentionWaived } = req.body ?? {};
   const [updated] = await db.update(projectsTable)
-    .set({ status: "COMPLETE", updatedAt: new Date() })
+    .set({
+      status: "COMPLETE",
+      completionNote: completionNote?.trim() || null,
+      retentionWaived: retentionWaived === true,
+      updatedAt: new Date(),
+    })
     .where(eq(projectsTable.id, req.params.projectId))
     .returning();
   res.json(updated);
+});
+
+// GC: register a completion document (called after client uploads to object storage)
+router.post("/:projectId/completion-documents", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const { fileName, objectPath, fileSize, category, label } = req.body;
+  if (!fileName || !objectPath) { res.status(400).json({ error: "fileName and objectPath are required" }); return; }
+  const [doc] = await db.insert(projectCompletionDocumentsTable).values({
+    projectId: req.params.projectId,
+    fileName,
+    objectPath,
+    fileSize: fileSize ?? null,
+    category: category ?? "document",
+    label: label ?? null,
+    uploadedBy: user.companyName ?? user.email ?? "GC",
+  }).returning();
+  res.status(201).json(doc);
+});
+
+// GC: list completion documents for a project
+router.get("/:projectId/completion-documents", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const docs = await db.select().from(projectCompletionDocumentsTable)
+    .where(eq(projectCompletionDocumentsTable.projectId, req.params.projectId))
+    .orderBy(projectCompletionDocumentsTable.createdAt);
+  res.json(docs);
 });
 
 // GC: archive a COMPLETE project

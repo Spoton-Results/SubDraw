@@ -298,6 +298,18 @@ export default function ProjectDetail() {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   };
 
+  type CompletionDoc = { id: string; projectId: string; fileName: string; objectPath: string; fileSize: number | null; category: string; label: string | null; uploadedBy: string | null; createdAt: string };
+  const { data: completionDocsData = [], refetch: refetchCompletionDocs } = useQuery<CompletionDoc[]>({
+    queryKey: ["completion-docs", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/completion-documents`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC" && (project?.status === "COMPLETE" || !!(project as any)?.archivedAt),
+    staleTime: 15000,
+  });
+
   type OwnerNotification = { id: string; changeOrderId: string; ownerName: string; ownerEmail: string; ownerResponse: string | null; ownerResponseAt: string | null; sentAt: string; changeOrder: { description: string; amount: number; status: string } | null };
   const { data: ownerNotifications = [], refetch: refetchOwnerNotifications } = useQuery<OwnerNotification[]>({
     queryKey: ["owner-notifications", projectId],
@@ -360,6 +372,16 @@ export default function ProjectDetail() {
   const [archiveConfirm, setArchiveConfirm] = React.useState(false);
   const [unarchiveConfirm, setUnarchiveConfirm] = React.useState(false);
   const [archiveLoading, setArchiveLoading] = React.useState(false);
+
+  // Completion checklist modal state
+  type CompletionUploadedFile = { objectPath: string; fileName: string; fileSize: number; category: "document" | "photo"; label: string };
+  const [completionUploadedFiles, setCompletionUploadedFiles] = React.useState<CompletionUploadedFile[]>([]);
+  const [completionNoteText, setCompletionNoteText] = React.useState("");
+  const [retentionReleased, setRetentionReleased] = React.useState(false);
+  const [retentionWaived, setRetentionWaived] = React.useState(false);
+  const [completionDocUploading, setCompletionDocUploading] = React.useState(false);
+  const completionDocInputRef = React.useRef<HTMLInputElement>(null);
+  const completionPhotoInputRef = React.useRef<HTMLInputElement>(null);
 
   // ── Bulk Change Order state (hooks must be before early returns) ───────────
   const [isBulkCOOpen, setIsBulkCOOpen] = React.useState(false);
@@ -465,6 +487,13 @@ export default function ProjectDetail() {
     onError: (err) => {
       toast.error(err.message || "Scope of work upload failed");
       setBidScopeUploading(false);
+    },
+  });
+
+  const { uploadFile: uploadCompletionFile } = useUpload({
+    onError: (err) => {
+      toast.error(err.message || "Completion document upload failed");
+      setCompletionDocUploading(false);
     },
   });
 
@@ -825,19 +854,65 @@ export default function ProjectDetail() {
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
   const handleMarkComplete = async () => {
+    if (!retentionReleased && !retentionWaived) {
+      toast.error("Please confirm retention status before completing the project.");
+      return;
+    }
     setCompleteLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/projects/${projectId}/complete`, { method: "POST", credentials: "include" });
+      // Register any uploaded completion documents with the API
+      for (const doc of completionUploadedFiles) {
+        await fetch(`${BASE}/api/projects/${projectId}/completion-documents`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: doc.fileName, objectPath: doc.objectPath, fileSize: doc.fileSize, category: doc.category, label: doc.label || null }),
+        });
+      }
+      // Mark project complete with note and retention status
+      const res = await fetch(`${BASE}/api/projects/${projectId}/complete`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          completionNote: completionNoteText.trim() || undefined,
+          retentionWaived: retentionWaived && !retentionReleased,
+        }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed to mark project complete");
       toast.success("Project marked as complete!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      queryClient.invalidateQueries({ queryKey: ["completion-docs", projectId] });
       setCompleteConfirm(false);
+      setCompletionUploadedFiles([]);
+      setCompletionNoteText("");
+      setRetentionReleased(false);
+      setRetentionWaived(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to mark project complete");
     } finally {
       setCompleteLoading(false);
     }
+  };
+
+  const handleCompletionFileSelect = async (files: FileList | null, category: "document" | "photo") => {
+    if (!files || files.length === 0) return;
+    setCompletionDocUploading(true);
+    const added: typeof completionUploadedFiles = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const result = await uploadCompletionFile(file);
+        if (result) {
+          added.push({ objectPath: result.objectPath, fileName: result.metadata.name, fileSize: result.metadata.size, category, label: "" });
+        }
+      } catch {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+    setCompletionUploadedFiles(prev => [...prev, ...added]);
+    setCompletionDocUploading(false);
   };
 
   const handleArchive = async () => {
@@ -1130,14 +1205,6 @@ export default function ProjectDetail() {
               <Button onClick={() => setIsInviteOpen(true)} className="gap-2 min-h-[44px] px-5">
                 <Plus className="h-5 w-5" />
                 Add Subcontractor
-              </Button>
-            )}
-            {isGC && project.status === "CONSTRUCTION" && !isArchived && (
-              <Button
-                onClick={() => setCompleteConfirm(true)}
-                className="gap-2 min-h-[48px] px-6 text-base font-semibold bg-green-600 hover:bg-green-700 text-white shadow-md"
-              >
-                <CheckCircle2 className="h-5 w-5" /> Mark Project Complete
               </Button>
             )}
             {isGC && project.status === "COMPLETE" && !isArchived && (
@@ -2435,6 +2502,92 @@ export default function ProjectDetail() {
         )}
       </div>
 
+      {/* Mark Project Complete Button — above notes, GC only, CONSTRUCTION status only */}
+      {isGC && project.status === "CONSTRUCTION" && !isArchived && (
+        <div className="mt-8">
+          <Card className="border-green-200/70 dark:border-green-800/40 bg-green-50/40 dark:bg-green-950/10">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-green-800 dark:text-green-300 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 shrink-0" /> Ready to wrap up this project?
+                  </h3>
+                  <p className="text-sm text-green-700/80 dark:text-green-400/80 mt-0.5">Upload completion documents, confirm retention, and mark it done.</p>
+                </div>
+                <Button
+                  onClick={() => {
+                    setCompletionUploadedFiles([]);
+                    setCompletionNoteText("");
+                    setRetentionReleased(false);
+                    setRetentionWaived(false);
+                    setCompleteConfirm(true);
+                  }}
+                  className="gap-2 min-h-[44px] px-6 font-semibold bg-green-600 hover:bg-green-700 text-white shadow-sm shrink-0"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Mark Project Complete
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Completion Documents — shown once project is COMPLETE or archived */}
+      {isGC && (project.status === "COMPLETE" || isArchived) && (
+        <div className="mt-8">
+          <Card className="border-green-200/60 dark:border-green-800/30">
+            <CardHeader className="border-b border-green-200/60 dark:border-green-800/30 pb-4">
+              <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-5 w-5" /> Project Completion Record
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              {/* Completion note */}
+              {(project as any).completionNote && (
+                <div className="rounded-xl bg-green-50/60 dark:bg-green-950/10 border border-green-200/60 dark:border-green-800/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1.5">Completion Note</p>
+                  <p className="text-sm text-foreground leading-relaxed">{(project as any).completionNote}</p>
+                </div>
+              )}
+              {/* Retention status */}
+              <div className="flex items-center gap-2 text-sm">
+                {(project as any).retentionWaived ? (
+                  <><span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-3 py-1 text-xs font-semibold"><Shield className="h-3.5 w-3.5" /> Retention Waived</span><span className="text-muted-foreground">Marked as waived at completion</span></>
+                ) : (
+                  <><span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 px-3 py-1 text-xs font-semibold"><ShieldCheck className="h-3.5 w-3.5" /> Retention Released</span><span className="text-muted-foreground">Confirmed at completion</span></>
+                )}
+              </div>
+              {/* Documents */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Completion Documents</p>
+                {completionDocsData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No completion documents uploaded.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {completionDocsData.map(doc => (
+                      <a
+                        key={doc.id}
+                        href={`${BASE}/api/storage${doc.objectPath}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 p-3 transition-colors group"
+                      >
+                        {doc.category === "photo" ? <Eye className="h-5 w-5 text-blue-500 shrink-0" /> : <FileText className="h-5 w-5 text-primary shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{doc.fileName}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{doc.category} · {format(new Date(doc.createdAt), "MMM d, yyyy")}</p>
+                        </div>
+                        <Download className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* GC Private Notes */}
       {isGC && (
         <Card className="mt-8 border-amber-200/60 dark:border-amber-800/40">
@@ -3462,34 +3615,173 @@ export default function ProjectDetail() {
         </div>
       </Dialog>
 
-      {/* Mark Project Complete Confirmation */}
+      {/* Mark Project Complete — Checklist Modal */}
       <Dialog
         open={completeConfirm}
-        onOpenChange={(open) => !open && setCompleteConfirm(false)}
+        onOpenChange={(open) => { if (!open && !completeLoading) { setCompleteConfirm(false); } }}
         title="Mark Project Complete"
       >
-        <div className="space-y-4">
+        <div className="flex flex-col gap-0">
+        <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 pb-1">
+          {/* Section 1: Upload completion documents */}
+          <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/40">
+              <FileText className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-semibold text-sm">Upload Completion Documents</span>
+              <span className="text-xs text-muted-foreground ml-1">optional</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Final inspection report, certificate of occupancy, punch list sign-off, or any other project closeout documents.</p>
+              <input
+                ref={completionDocInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                className="hidden"
+                onChange={e => handleCompletionFileSelect(e.target.files, "document")}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={completionDocUploading}
+                onClick={() => completionDocInputRef.current?.click()}
+                className="gap-2"
+              >
+                {completionDocUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Select Documents
+              </Button>
+            </div>
+          </div>
+
+          {/* Section 2: Upload completion photos */}
+          <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/40">
+              <Eye className="h-4 w-4 text-blue-500 shrink-0" />
+              <span className="font-semibold text-sm">Upload Photos of Completed Work</span>
+              <span className="text-xs text-muted-foreground ml-1">optional</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Photographs documenting the finished state of the project for your records.</p>
+              <input
+                ref={completionPhotoInputRef}
+                type="file"
+                multiple
+                accept=".png,.jpg,.jpeg,.webp"
+                className="hidden"
+                onChange={e => handleCompletionFileSelect(e.target.files, "photo")}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={completionDocUploading}
+                onClick={() => completionPhotoInputRef.current?.click()}
+                className="gap-2"
+              >
+                {completionDocUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Select Photos
+              </Button>
+            </div>
+          </div>
+
+          {/* Uploaded files preview */}
+          {completionUploadedFiles.length > 0 && (
+            <div className="rounded-xl border border-green-200 dark:border-green-800/40 bg-green-50/40 dark:bg-green-950/10 p-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1">{completionUploadedFiles.length} file{completionUploadedFiles.length !== 1 ? "s" : ""} ready to upload</p>
+              {completionUploadedFiles.map((f, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-sm">
+                  {f.category === "photo" ? <Eye className="h-4 w-4 text-blue-500 shrink-0" /> : <FileText className="h-4 w-4 text-primary shrink-0" />}
+                  <span className="truncate flex-1 text-foreground">{f.fileName}</span>
+                  <span className="text-xs text-muted-foreground capitalize shrink-0">{f.category}</span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    onClick={() => setCompletionUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Section 3: Completion note */}
+          <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/40">
+              <StickyNote className="h-4 w-4 text-amber-500 shrink-0" />
+              <span className="font-semibold text-sm">Completion Note</span>
+              <span className="text-xs text-muted-foreground ml-1">optional</span>
+            </div>
+            <div className="p-4">
+              <textarea
+                className="w-full min-h-[80px] bg-background rounded-lg border border-input p-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y placeholder:text-muted-foreground/60"
+                placeholder="Add any final notes about the project completion — punch list status, final walkthrough, or handoff details…"
+                value={completionNoteText}
+                onChange={e => setCompletionNoteText(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Section 4: Retention confirmation — required */}
+          <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/40">
+              <Shield className="h-4 w-4 text-violet-500 shrink-0" />
+              <span className="font-semibold text-sm">Subcontract Retention</span>
+              <span className="text-xs font-semibold text-destructive ml-1">required</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Confirm the status of retention held on all subcontracts for this project.</p>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="retention"
+                  className="mt-0.5 shrink-0 accent-green-600"
+                  checked={retentionReleased}
+                  onChange={() => { setRetentionReleased(true); setRetentionWaived(false); }}
+                />
+                <div>
+                  <p className="text-sm font-medium group-hover:text-foreground">All retention has been released</p>
+                  <p className="text-xs text-muted-foreground">Subcontractors have been paid or will receive their retention balance.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="retention"
+                  className="mt-0.5 shrink-0 accent-amber-600"
+                  checked={retentionWaived && !retentionReleased}
+                  onChange={() => { setRetentionWaived(true); setRetentionReleased(false); }}
+                />
+                <div>
+                  <p className="text-sm font-medium group-hover:text-foreground">Mark retention as waived</p>
+                  <p className="text-xs text-muted-foreground">Retention was waived by agreement — no additional payments owed.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Info bullets */}
           <div className="rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-4">
-            <p className="text-sm text-foreground font-medium">
-              Are you sure you want to mark this project as complete?
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              This will trigger retention release for all subcontracts.
-            </p>
-            <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+            <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-2 uppercase tracking-wide">After marking complete</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
               <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> Subcontractors can request their retention balance</li>
               <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> New invoices and change orders can still be added</li>
               <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-green-600 shrink-0" /> You can archive the project once all payments are settled</li>
             </ul>
           </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-            <Button variant="ghost" className="min-h-[44px]" onClick={() => setCompleteConfirm(false)}>Cancel</Button>
+
+        </div>
+        {/* Action buttons — outside scrollable area so they are always accessible */}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-border mt-4">
+            <Button variant="ghost" className="min-h-[44px]" disabled={completeLoading} onClick={() => setCompleteConfirm(false)}>Cancel</Button>
             <Button
-              className="min-h-[44px] bg-green-600 hover:bg-green-700 text-white"
+              className="min-h-[44px] bg-green-600 hover:bg-green-700 text-white gap-2"
               isLoading={completeLoading}
+              disabled={completeLoading || completionDocUploading || (!retentionReleased && !retentionWaived)}
               onClick={handleMarkComplete}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Yes, Mark Complete
+              <CheckCircle2 className="h-4 w-4" /> Mark Project Complete
             </Button>
           </div>
         </div>

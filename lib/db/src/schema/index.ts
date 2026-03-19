@@ -9,3 +9,4 @@ export * from "./magic-link-tokens";
 export * from "./draw-schedule";
 export * from "./compliance";
 export * from "./owner-notifications";
+export * from "./completion-documents";
