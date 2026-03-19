@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
@@ -9,7 +9,8 @@ export const planFilesTable = pgTable("plan_files", {
   fileName: text("file_name"),
   objectPath: text("object_path"),
   fileUrl: text("file_url"),
-  description: text("description").notNull(),
+  fileSize: bigint("file_size", { mode: "number" }),
+  description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -28,3 +29,16 @@ export const planFileViewsTable = pgTable("plan_file_views", {
 });
 
 export type PlanFileView = typeof planFileViewsTable.$inferSelect;
+
+export const scopeDocumentsTable = pgTable("scope_documents", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  projectId: text("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  objectPath: text("object_path"),
+  fileSize: bigint("file_size", { mode: "number" }),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ScopeDocument = typeof scopeDocumentsTable.$inferSelect;

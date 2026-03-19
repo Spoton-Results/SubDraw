@@ -137,16 +137,24 @@ export default function ProjectDetail() {
   const [bidScopeUploading, setBidScopeUploading] = React.useState(false);
 
   const [isPlanOpen, setIsPlanOpen] = React.useState(false);
-  const [planDescription, setPlanDescription] = React.useState("");
-  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
   const [fileError, setFileError] = React.useState("");
   const [uploadStep, setUploadStep] = React.useState<"idle" | "uploading" | "saving">("idle");
+  const [uploadFileIndex, setUploadFileIndex] = React.useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [deletePlanConfirm, setDeletePlanConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
   const [expandedPlanViews, setExpandedPlanViews] = React.useState<Set<string>>(new Set());
   const [showNoPlanWarning, setShowNoPlanWarning] = React.useState(false);
+
+  const [isScopeOpen, setIsScopeOpen] = React.useState(false);
+  const [selectedScopeFiles, setSelectedScopeFiles] = React.useState<File[]>([]);
+  const [scopeFileError, setScopeFileError] = React.useState("");
+  const [scopeUploadStep, setScopeUploadStep] = React.useState<"idle" | "uploading" | "saving">("idle");
+  const [scopeUploadFileIndex, setScopeUploadFileIndex] = React.useState(0);
+  const scopeFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [deleteScopeConfirm, setDeleteScopeConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -175,6 +183,24 @@ export default function ProjectDetail() {
   });
 
   const viewedPlanFileIds = React.useMemo(() => new Set(myPlanViews.map(v => v.planFileId)), [myPlanViews]);
+
+  const { data: scopeDocs = [], refetch: refetchScopeDocs } = useQuery<{ id: string; projectId: string; fileName: string; objectPath: string | null; fileSize: number | null; description: string | null; createdAt: string }[]>({
+    queryKey: ["scope-documents", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/scope-documents`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+    staleTime: 30000,
+  });
+
+  const formatFileSize = (bytes: number | null | undefined): string => {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
 
   const queryClient_ref = queryClient;
 
@@ -501,61 +527,121 @@ export default function ProjectDetail() {
     await doBidSubmit();
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePlanFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!ALLOWED_EXTENSIONS.test(file.name)) {
-      setFileError("Unsupported file type. Please upload PDF, PNG, JPG, DWG, or DOCX.");
-      e.target.value = "";
-      return;
-    }
-    if (file.size > MAX_SIZE_BYTES) {
-      setFileError("File is too large. Maximum size is 50 MB.");
-      e.target.value = "";
-      return;
-    }
-    setSelectedFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const invalid = files.find(f => !ALLOWED_EXTENSIONS.test(f.name));
+    if (invalid) { setFileError(`"${invalid.name}" is not a supported file type. Use PDF, PNG, JPG, DWG, or DOCX.`); e.target.value = ""; return; }
+    const tooBig = files.find(f => f.size > MAX_SIZE_BYTES);
+    if (tooBig) { setFileError(`"${tooBig.name}" exceeds the 50 MB limit.`); e.target.value = ""; return; }
+    setSelectedFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...files.filter(f => !names.has(f.name))];
+    });
+    e.target.value = "";
   };
 
-  const handleUploadPlan = async (e: React.FormEvent) => {
+  const handleUploadPlans = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) return toast.error("Please select a file");
-    if (!planDescription.trim()) return toast.error("Please add a description");
-
+    if (!selectedFiles.length) return toast.error("Please select at least one file");
     setUploadStep("uploading");
-    const result = await uploadFile(selectedFile);
-    if (!result) {
-      setUploadStep("idle");
-      return;
+    const results: { file: File; objectPath: string }[] = [];
+    for (let i = 0; i < selectedFiles.length; i++) {
+      setUploadFileIndex(i);
+      const result = await uploadFile(selectedFiles[i]);
+      if (!result) { setUploadStep("idle"); return; }
+      results.push({ file: selectedFiles[i], objectPath: result.objectPath });
     }
-
     setUploadStep("saving");
     try {
-      await addPlanFile.mutateAsync({
-        projectId,
-        data: {
-          objectPath: result.objectPath,
-          fileName: selectedFile.name,
-          description: planDescription.trim(),
-        },
-      });
-      toast.success("Plan file uploaded!");
+      for (const { file, objectPath } of results) {
+        await addPlanFile.mutateAsync({ projectId, data: { objectPath, fileName: file.name, fileSize: file.size } as any });
+      }
+      toast.success(results.length === 1 ? "Plan file uploaded!" : `${results.length} plan files uploaded!`);
       queryClient.invalidateQueries({ queryKey: getGetProjectPlanFilesQueryKey(projectId) });
       handleClosePlanDialog();
     } catch (err: any) {
-      toast.error(err?.data?.error || err?.message || "Failed to save plan file");
+      toast.error(err?.data?.error || err?.message || "Failed to save plan files");
       setUploadStep("idle");
     }
   };
 
   const handleClosePlanDialog = () => {
     setIsPlanOpen(false);
-    setPlanDescription("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setFileError("");
     setUploadStep("idle");
+    setUploadFileIndex(0);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleScopeFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setScopeFileError("");
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const invalid = files.find(f => !ALLOWED_EXTENSIONS.test(f.name));
+    if (invalid) { setScopeFileError(`"${invalid.name}" is not a supported file type. Use PDF, PNG, JPG, DWG, or DOCX.`); e.target.value = ""; return; }
+    const tooBig = files.find(f => f.size > MAX_SIZE_BYTES);
+    if (tooBig) { setScopeFileError(`"${tooBig.name}" exceeds the 50 MB limit.`); e.target.value = ""; return; }
+    setSelectedScopeFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...files.filter(f => !names.has(f.name))];
+    });
+    e.target.value = "";
+  };
+
+  const handleUploadScopeDocs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedScopeFiles.length) return toast.error("Please select at least one file");
+    setScopeUploadStep("uploading");
+    const results: { file: File; objectPath: string }[] = [];
+    for (let i = 0; i < selectedScopeFiles.length; i++) {
+      setScopeUploadFileIndex(i);
+      const result = await uploadFile(selectedScopeFiles[i]);
+      if (!result) { setScopeUploadStep("idle"); return; }
+      results.push({ file: selectedScopeFiles[i], objectPath: result.objectPath });
+    }
+    setScopeUploadStep("saving");
+    try {
+      for (const { file, objectPath } of results) {
+        await fetch(`${BASE_URL}/api/projects/${projectId}/scope-documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ objectPath, fileName: file.name, fileSize: file.size }),
+        });
+      }
+      toast.success(results.length === 1 ? "Scope document uploaded!" : `${results.length} scope documents uploaded!`);
+      refetchScopeDocs();
+      handleCloseScopeDialog();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save scope documents");
+      setScopeUploadStep("idle");
+    }
+  };
+
+  const handleCloseScopeDialog = () => {
+    setIsScopeOpen(false);
+    setSelectedScopeFiles([]);
+    setScopeFileError("");
+    setScopeUploadStep("idle");
+    setScopeUploadFileIndex(0);
+    if (scopeFileInputRef.current) scopeFileInputRef.current.value = "";
+  };
+
+  const handleDeleteScope = async () => {
+    try {
+      await fetch(`${BASE_URL}/api/projects/${projectId}/scope-documents/${deleteScopeConfirm.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      toast.success("Document deleted");
+      refetchScopeDocs();
+      setDeleteScopeConfirm({ open: false, id: "", name: "" });
+    } catch {
+      toast.error("Failed to delete document");
+    }
   };
 
   const handleRemoveMember = async () => {
@@ -721,8 +807,18 @@ export default function ProjectDetail() {
   };
 
   const uploadProgressDisplay = uploadStep === "uploading" ? progress : uploadStep === "saving" ? 100 : 0;
-  const uploadStatusText = uploadStep === "uploading" ? `Uploading… ${progress}%` : uploadStep === "saving" ? "Saving…" : "";
+  const uploadStatusText = uploadStep === "uploading"
+    ? selectedFiles.length > 1
+      ? `Uploading file ${uploadFileIndex + 1} of ${selectedFiles.length}… ${progress}%`
+      : `Uploading… ${progress}%`
+    : uploadStep === "saving" ? "Saving…" : "";
   const isSubmitting = uploadStep !== "idle";
+  const isScopeSubmitting = scopeUploadStep !== "idle";
+  const scopeUploadStatusText = scopeUploadStep === "uploading"
+    ? selectedScopeFiles.length > 1
+      ? `Uploading file ${scopeUploadFileIndex + 1} of ${selectedScopeFiles.length}… ${progress}%`
+      : `Uploading… ${progress}%`
+    : scopeUploadStep === "saving" ? "Saving…" : "";
 
   const handleDsAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1030,7 +1126,7 @@ export default function ProjectDetail() {
                 </CardTitle>
                 {isGC && project.status === "BIDDING" && (
                   <Button size="sm" variant="outline" onClick={() => setIsPlanOpen(true)} className="gap-1.5">
-                    <Upload className="h-4 w-4" /> Upload Plan
+                    <Upload className="h-4 w-4" /> Upload Plans
                   </Button>
                 )}
               </div>
@@ -1071,6 +1167,9 @@ export default function ProjectDetail() {
                                   <Calendar className="h-3 w-3" />
                                   {format(new Date(plan.createdAt), "MMM d, yyyy")}
                                 </div>
+                                {(plan as any).fileSize && (
+                                  <span className="text-xs text-muted-foreground">{formatFileSize((plan as any).fileSize)}</span>
+                                )}
                                 {isGC && fileViews.length > 0 && (
                                   <button
                                     onClick={() => setExpandedPlanViews(prev => {
@@ -1129,6 +1228,78 @@ export default function ProjectDetail() {
                       </li>
                     );
                   })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SCOPE DOCUMENTS SECTION */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-primary" /> Scope of Work Documents
+                </CardTitle>
+                {isGC && project.status === "BIDDING" && (
+                  <Button size="sm" variant="outline" onClick={() => setIsScopeOpen(true)} className="gap-1.5">
+                    <Upload className="h-4 w-4" /> Upload Docs
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Specifications, project requirements, and scope documents available to all invited subs before bidding.</p>
+            </CardHeader>
+            <CardContent>
+              {scopeDocs.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-2">No scope documents uploaded yet.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {scopeDocs.map((doc) => (
+                    <li key={doc.id} className="py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 bg-primary/10">
+                            <FileText className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{doc.fileName}</p>
+                            {doc.description && doc.description !== doc.fileName && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{doc.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Calendar className="h-3 w-3" />
+                                {format(new Date(doc.createdAt), "MMM d, yyyy")}
+                              </div>
+                              {doc.fileSize && (
+                                <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {doc.objectPath && (
+                            <a
+                              href={`${BASE_URL}/api/storage${doc.objectPath}`}
+                              download={doc.fileName}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Download
+                            </a>
+                          )}
+                          {isGC && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteScopeConfirm({ open: true, id: doc.id, name: doc.fileName })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </CardContent>
@@ -1578,6 +1749,34 @@ export default function ProjectDetail() {
                 ) : !myBid ? (
                   <form onSubmit={handleBidSubmit} className="space-y-5">
                     <p className="text-sm text-muted-foreground">Submit your proposed bid for this project. You may only submit one bid per project.</p>
+
+                    {/* SCOPE DOCUMENTS — quick access for subs while filling in their bid */}
+                    {scopeDocs.length > 0 && (
+                      <div className="rounded-xl border border-border bg-muted/30 p-3">
+                        <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                          <ClipboardList className="h-3.5 w-3.5" /> Scope of Work Documents
+                        </p>
+                        <ul className="space-y-1.5">
+                          {scopeDocs.map(doc => (
+                            <li key={doc.id}>
+                              {doc.objectPath ? (
+                                <a
+                                  href={`${BASE_URL}/api/storage${doc.objectPath}`}
+                                  download={doc.fileName}
+                                  className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
+                                >
+                                  <Download className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{doc.fileName}</span>
+                                  {doc.fileSize && <span className="text-muted-foreground shrink-0">{formatFileSize(doc.fileSize)}</span>}
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">{doc.fileName}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {/* PLAN FILE REVIEW STATUS — shown in bid form so subs know what they've downloaded */}
                     {planFiles.length > 0 && (
@@ -2448,78 +2647,139 @@ export default function ProjectDetail() {
         )}
       </Dialog>
 
-      {/* Upload Plan File Dialog */}
+      {/* Upload Plan Files Dialog (multi-file) */}
       <Dialog
         open={isPlanOpen}
         onOpenChange={(open) => { if (!open && !isSubmitting) handleClosePlanDialog(); }}
-        title="Upload Site Plan"
-        description="Select a file from your device and add a brief description. PDF, PNG, JPG, DWG, and DOCX files up to 50 MB are supported."
+        title="Upload Site Plans"
+        description="Select one or more plan files. PDF, PNG, JPG, DWG, and DOCX up to 50 MB each."
       >
-        <form onSubmit={handleUploadPlan} className="space-y-4 mt-4">
-          <div>
-            <label className="text-sm font-semibold mb-1 block">Description</label>
-            <Input
-              type="text"
-              required
-              placeholder="e.g. Architectural Floor Plan – Level 1"
-              value={planDescription}
-              onChange={e => setPlanDescription(e.target.value)}
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold mb-1 block">File</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
-              onChange={handleFileSelect}
-              disabled={isSubmitting}
-            />
-            {selectedFile ? (
-              <div className="border-2 border-primary/40 bg-primary/5 rounded-xl p-4 flex items-center gap-3">
-                <FileText className="h-8 w-8 text-primary shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">{selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                  className="text-muted-foreground hover:text-destructive transition-colors p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  disabled={isSubmitting}
-                >
-                  ✕
+        <form onSubmit={handleUploadPlans} className="space-y-4 mt-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
+            onChange={handlePlanFilesSelect}
+            disabled={isSubmitting}
+          />
+          {selectedFiles.length > 0 ? (
+            <div className="space-y-2">
+              <ul className="space-y-2 max-h-52 overflow-y-auto">
+                {selectedFiles.map((f, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-muted/30">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatFileSize(f.size)}</p>
+                    </div>
+                    {!isSubmitting && (
+                      <button type="button" onClick={() => setSelectedFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive p-1 min-h-[36px] min-w-[36px] flex items-center justify-center">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {!isSubmitting && (
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" /> Add more files
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => !isSubmitting && fileInputRef.current?.click()}
-                disabled={isSubmitting}
-                className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 active:bg-muted/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <Upload className="h-8 w-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
-                <p className="text-sm font-medium text-muted-foreground">Tap to browse files</p>
-                <p className="text-xs mt-1 text-muted-foreground">PDF, PNG, JPG, DWG, DOCX · max 50 MB</p>
-              </button>
-            )}
-            {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
-          </div>
-
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => !isSubmitting && fileInputRef.current?.click()}
+              disabled={isSubmitting}
+              className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 active:bg-muted/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <Upload className="h-8 w-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
+              <p className="text-sm font-medium text-muted-foreground">Tap to browse — select multiple files at once</p>
+              <p className="text-xs mt-1 text-muted-foreground">PDF, PNG, JPG, DWG, DOCX · max 50 MB each</p>
+            </button>
+          )}
+          {fileError && <p className="text-xs text-destructive">{fileError}</p>}
           {isSubmitting && (
             <div className="space-y-1.5">
               <Progress value={uploadProgressDisplay} className="h-2" />
               <p className="text-xs text-muted-foreground text-center">{uploadStatusText}</p>
             </div>
           )}
-
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={handleClosePlanDialog} disabled={isSubmitting} className="min-h-[44px]">Cancel</Button>
-            <Button type="submit" isLoading={isSubmitting} disabled={!selectedFile || isSubmitting} className="gap-2 min-h-[44px]">
-              <Upload className="h-4 w-4" /> Upload
+            <Button type="submit" isLoading={isSubmitting} disabled={!selectedFiles.length || isSubmitting} className="gap-2 min-h-[44px]">
+              <Upload className="h-4 w-4" /> Upload {selectedFiles.length > 1 ? `${selectedFiles.length} Files` : "File"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Upload Scope Documents Dialog (multi-file) */}
+      <Dialog
+        open={isScopeOpen}
+        onOpenChange={(open) => { if (!open && !isScopeSubmitting) handleCloseScopeDialog(); }}
+        title="Upload Scope Documents"
+        description="Specifications, requirements, and other scope documents visible to invited subs. PDF, Word, PNG, JPG, DWG up to 50 MB each."
+      >
+        <form onSubmit={handleUploadScopeDocs} className="space-y-4 mt-4">
+          <input
+            ref={scopeFileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            accept=".pdf,.png,.jpg,.jpeg,.dwg,.docx,.doc"
+            onChange={handleScopeFilesSelect}
+            disabled={isScopeSubmitting}
+          />
+          {selectedScopeFiles.length > 0 ? (
+            <div className="space-y-2">
+              <ul className="space-y-2 max-h-52 overflow-y-auto">
+                {selectedScopeFiles.map((f, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-muted/30">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatFileSize(f.size)}</p>
+                    </div>
+                    {!isScopeSubmitting && (
+                      <button type="button" onClick={() => setSelectedScopeFiles(prev => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive p-1 min-h-[36px] min-w-[36px] flex items-center justify-center">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {!isScopeSubmitting && (
+                <button type="button" onClick={() => scopeFileInputRef.current?.click()} className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" /> Add more files
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => !isScopeSubmitting && scopeFileInputRef.current?.click()}
+              disabled={isScopeSubmitting}
+              className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 active:bg-muted/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <Upload className="h-8 w-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
+              <p className="text-sm font-medium text-muted-foreground">Tap to browse — select multiple files at once</p>
+              <p className="text-xs mt-1 text-muted-foreground">PDF, Word, PNG, JPG, DWG · max 50 MB each</p>
+            </button>
+          )}
+          {scopeFileError && <p className="text-xs text-destructive">{scopeFileError}</p>}
+          {isScopeSubmitting && (
+            <div className="space-y-1.5">
+              <Progress value={uploadProgressDisplay} className="h-2" />
+              <p className="text-xs text-muted-foreground text-center">{scopeUploadStatusText}</p>
+            </div>
+          )}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={handleCloseScopeDialog} disabled={isScopeSubmitting} className="min-h-[44px]">Cancel</Button>
+            <Button type="submit" isLoading={isScopeSubmitting} disabled={!selectedScopeFiles.length || isScopeSubmitting} className="gap-2 min-h-[44px]">
+              <Upload className="h-4 w-4" /> Upload {selectedScopeFiles.length > 1 ? `${selectedScopeFiles.length} Files` : "File"}
             </Button>
           </div>
         </form>
@@ -2731,6 +2991,33 @@ export default function ProjectDetail() {
               isLoading={deletePlanFileMutation.isPending}
               onClick={handleDeletePlan}
             >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete File
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Delete Scope Document Confirmation */}
+      <Dialog
+        open={deleteScopeConfirm.open}
+        onOpenChange={(open) => !open && setDeleteScopeConfirm({ open: false, id: "", name: "" })}
+        title="Delete Scope Document"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4">
+            <p className="text-sm text-foreground">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{deleteScopeConfirm.name}</span>?
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will permanently remove the file. All team members will lose access to it.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+            <Button variant="ghost" className="min-h-[44px]" onClick={() => setDeleteScopeConfirm({ open: false, id: "", name: "" })}>
+              Cancel
+            </Button>
+            <Button variant="destructive" className="min-h-[44px]" onClick={handleDeleteScope}>
               <Trash2 className="h-4 w-4 mr-2" /> Delete File
             </Button>
           </div>

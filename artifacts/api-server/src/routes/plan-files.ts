@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { planFilesTable, planFileViewsTable, activityLogsTable, subcontractsTable } from "@workspace/db/schema";
+import { planFilesTable, planFileViewsTable, activityLogsTable, subcontractsTable, scopeDocumentsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -17,14 +17,14 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, requireGC, async (req, res) => {
   const { projectId } = req.params as any;
-  const { objectPath, fileName, description } = req.body;
-  if (!objectPath || !fileName || !description) {
-    res.status(400).json({ error: "objectPath, fileName, and description are required" });
+  const { objectPath, fileName, fileSize, description } = req.body;
+  if (!objectPath || !fileName) {
+    res.status(400).json({ error: "objectPath and fileName are required" });
     return;
   }
   const [plan] = await db
     .insert(planFilesTable)
-    .values({ projectId, objectPath, fileName, description })
+    .values({ projectId, objectPath, fileName, fileSize: fileSize ?? null, description: description ?? fileName })
     .returning();
   res.status(201).json(plan);
 });
