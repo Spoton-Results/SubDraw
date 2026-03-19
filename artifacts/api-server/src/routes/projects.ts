@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
 import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js";
-import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail } from "../lib/email.js";
+import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 import { generateDrawSchedulePDF } from "../lib/pdfDrawSchedule.js";
@@ -116,6 +116,75 @@ async function getProjectWithDetails(projectId: string, requestingUserId?: strin
   }));
 
   return { ...project, gc, members: membersWithUsers, bids: bidsWithSubs, subcontracts: subcontractsWithDetails };
+}
+
+// ── Owner CO notification helper ──────────────────────────────────────────────
+export async function triggerOwnerCoNotification(opts: {
+  projectId: string;
+  changeOrderId: string;
+  changeOrderDescription: string;
+  changeOrderAmount: number;
+  subcontractId: string;
+  gcCompanyName: string;
+  appUrl: string;
+}) {
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, opts.projectId)).limit(1);
+  if (!project || !project.ownerEmail || !project.ownerName) return;
+  if (project.ownerCoThreshold !== null && project.ownerCoThreshold !== undefined && Math.abs(opts.changeOrderAmount) < project.ownerCoThreshold) return;
+
+  // Compute total project budget before this CO
+  const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, opts.projectId));
+  let previousBudget = 0;
+  for (const sc of subcontracts) {
+    const cos = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.subcontractId, sc.id));
+    const approvedCOs = cos.filter(c => c.status === "APPROVED" && c.id !== opts.changeOrderId);
+    previousBudget += sc.baseContractAmount + approvedCOs.reduce((s, c) => s + c.amount, 0);
+  }
+  const newBudget = previousBudget + opts.changeOrderAmount;
+
+  // Deduplicate: only notify once per CO per owner email
+  const [existing] = await db.select().from(ownerCoNotificationsTable)
+    .where(and(
+      eq(ownerCoNotificationsTable.changeOrderId, opts.changeOrderId),
+      eq(ownerCoNotificationsTable.ownerEmail, project.ownerEmail)
+    )).limit(1);
+  if (existing) return;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  await db.insert(ownerCoNotificationsTable).values({
+    projectId: opts.projectId,
+    changeOrderId: opts.changeOrderId,
+    notificationToken: token,
+    ownerName: project.ownerName,
+    ownerEmail: project.ownerEmail,
+  });
+
+  const baseUrl = opts.appUrl;
+  const approveUrl = `${baseUrl}/api/projects/${opts.projectId}/owner-reply?token=${token}&action=approve`;
+  const rejectUrl = `${baseUrl}/api/projects/${opts.projectId}/owner-reply?token=${token}&action=reject`;
+
+  sendOwnerCoNotificationEmail({
+    toEmail: project.ownerEmail,
+    ownerName: project.ownerName,
+    gcCompanyName: opts.gcCompanyName,
+    projectName: project.name,
+    projectAddress: project.address,
+    coDescription: opts.changeOrderDescription,
+    coAmount: opts.changeOrderAmount,
+    previousBudget,
+    newBudget,
+    approveUrl,
+    rejectUrl,
+  }).catch(err => console.error("[email] sendOwnerCoNotificationEmail failed:", err));
+
+  // Log to activity log
+  await db.insert(activityLogsTable).values({
+    subcontractId: opts.subcontractId,
+    type: "OWNER_CO_NOTIFICATION_SENT",
+    description: `Owner notification sent to ${project.ownerName} (${project.ownerEmail}) for change order "${opts.changeOrderDescription}"`,
+    actorName: opts.gcCompanyName,
+    actorRole: "GC",
+  }).catch(() => {});
 }
 
 router.get("/", requireAuth, async (req, res) => {
@@ -588,13 +657,16 @@ router.patch("/:projectId", requireAuth, requireGC, async (req, res) => {
     res.status(400).json({ error: "Archived projects cannot be edited. Unarchive the project first." });
     return;
   }
-  const { name, address, description, estimatedStartDate, notes } = req.body;
+  const { name, address, description, estimatedStartDate, notes, ownerName, ownerEmail, ownerCoThreshold } = req.body;
   const updates: Record<string, any> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name;
   if (address !== undefined) updates.address = address || null;
   if (description !== undefined) updates.description = description || null;
   if (estimatedStartDate !== undefined) updates.estimatedStartDate = estimatedStartDate || null;
   if (notes !== undefined) updates.notes = notes || null;
+  if (ownerName !== undefined) updates.ownerName = ownerName || null;
+  if (ownerEmail !== undefined) updates.ownerEmail = ownerEmail || null;
+  if (ownerCoThreshold !== undefined) updates.ownerCoThreshold = ownerCoThreshold != null && ownerCoThreshold !== "" ? Number(ownerCoThreshold) : null;
 
   await db.update(projectsTable).set(updates).where(eq(projectsTable.id, req.params.projectId));
   const detail = await getProjectWithDetails(req.params.projectId, user.id);
@@ -988,10 +1060,90 @@ router.post("/:projectId/change-orders/bulk", requireAuth, requireGC, async (req
       }).catch((err) => console.error("[email] bulk CO sendChangeOrderCreatedEmail failed:", err));
     }
 
+    // Trigger owner notification if threshold is met
+    triggerOwnerCoNotification({
+      projectId: project.id,
+      changeOrderId: co.id,
+      changeOrderDescription: co.description,
+      changeOrderAmount: co.amount,
+      subcontractId: entry.subcontractId,
+      gcCompanyName: gcUserData?.companyName ?? "GC",
+      appUrl,
+    }).catch(err => console.error("[owner-notify] bulk CO failed:", err));
+
     return co;
   }));
 
   res.status(201).json(created.filter(Boolean));
+});
+
+// Owner CO notification: list all (GC-only)
+router.get("/:projectId/owner-notifications", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const effectiveGcId = getEffectiveGcId(user);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, req.params.projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
+  const notifications = await db.select().from(ownerCoNotificationsTable)
+    .where(eq(ownerCoNotificationsTable.projectId, req.params.projectId));
+  const withCO = await Promise.all(notifications.map(async (n) => {
+    const [co] = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.id, n.changeOrderId)).limit(1);
+    return { ...n, changeOrder: co ?? null };
+  }));
+  withCO.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json(withCO);
+});
+
+// Owner CO reply — PUBLIC, no auth needed (token-based)
+router.get("/:projectId/owner-reply", async (req, res) => {
+  const { token, action } = req.query as { token?: string; action?: string };
+  if (!token || !["approve", "reject"].includes(action ?? "")) {
+    res.status(400).send("<h2>Invalid link. Please check the email and try again.</h2>"); return;
+  }
+
+  const [notification] = await db.select().from(ownerCoNotificationsTable)
+    .where(eq(ownerCoNotificationsTable.notificationToken, token)).limit(1);
+  if (!notification) {
+    res.status(404).send("<h2>This link is invalid or has expired.</h2>"); return;
+  }
+  if (notification.ownerResponse) {
+    const alreadyPage = buildOwnerReplyPage({
+      ownerName: notification.ownerName,
+      projectName: "the project",
+      coDescription: "this change order",
+      action: notification.ownerResponse as "APPROVED" | "REJECTED",
+    });
+    res.send(alreadyPage); return;
+  }
+
+  const response = action === "approve" ? "APPROVED" : "REJECTED";
+  await db.update(ownerCoNotificationsTable).set({
+    ownerResponse: response,
+    ownerResponseAt: new Date(),
+  }).where(eq(ownerCoNotificationsTable.id, notification.id));
+
+  // Fetch CO and project for logging and activity
+  const [co] = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.id, notification.changeOrderId)).limit(1);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, notification.projectId)).limit(1);
+
+  if (co && project) {
+    // Log to activity on the subcontract
+    await db.insert(activityLogsTable).values({
+      subcontractId: co.subcontractId,
+      type: "OWNER_CO_RESPONSE",
+      description: `Project owner ${notification.ownerName} ${response === "APPROVED" ? "approved" : "rejected"} change order "${co.description}"`,
+      actorName: notification.ownerName,
+      actorRole: "OWNER",
+    }).catch(() => {});
+  }
+
+  const html = buildOwnerReplyPage({
+    ownerName: notification.ownerName,
+    projectName: project?.name ?? "the project",
+    coDescription: co?.description ?? "this change order",
+    action: response,
+  });
+  res.send(html);
 });
 
 // List all signed lien waivers for a project

@@ -18,6 +18,7 @@ import {
   sendContractReadyEmail,
   sendContractSignedEmail,
 } from "../lib/email.js";
+import { triggerOwnerCoNotification } from "./projects.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -529,6 +530,17 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
       amount: Number(amount),
       appUrl,
     }).catch((err) => console.error("[email] sendChangeOrderCreatedEmail failed:", err));
+
+    // Notify project owner if threshold is met
+    triggerOwnerCoNotification({
+      projectId: sc.project.id,
+      changeOrderId: co.id,
+      changeOrderDescription: co.description,
+      changeOrderAmount: co.amount,
+      subcontractId: co.subcontractId,
+      gcCompanyName: sc.project.gc.companyName,
+      appUrl,
+    }).catch(err => console.error("[owner-notify] CO create failed:", err));
   } else {
     // Sub created the CO — notify GC
     sendChangeOrderSubmittedBySubEmail({
@@ -559,6 +571,7 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
     "SUB"
   );
 
+  const appUrl = getAppUrl(req);
   sendChangeOrderDecisionEmail({
     toEmail: sc.project.gc.email,
     projectName: sc.project.name,
@@ -566,8 +579,19 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
     description: co.description,
     amount: co.amount,
     decision: "APPROVED",
-    appUrl: getAppUrl(req),
+    appUrl,
   }).catch((err) => console.error("[email] sendChangeOrderDecisionEmail failed:", err));
+
+  // Notify project owner when a CO is approved by sub (if not already notified at creation)
+  triggerOwnerCoNotification({
+    projectId: sc.project.id,
+    changeOrderId: co.id,
+    changeOrderDescription: co.description,
+    changeOrderAmount: co.amount,
+    subcontractId: co.subcontractId,
+    gcCompanyName: sc.project.gc.companyName,
+    appUrl,
+  }).catch(err => console.error("[owner-notify] CO approve failed:", err));
 
   res.json(co);
 });

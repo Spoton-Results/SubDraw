@@ -708,3 +708,86 @@ export async function sendCommentNotificationEmail(opts: {
   `);
   await send(opts.toEmail, `New message from ${opts.senderCompanyName} on ${opts.projectName}`, html);
 }
+
+// ─── Owner CO notification ────────────────────────────────────────────────────
+export async function sendOwnerCoNotificationEmail(opts: {
+  toEmail: string;
+  ownerName: string;
+  gcCompanyName: string;
+  projectName: string;
+  projectAddress: string | null;
+  coDescription: string;
+  coAmount: number;
+  previousBudget: number;
+  newBudget: number;
+  approveUrl: string;
+  rejectUrl: string;
+}) {
+  const budgetChange = opts.newBudget - opts.previousBudget;
+  const isIncrease = budgetChange > 0;
+  const html = layout(`
+    ${heading("Change Order Notification")}
+    ${subtext(`Dear <strong>${opts.ownerName}</strong>, a change order has been issued on <strong>${opts.projectName}</strong> by <strong>${opts.gcCompanyName}</strong> that requires your awareness.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName + (opts.projectAddress ? ` — ${opts.projectAddress}` : "") },
+      { label: "General Contractor", value: opts.gcCompanyName },
+      { label: "Change Order", value: opts.coDescription },
+      { label: "CO Amount", value: formatCurrency(opts.coAmount) },
+      { label: "Previous Budget", value: formatCurrency(opts.previousBudget) },
+      { label: "New Budget", value: formatCurrency(opts.newBudget) },
+      { label: "Budget Impact", value: `${isIncrease ? "+" : ""}${formatCurrency(budgetChange)} (${isIncrease ? "increase" : "decrease"})` },
+    ])}
+    <p style="margin:0 0 12px;font-size:15px;color:#475569;">Please review this change order and indicate your response below. Your reply will be recorded for the project record.</p>
+    <table cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td style="padding-right:12px;">
+          <a href="${opts.approveUrl}" style="display:inline-block;background:#15803d;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">✓ Approve Change Order</a>
+        </td>
+        <td>
+          <a href="${opts.rejectUrl}" style="display:inline-block;background:#b91c1c;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">✗ Reject Change Order</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:12px;color:#94a3b8;">If you believe you received this email in error, please contact your General Contractor directly. These links are unique to this notification and expire when acted upon.</p>
+  `);
+  await send(
+    opts.toEmail,
+    `Change Order Notification — ${opts.projectName}: ${opts.coDescription} (${formatCurrency(opts.coAmount)})`,
+    html
+  );
+}
+
+// ─── Owner CO reply confirmation ──────────────────────────────────────────────
+export function buildOwnerReplyPage(opts: {
+  ownerName: string;
+  projectName: string;
+  coDescription: string;
+  action: "APPROVED" | "REJECTED";
+}): string {
+  const isApproved = opts.action === "APPROVED";
+  const color = isApproved ? "#15803d" : "#b91c1c";
+  const icon = isApproved ? "✓" : "✗";
+  const verb = isApproved ? "approved" : "rejected";
+  return `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;margin:0;padding:0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:60px 0;">
+      <tr><td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);">
+          <tr><td style="background:#1e3a5f;padding:24px 32px;">
+            <span style="color:#ffffff;font-size:20px;font-weight:700;">⚙ SubTracker</span>
+          </td></tr>
+          <tr><td style="padding:40px 32px;text-align:center;">
+            <div style="width:64px;height:64px;border-radius:50%;background:${color};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;">
+              <span style="color:#fff;font-size:28px;font-weight:700;">${icon}</span>
+            </div>
+            <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#0f172a;">Change Order ${opts.action === "APPROVED" ? "Approved" : "Rejected"}</h2>
+            <p style="margin:0 0 24px;font-size:15px;color:#475569;">Thank you, <strong>${opts.ownerName}</strong>. You have <strong>${verb}</strong> the change order "<em>${opts.coDescription}</em>" on <strong>${opts.projectName}</strong>.</p>
+            <p style="margin:0;font-size:14px;color:#64748b;">Your response has been recorded and the General Contractor has been notified. You may close this window.</p>
+          </td></tr>
+          <tr><td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#94a3b8;">Powered by SubTracker — Construction Project Management</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body></html>`;
+}

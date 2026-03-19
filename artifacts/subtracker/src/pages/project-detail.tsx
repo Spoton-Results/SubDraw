@@ -33,6 +33,7 @@ import {
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
   Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare, ListChecks, SquareCheck,
+  UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -168,6 +169,13 @@ export default function ProjectDetail() {
   const [complianceEditSaving, setComplianceEditSaving] = React.useState(false);
   const [complianceDeleteConfirm, setComplianceDeleteConfirm] = React.useState<string | null>(null);
 
+  // Project Owner state
+  const [ownerEditing, setOwnerEditing] = React.useState(false);
+  const [ownerName, setOwnerName] = React.useState("");
+  const [ownerEmail, setOwnerEmail] = React.useState("");
+  const [ownerCoThreshold, setOwnerCoThreshold] = React.useState("");
+  const [ownerSaving, setOwnerSaving] = React.useState(false);
+
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
   const isGC_for_views = user?.role === "GC";
@@ -289,6 +297,43 @@ export default function ProjectDetail() {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   };
+
+  type OwnerNotification = { id: string; changeOrderId: string; ownerName: string; ownerEmail: string; ownerResponse: string | null; ownerResponseAt: string | null; sentAt: string; changeOrder: { description: string; amount: number; status: string } | null };
+  const { data: ownerNotifications = [], refetch: refetchOwnerNotifications } = useQuery<OwnerNotification[]>({
+    queryKey: ["owner-notifications", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/owner-notifications`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC",
+    staleTime: 15000,
+  });
+
+  async function handleOwnerSave(e: React.FormEvent) {
+    e.preventDefault();
+    setOwnerSaving(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ownerName: ownerName.trim() || null,
+          ownerEmail: ownerEmail.trim() || null,
+          ownerCoThreshold: ownerCoThreshold !== "" ? Number(ownerCoThreshold) : null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+      setOwnerEditing(false);
+      toast.success("Project owner saved");
+    } catch {
+      toast.error("Failed to save project owner");
+    } finally {
+      setOwnerSaving(false);
+    }
+  }
 
   const queryClient_ref = queryClient;
 
@@ -2254,6 +2299,136 @@ export default function ProjectDetail() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* PROJECT OWNER CARD */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <UserCog className="h-5 w-5 text-primary" /> Project Owner
+                  </CardTitle>
+                  {!ownerEditing && !isArchived && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setOwnerName((project as any).ownerName ?? "");
+                        setOwnerEmail((project as any).ownerEmail ?? "");
+                        setOwnerCoThreshold((project as any).ownerCoThreshold != null ? String((project as any).ownerCoThreshold) : "");
+                        setOwnerEditing(true);
+                      }}
+                      className="gap-1.5"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> {(project as any).ownerName ? "Edit" : "Add Owner"}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {ownerEditing ? (
+                  <form onSubmit={handleOwnerSave} className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner Name</label>
+                      <Input
+                        placeholder="e.g. John Smith"
+                        value={ownerName}
+                        onChange={e => setOwnerName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner Email</label>
+                      <Input
+                        type="email"
+                        placeholder="e.g. owner@company.com"
+                        value={ownerEmail}
+                        onChange={e => setOwnerEmail(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">CO Notification Threshold</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="500"
+                          placeholder="e.g. 5000"
+                          className="pl-7"
+                          value={ownerCoThreshold}
+                          onChange={e => setOwnerCoThreshold(e.target.value)}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Notify owner for change orders at or above this amount. Leave blank to notify on all COs.</p>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button type="submit" size="sm" isLoading={ownerSaving} disabled={ownerSaving} className="flex-1">Save Owner</Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setOwnerEditing(false)}>Cancel</Button>
+                    </div>
+                  </form>
+                ) : (project as any).ownerName ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-violet-100 dark:bg-violet-950/30 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold shrink-0">
+                        {(project as any).ownerName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">{(project as any).ownerName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{(project as any).ownerEmail}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 border border-border p-3">
+                      <p className="text-xs text-muted-foreground font-medium mb-0.5">CO Notification Threshold</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {(project as any).ownerCoThreshold != null
+                          ? `${formatCurrency((project as any).ownerCoThreshold)} and above`
+                          : "All change orders"}
+                      </p>
+                    </div>
+                    {ownerNotifications.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <BellRing className="h-3.5 w-3.5" /> Notification History
+                        </p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {ownerNotifications.map(n => (
+                            <div key={n.id} className="rounded-lg border border-border bg-muted/20 p-2.5">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <p className="text-xs font-medium text-foreground truncate flex-1">{n.changeOrder?.description ?? "CO #" + n.changeOrderId.slice(0, 8)}</p>
+                                {n.ownerResponse ? (
+                                  <span className={cn(
+                                    "text-xs font-semibold px-2 py-0.5 rounded-full shrink-0",
+                                    n.ownerResponse === "APPROVED" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                                  )}>
+                                    {n.ownerResponse === "APPROVED" ? <ThumbsUp className="inline h-3 w-3 mr-0.5" /> : <ThumbsDown className="inline h-3 w-3 mr-0.5" />}
+                                    {n.ownerResponse}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 shrink-0">
+                                    <Bell className="inline h-3 w-3 mr-0.5" /> Pending
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {n.changeOrder ? formatCurrency(n.changeOrder.amount) : ""} · Sent {format(new Date(n.sentAt), "MMM d, yyyy")}
+                              </p>
+                              {n.ownerResponseAt && (
+                                <p className="text-xs text-muted-foreground">Responded {format(new Date(n.ownerResponseAt), "MMM d, yyyy")}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <BellOff className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">No project owner set</p>
+                    <p className="text-xs text-muted-foreground mt-1">Add the property owner or developer to receive change order notifications.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

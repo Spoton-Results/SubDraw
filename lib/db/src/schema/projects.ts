@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -12,6 +12,10 @@ export const projectsTable = pgTable("projects", {
   description: text("description"),
   estimatedStartDate: text("estimated_start_date"),
   notes: text("notes"),
+  // Project owner (property owner / developer — email-only, no SubTracker account needed)
+  ownerName: text("owner_name"),
+  ownerEmail: text("owner_email"),
+  ownerCoThreshold: doublePrecision("owner_co_threshold"),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
