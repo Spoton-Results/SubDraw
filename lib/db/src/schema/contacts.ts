@@ -5,6 +5,7 @@ export const gcContactsTable = pgTable("gc_contacts", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   gcId: text("gc_id").notNull().references(() => usersTable.id),
   subId: text("sub_id").notNull().references(() => usersTable.id),
+  contactName: text("contact_name"),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -4,6 +4,7 @@ import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, pro
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { sendAddedToProjectEmail } from "../lib/email.js";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -34,6 +35,114 @@ async function buildContact(contact: any, gcId: string) {
 
   return { ...contact, sub: { ...sub, subProfile: subProfile ?? null }, subProfile: subProfile ?? null, sharedProjects };
 }
+
+async function findOrCreateSub(email: string, companyName: string) {
+  let [found] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim())).limit(1);
+  if (!found) {
+    const passwordHash = crypto.randomBytes(32).toString("hex");
+    [found] = await db.insert(usersTable).values({
+      email: email.toLowerCase().trim(),
+      passwordHash,
+      role: "SUB",
+      companyName: companyName.trim(),
+      mustChangePassword: false,
+    }).returning();
+  }
+  return found;
+}
+
+async function upsertSubProfile(userId: string, opts: { trade?: string; phone?: string; licenseNumber?: string }) {
+  const [existing] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, userId)).limit(1);
+  if (existing) {
+    const updates: any = { updatedAt: new Date() };
+    if (opts.trade && !existing.trade) updates.trade = opts.trade;
+    if (opts.phone && !existing.phone) updates.phone = opts.phone;
+    if (opts.licenseNumber && !existing.licenseNumber) updates.licenseNumber = opts.licenseNumber;
+    if (Object.keys(updates).length > 1) {
+      await db.update(subProfilesTable).set(updates).where(eq(subProfilesTable.userId, userId));
+    }
+  } else if (opts.trade) {
+    await db.insert(subProfilesTable).values({
+      userId,
+      trade: opts.trade,
+      phone: opts.phone ?? null,
+      licenseNumber: opts.licenseNumber ?? null,
+    }).onConflictDoNothing();
+  }
+}
+
+// POST / — add a single contact to the GC's contact book
+router.post("/", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { companyName, email, contactName, phone, tradeSpecialty, licenseNumber } = req.body;
+
+  if (!email?.trim() || !companyName?.trim()) {
+    res.status(400).json({ error: "Company name and email are required" });
+    return;
+  }
+
+  const sub = await findOrCreateSub(email, companyName);
+  if (sub.role !== "SUB") {
+    res.status(400).json({ error: "That email belongs to a non-subcontractor account" });
+    return;
+  }
+
+  await upsertSubProfile(sub.id, { trade: tradeSpecialty, phone, licenseNumber });
+
+  const [contact] = await db.insert(gcContactsTable)
+    .values({ gcId: user.id, subId: sub.id, contactName: contactName?.trim() || null })
+    .onConflictDoNothing()
+    .returning();
+
+  if (!contact) {
+    res.status(409).json({ error: "This contact is already in your contact book" });
+    return;
+  }
+
+  res.status(201).json(await buildContact(contact, user.id));
+});
+
+// POST /import — bulk import contacts from CSV rows
+router.post("/import", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { contacts } = req.body as { contacts: Array<{ companyName: string; contactName?: string; email: string; phone?: string; tradeSpecialty?: string; licenseNumber?: string }> };
+
+  if (!Array.isArray(contacts) || contacts.length === 0) {
+    res.status(400).json({ error: "No contacts provided" });
+    return;
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const row of contacts) {
+    if (!row.email?.trim() || !row.companyName?.trim()) {
+      errors.push(`Row missing email or company name — skipped`);
+      skipped++;
+      continue;
+    }
+
+    try {
+      const sub = await findOrCreateSub(row.email, row.companyName);
+      if (sub.role !== "SUB") { skipped++; continue; }
+
+      await upsertSubProfile(sub.id, { trade: row.tradeSpecialty, phone: row.phone, licenseNumber: row.licenseNumber });
+
+      const [contact] = await db.insert(gcContactsTable)
+        .values({ gcId: user.id, subId: sub.id, contactName: row.contactName?.trim() || null })
+        .onConflictDoNothing()
+        .returning();
+
+      if (contact) { imported++; } else { skipped++; }
+    } catch (err: any) {
+      errors.push(`${row.email}: ${err.message}`);
+      skipped++;
+    }
+  }
+
+  res.json({ imported, skipped, errors });
+});
 
 router.get("/", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
