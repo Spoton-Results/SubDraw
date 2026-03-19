@@ -645,6 +645,48 @@ export async function sendPasswordResetEmail(opts: {
   await send(opts.toEmail, "Reset your SubTracker password", html);
 }
 
+export async function sendContractReadyEmail(opts: {
+  toEmail: string;
+  subCompanyName: string;
+  gcCompanyName: string;
+  projectName: string;
+  fileName: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Your subcontract agreement is ready to review and sign")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has uploaded a subcontract agreement for <strong>${opts.projectName}</strong>. Please download, review, sign it, and upload your signed copy.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Document", value: opts.fileName },
+      { label: "Next Step", value: "Download, sign, and upload your signed copy" },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Subcontract agreement ready for ${opts.projectName} — signature required`, html);
+}
+
+export async function sendContractSignedEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  fileName: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Subcontractor uploaded signed agreement")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has uploaded their signed subcontract agreement for <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Document", value: opts.fileName },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Signed subcontract received from ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
 export async function sendCommentNotificationEmail(opts: {
   toEmail: string;
   projectName: string;

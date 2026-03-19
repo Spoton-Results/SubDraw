@@ -15,9 +15,14 @@ import {
   sendPaymentConfirmedEmail,
   sendPaymentDisputedEmail,
   sendCommentNotificationEmail,
+  sendContractReadyEmail,
+  sendContractSignedEmail,
 } from "../lib/email.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
+import { ObjectStorageService } from "../lib/objectStorage.js";
+
+const objectStorageService = new ObjectStorageService();
 
 const router = Router();
 
@@ -220,6 +225,176 @@ router.patch("/:subcontractId/sign", requireAuth, requireSub, async (req, res) =
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
   await logActivity(subcontractId, "SUBCONTRACT_SIGNED", `Subcontract signed electronically by ${user.companyName}`, user.companyName, "SUB");
+  res.json(updated);
+});
+
+// ─── Subcontract Agreement Document Endpoints ────────────────────────────────
+
+// POST /:subcontractId/contract-document — GC uploads their agreement
+router.post("/:subcontractId/contract-document", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const { objectPath, fileName } = req.body;
+  if (!objectPath || !fileName) { res.status(400).json({ error: "objectPath and fileName are required" }); return; }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  // Delete old doc from storage if replacing
+  if (sc.contractDocPath) {
+    try { const f = await objectStorageService.getObjectEntityFile(sc.contractDocPath); await f.delete(); } catch { }
+  }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ contractDocPath: objectPath, contractDocName: fileName, contractDocUploadedAt: new Date(), signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, contractWaived: false, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_UPLOADED", `Subcontract agreement uploaded: ${fileName}`, getActorName(user), "GC");
+
+  // Notify sub
+  const [subUser] = await db.select().from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+  if (subUser?.email) {
+    sendContractReadyEmail({
+      toEmail: subUser.email,
+      subCompanyName: subUser.companyName ?? "Subcontractor",
+      gcCompanyName: user.companyName ?? "General Contractor",
+      projectName: project.name,
+      fileName,
+      appUrl: `${getAppUrl(req)}/subcontracts/${subcontractId}`,
+    }).catch(err => console.error("[email] sendContractReadyEmail failed:", err));
+  }
+
+  res.json(updated);
+});
+
+// DELETE /:subcontractId/contract-document — GC removes their agreement
+router.delete("/:subcontractId/contract-document", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  if (sc.contractDocPath) {
+    try { const f = await objectStorageService.getObjectEntityFile(sc.contractDocPath); await f.delete(); } catch { }
+  }
+  if (sc.signedContractPath) {
+    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
+  }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ contractDocPath: null, contractDocName: null, contractDocUploadedAt: null, signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, contractWaived: false, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_REMOVED", "Subcontract agreement removed by GC", getActorName(user), "GC");
+  res.json(updated);
+});
+
+// POST /:subcontractId/signed-contract — Sub uploads their signed copy
+router.post("/:subcontractId/signed-contract", requireAuth, requireSub, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const { objectPath, fileName } = req.body;
+  if (!objectPath || !fileName) { res.status(400).json({ error: "objectPath and fileName are required" }); return; }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (sc.subId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!sc.contractDocPath) { res.status(400).json({ error: "GC has not uploaded a contract document yet" }); return; }
+
+  // Delete old signed doc from storage if replacing
+  if (sc.signedContractPath) {
+    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
+  }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ signedContractPath: objectPath, signedContractName: fileName, signedContractUploadedAt: new Date(), updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_SIGNED", `Signed contract uploaded by ${user.companyName}: ${fileName}`, user.companyName, "SUB");
+
+  // Notify GC
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  const [gcUser] = await db.select().from(usersTable).where(eq(usersTable.id, project?.gcId ?? "")).limit(1);
+  if (gcUser?.email) {
+    sendContractSignedEmail({
+      toEmail: gcUser.email,
+      gcCompanyName: gcUser.companyName ?? "General Contractor",
+      subCompanyName: user.companyName ?? "Subcontractor",
+      projectName: project?.name ?? "Project",
+      fileName,
+      appUrl: `${getAppUrl(req)}/subcontracts/${subcontractId}`,
+    }).catch(err => console.error("[email] sendContractSignedEmail failed:", err));
+  }
+
+  res.json(updated);
+});
+
+// DELETE /:subcontractId/signed-contract — GC removes signed copy
+router.delete("/:subcontractId/signed-contract", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  if (sc.signedContractPath) {
+    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
+  }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_REMOVED", "Signed contract removed by GC", getActorName(user), "GC");
+  res.json(updated);
+});
+
+// POST /:subcontractId/waive-contract — GC waives signature requirement
+router.post("/:subcontractId/waive-contract", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ contractWaived: true, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_WAIVED", "Contract signature requirement waived by GC", getActorName(user), "GC");
+  res.json(updated);
+});
+
+// DELETE /:subcontractId/waive-contract — GC un-waives (reinstates requirement)
+router.delete("/:subcontractId/waive-contract", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
+  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [updated] = await db.update(subcontractsTable)
+    .set({ contractWaived: false, updatedAt: new Date() })
+    .where(eq(subcontractsTable.id, subcontractId))
+    .returning();
+
+  await logActivity(subcontractId, "CONTRACT_UNWAIVED", "Contract signature requirement reinstated by GC", getActorName(user), "GC");
   res.json(updated);
 });
 

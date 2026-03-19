@@ -108,8 +108,11 @@ export default function SubcontractDetail() {
   const [signedByName, setSignedByName] = React.useState("");
   const [waiverSigning, setWaiverSigning] = React.useState(false);
 
-  const [signContractOpen, setSignContractOpen] = React.useState(false);
-  const [signContractLoading, setSignContractLoading] = React.useState(false);
+  const [contractDocUploading, setContractDocUploading] = React.useState(false);
+  const [signedDocUploading, setSignedDocUploading] = React.useState(false);
+  const [waiverLoading, setWaiverLoading] = React.useState(false);
+  const [deleteContractConfirmOpen, setDeleteContractConfirmOpen] = React.useState(false);
+  const [deleteSignedConfirmOpen, setDeleteSignedConfirmOpen] = React.useState(false);
 
   const [paymentTermsSaving, setPaymentTermsSaving] = React.useState(false);
 
@@ -213,6 +216,14 @@ export default function SubcontractDetail() {
 
   const { uploadFile: uploadCert, progress: certProgress, isUploading: certUploading } = useUpload({
     onError: (err) => toast.error(err.message || "Certificate upload failed"),
+  });
+
+  const { uploadFile: uploadContractDoc, progress: contractDocProgress, isUploading: contractDocIsUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Contract upload failed"),
+  });
+
+  const { uploadFile: uploadSignedDoc, progress: signedDocProgress, isUploading: signedDocIsUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Signed contract upload failed"),
   });
 
   const invalidate = () => {
@@ -513,25 +524,109 @@ export default function SubcontractDetail() {
     }
   };
 
-  const handleSignContract = async () => {
-    setSignContractLoading(true);
+  const handleUploadContractDoc = async (file: File) => {
+    setContractDocUploading(true);
     try {
-      const resp = await fetch(`${BASE}/api/subcontracts/${subcontractId}/sign`, {
-        method: "PATCH",
+      const result = await uploadContractDoc(file);
+      if (!result?.objectPath) throw new Error("Upload failed");
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/contract-document`, {
+        method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath: result.objectPath, fileName: file.name }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? "Failed to save"); }
+      toast.success("Subcontract agreement uploaded — sub has been notified");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to upload contract");
+    } finally {
+      setContractDocUploading(false);
+    }
+  };
+
+  const handleDeleteContractDoc = async () => {
+    setDeleteContractConfirmOpen(false);
+    try {
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/contract-document`, {
+        method: "DELETE",
         credentials: "include",
       });
-      if (!resp.ok) {
-        const d = await resp.json().catch(() => ({}));
-        throw new Error(d.error ?? "Failed to sign");
-      }
-      toast.success("Subcontract signed — you can now submit invoices");
+      if (!res.ok) throw new Error("Failed to delete");
+      toast.success("Contract document removed");
       invalidate();
-      setSignContractOpen(false);
     } catch (err: any) {
-      toast.error(err?.message ?? "Failed to sign subcontract");
+      toast.error(err?.message ?? "Failed to delete contract");
+    }
+  };
+
+  const handleUploadSignedDoc = async (file: File) => {
+    setSignedDocUploading(true);
+    try {
+      const result = await uploadSignedDoc(file);
+      if (!result?.objectPath) throw new Error("Upload failed");
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/signed-contract`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectPath: result.objectPath, fileName: file.name }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? "Failed to save"); }
+      toast.success("Signed contract uploaded — GC has been notified");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to upload signed contract");
     } finally {
-      setSignContractLoading(false);
+      setSignedDocUploading(false);
+    }
+  };
+
+  const handleDeleteSignedDoc = async () => {
+    setDeleteSignedConfirmOpen(false);
+    try {
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/signed-contract`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      toast.success("Signed contract removed");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to delete signed contract");
+    }
+  };
+
+  const handleWaiveContract = async () => {
+    setWaiverLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/waive-contract`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to waive");
+      toast.success("Contract signature requirement waived");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to waive");
+    } finally {
+      setWaiverLoading(false);
+    }
+  };
+
+  const handleUnwaiveContract = async () => {
+    setWaiverLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/subcontracts/${subcontractId}/waive-contract`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success("Contract requirement reinstated");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to reinstate");
+    } finally {
+      setWaiverLoading(false);
     }
   };
 
@@ -664,6 +759,11 @@ export default function SubcontractDetail() {
     if (type === "PLAN_FILE_VIEWED") return <FileDown className="h-4 w-4 text-blue-500" />;
     if (type === "SUBCONTRACT_CREATED") return <FileSignature className="h-4 w-4 text-primary" />;
     if (type === "SUBCONTRACT_SIGNED") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (type === "CONTRACT_UPLOADED") return <FileSignature className="h-4 w-4 text-primary" />;
+    if (type === "CONTRACT_SIGNED") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+    if (type === "CONTRACT_REMOVED") return <Trash2 className="h-4 w-4 text-muted-foreground" />;
+    if (type === "CONTRACT_WAIVED") return <Ban className="h-4 w-4 text-muted-foreground" />;
+    if (type === "CONTRACT_UNWAIVED") return <Unlock className="h-4 w-4 text-primary" />;
     if (type === "CO_CREATED") return <PlusCircle className="h-4 w-4 text-blue-500" />;
     if (type === "CO_APPROVED") return <BadgeCheck className="h-4 w-4 text-green-600" />;
     if (type === "CO_REJECTED") return <Ban className="h-4 w-4 text-red-500" />;
@@ -807,33 +907,14 @@ export default function SubcontractDetail() {
         </div>
       )}
 
-      {/* UNSIGNED CONTRACT BANNER — subs must sign before invoicing */}
-      {!isGC && !(sub as any).signedBySubAt && (
-        <div className="mb-6 flex items-center justify-between gap-4 flex-wrap bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded-2xl px-5 py-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-yellow-700 dark:text-yellow-300 text-sm">Please sign your subcontract to begin invoicing</p>
-              <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-0.5">Your electronic signature confirms you agree to the contract terms.</p>
-            </div>
+      {/* PENDING SIGNATURE BANNER — sub has not yet uploaded signed contract */}
+      {!isGC && (sub as any).contractDocPath && !(sub as any).signedContractPath && !(sub as any).contractWaived && (
+        <div className="mb-6 flex items-start gap-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded-2xl px-5 py-4">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-yellow-700 dark:text-yellow-300 text-sm">Subcontract agreement ready — signature required</p>
+            <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-0.5">Download the agreement below, sign it, and upload your signed copy to the Subcontract Agreement card.</p>
           </div>
-          <Button
-            size="sm"
-            className="bg-yellow-500 hover:bg-yellow-600 text-white shrink-0 gap-1.5"
-            onClick={() => setSignContractOpen(true)}
-          >
-            <FileSignature className="h-4 w-4" /> Sign Now
-          </Button>
-        </div>
-      )}
-
-      {/* SIGNED CONFIRMATION BADGE — shown after signing */}
-      {!isGC && (sub as any).signedBySubAt && (
-        <div className="mb-6 flex items-center gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl px-5 py-3">
-          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-          <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-            Subcontract signed on {format(new Date((sub as any).signedBySubAt), "MMMM d, yyyy")}
-          </p>
         </div>
       )}
 
@@ -1279,63 +1360,197 @@ export default function SubcontractDetail() {
         </CardContent>
       </Card>
 
-      {/* SIGN CONTRACT DIALOG */}
-      <Dialog open={signContractOpen} onOpenChange={setSignContractOpen}>
-        <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-          onClick={() => setSignContractOpen(false)}
-        >
-          <div
-            className="bg-card rounded-2xl border shadow-xl w-full max-w-md"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-lg font-bold font-display flex items-center gap-2">
-                <FileSignature className="h-5 w-5 text-primary" /> Sign Subcontract
-              </h3>
-              <button onClick={() => setSignContractOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="rounded-xl bg-muted/50 border border-border p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Project</span>
-                  <span className="font-semibold">{(sub as any).project?.name}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Contract Amount</span>
-                  <span className="font-bold font-mono">{formatCurrency(sb.base)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Retention</span>
-                  <span className="font-semibold">{(sub as any).retentionPercentage ?? 0}%</span>
+      {/* SUBCONTRACT AGREEMENT CARD */}
+      {(() => {
+        const contractDocPath: string | null = (sub as any).contractDocPath ?? null;
+        const contractDocName: string | null = (sub as any).contractDocName ?? null;
+        const contractDocUploadedAt: string | null = (sub as any).contractDocUploadedAt ?? null;
+        const signedContractPath: string | null = (sub as any).signedContractPath ?? null;
+        const signedContractName: string | null = (sub as any).signedContractName ?? null;
+        const signedContractUploadedAt: string | null = (sub as any).signedContractUploadedAt ?? null;
+        const contractWaived: boolean = !!(sub as any).contractWaived;
+
+        const contractStatus: "NO_DOCUMENT" | "PENDING_SUB_SIGNATURE" | "SIGNED_AND_UPLOADED" | "WAIVED" =
+          contractWaived ? "WAIVED" :
+          signedContractPath ? "SIGNED_AND_UPLOADED" :
+          contractDocPath ? "PENDING_SUB_SIGNATURE" :
+          "NO_DOCUMENT";
+
+        const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+        return (
+          <Card className={cn(
+            "mb-6",
+            contractStatus === "SIGNED_AND_UPLOADED" && "border-green-400 dark:border-green-700",
+            contractStatus === "PENDING_SUB_SIGNATURE" && "border-yellow-400 dark:border-yellow-700",
+          )}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileSignature className={cn("h-5 w-5",
+                    contractStatus === "SIGNED_AND_UPLOADED" ? "text-green-600" :
+                    contractStatus === "PENDING_SUB_SIGNATURE" ? "text-yellow-600" :
+                    contractStatus === "WAIVED" ? "text-muted-foreground" :
+                    "text-muted-foreground"
+                  )} />
+                  Subcontract Agreement
+                  <Badge variant="outline" className={cn("ml-1 text-xs font-semibold",
+                    contractStatus === "SIGNED_AND_UPLOADED" && "border-green-400 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30",
+                    contractStatus === "PENDING_SUB_SIGNATURE" && "border-yellow-400 text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30",
+                    contractStatus === "WAIVED" && "border-border text-muted-foreground",
+                    contractStatus === "NO_DOCUMENT" && "border-border text-muted-foreground",
+                  )}>
+                    {contractStatus === "SIGNED_AND_UPLOADED" && "SIGNED & UPLOADED"}
+                    {contractStatus === "PENDING_SUB_SIGNATURE" && "PENDING SUB SIGNATURE"}
+                    {contractStatus === "WAIVED" && "WAIVED"}
+                    {contractStatus === "NO_DOCUMENT" && "NO DOCUMENT"}
+                  </Badge>
+                </CardTitle>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {isGC && contractWaived && (
+                    <Button size="sm" variant="outline" onClick={handleUnwaiveContract} isLoading={waiverLoading} className="gap-1.5 min-h-[36px] text-xs">
+                      <Unlock className="h-3.5 w-3.5" /> Reinstate Requirement
+                    </Button>
+                  )}
+                  {isGC && !contractWaived && (
+                    <Button size="sm" variant="outline" onClick={handleWaiveContract} isLoading={waiverLoading} className="gap-1.5 min-h-[36px] text-xs text-muted-foreground hover:text-foreground">
+                      <Ban className="h-3.5 w-3.5" /> Waive Requirement
+                    </Button>
+                  )}
+                  {isGC && !contractWaived && (
+                    <label className={cn(
+                      "inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold border rounded-lg px-3 py-2 min-h-[36px] transition-colors",
+                      (contractDocIsUploading || contractDocUploading) ? "opacity-60 pointer-events-none" : "hover:bg-muted",
+                    )}>
+                      {(contractDocIsUploading || contractDocUploading)
+                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading… {contractDocProgress}%</>
+                        : <><Upload className="h-3.5 w-3.5" /> {contractDocPath ? "Replace Agreement" : "Upload Agreement"}</>
+                      }
+                      <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={e => { if (e.target.files?.[0]) { handleUploadContractDoc(e.target.files[0]); e.target.value = ""; } }} />
+                    </label>
+                  )}
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                By clicking <strong>Sign Subcontract</strong>, you confirm that you have reviewed and agree to the contract terms. This is your electronic signature.
-              </p>
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setSignContractOpen(false)}
-                  disabled={signContractLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                  isLoading={signContractLoading}
-                  onClick={handleSignContract}
-                >
-                  <FileSignature className="h-4 w-4" /> Sign Subcontract
-                </Button>
-              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {contractStatus === "NO_DOCUMENT" && (
+                <p className="text-sm text-muted-foreground">
+                  {isGC ? "No subcontract agreement uploaded yet. Click Upload Agreement to attach your contract template for the sub to sign." : "No subcontract agreement has been uploaded by the GC yet."}
+                </p>
+              )}
+              {contractStatus === "WAIVED" && (
+                <p className="text-sm text-muted-foreground">The contract signature requirement has been waived by the GC for this subcontract.</p>
+              )}
+
+              {/* GC's original document */}
+              {contractDocPath && (
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Agreement Document (GC)</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <a
+                      href={`${BASE_URL}/api/storage${contractDocPath}`}
+                      download={contractDocName ?? "subcontract-agreement"}
+                      className="flex items-center gap-2 text-sm font-medium text-primary hover:underline min-w-0"
+                    >
+                      <FileDown className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{contractDocName ?? "Subcontract Agreement"}</span>
+                    </a>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {contractDocUploadedAt && (
+                        <span className="text-xs text-muted-foreground">{format(new Date(contractDocUploadedAt), "MMM d, yyyy")}</span>
+                      )}
+                      {isGC && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteContractConfirmOpen(true)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub's signed document — upload area or display */}
+              {contractDocPath && !contractWaived && (
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Signed Copy (Sub)</p>
+                  {signedContractPath ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <a
+                        href={`${BASE_URL}/api/storage${signedContractPath}`}
+                        download={signedContractName ?? "signed-contract"}
+                        className="flex items-center gap-2 text-sm font-medium text-primary hover:underline min-w-0"
+                      >
+                        <FileDown className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{signedContractName ?? "Signed Contract"}</span>
+                      </a>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {signedContractUploadedAt && (
+                          <span className="text-xs text-muted-foreground">{format(new Date(signedContractUploadedAt), "MMM d, yyyy")}</span>
+                        )}
+                        {isGC && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteSignedConfirmOpen(true)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {!isGC ? (
+                        <label className={cn(
+                          "flex items-center gap-3 cursor-pointer border border-dashed rounded-xl px-4 py-3 transition-colors",
+                          (signedDocIsUploading || signedDocUploading) ? "opacity-60 pointer-events-none border-border" : "border-border hover:border-primary/40 hover:bg-muted/30",
+                        )}>
+                          {(signedDocIsUploading || signedDocUploading)
+                            ? <Loader2 className="h-4 w-4 text-muted-foreground animate-spin shrink-0" />
+                            : <Upload className="h-4 w-4 text-muted-foreground shrink-0" />}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">
+                              {(signedDocIsUploading || signedDocUploading) ? `Uploading… ${signedDocProgress}%` : "Upload signed contract"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">PDF, DOC, or DOCX</p>
+                          </div>
+                          <input type="file" className="hidden" accept=".pdf,.doc,.docx" onChange={e => { if (e.target.files?.[0]) { handleUploadSignedDoc(e.target.files[0]); e.target.value = ""; } }} />
+                        </label>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Awaiting signed copy from {(sub as any).sub?.companyName ?? "subcontractor"}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* DELETE CONTRACT DOCUMENT CONFIRM */}
+      {deleteContractConfirmOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setDeleteContractConfirmOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold font-display text-destructive flex items-center gap-2"><Trash2 className="h-4 w-4" /> Remove Contract Agreement</h3>
+            <p className="text-sm text-muted-foreground">This will also remove the signed copy if one was uploaded. This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteContractConfirmOpen(false)}>Cancel</Button>
+              <Button variant="destructive" className="flex-1" onClick={handleDeleteContractDoc}>Remove</Button>
             </div>
           </div>
         </div>
-      </Dialog>
+      )}
+
+      {/* DELETE SIGNED CONTRACT CONFIRM */}
+      {deleteSignedConfirmOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setDeleteSignedConfirmOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold font-display text-destructive flex items-center gap-2"><Trash2 className="h-4 w-4" /> Remove Signed Contract</h3>
+            <p className="text-sm text-muted-foreground">This will remove the signed copy. The original agreement will remain. This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteSignedConfirmOpen(false)}>Cancel</Button>
+              <Button variant="destructive" className="flex-1" onClick={handleDeleteSignedDoc}>Remove</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* INSURANCE EDIT DIALOG */}
       <Dialog open={insDialogOpen} onOpenChange={setInsDialogOpen}>

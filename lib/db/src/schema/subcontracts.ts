@@ -14,6 +14,13 @@ export const subcontractsTable = pgTable("subcontracts", {
   drawScheduleItemId: text("draw_schedule_item_id"),
   paymentTermsDays: integer("payment_terms_days").default(30).notNull(),
   signedBySubAt: timestamp("signed_by_sub_at"),
+  contractDocPath: text("contract_doc_path"),
+  contractDocName: text("contract_doc_name"),
+  contractDocUploadedAt: timestamp("contract_doc_uploaded_at"),
+  signedContractPath: text("signed_contract_path"),
+  signedContractName: text("signed_contract_name"),
+  signedContractUploadedAt: timestamp("signed_contract_uploaded_at"),
+  contractWaived: boolean("contract_waived").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

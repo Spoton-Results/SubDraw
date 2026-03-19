@@ -397,9 +397,12 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
     }
   }
 
-  // PENDING: Unsigned subcontracts (sub has not signed yet)
+  // PENDING: Uploaded contracts awaiting sub's signed copy
   for (const sc of subcontracts) {
-    if (!(sc as any).signedBySubAt) {
+    const hasDoc = !!(sc as any).contractDocPath;
+    const hasSigned = !!(sc as any).signedContractPath;
+    const isWaived = !!(sc as any).contractWaived;
+    if (hasDoc && !hasSigned && !isWaived) {
       const project = projectMap[sc.projectId];
       if (!project) continue;
       const subName = subUserMap[sc.subId] ?? "Unknown";
@@ -411,7 +414,7 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
         projectName: project.name,
         subcontractId: sc.id,
         subCompanyName: subName,
-        description: `${subName} has not yet signed their subcontract agreement`,
+        description: `${subName} has not yet uploaded their signed subcontract`,
         href: `/subcontracts/${sc.id}`,
       });
     }
