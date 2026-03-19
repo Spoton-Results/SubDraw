@@ -419,7 +419,7 @@ export default function ProjectDetail() {
     e.preventDefault();
     if (!inviteSelectedSub) return;
     const amount = parseFloat(directAmount.replace(/[$,]/g, ""));
-    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid contract amount");
+    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid Direct Award amount");
     setDirectLoading(true);
     try {
       const res = await fetch(`${BASE}/api/projects/${projectId}/subcontracts/direct`, {
@@ -2207,14 +2207,14 @@ export default function ProjectDetail() {
         title={
           directSuccess ? "Subcontractor Added" :
           inviteResult ? "Subcontractor Invited" :
-          inviteStep === "contract" ? `Contract Details — ${inviteSelectedSub?.companyName}` :
+          inviteStep === "contract" ? `Direct Award — ${inviteSelectedSub?.companyName}` :
           "Add Subcontractor"
         }
         description={
           inviteResult ? "Share these credentials with the subcontractor so they can log in." :
-          inviteStep === "contract" ? `${project.name} · In Construction` :
+          inviteStep === "contract" ? `Mid-construction addition to ${project.name}. Enter the negotiated amount you've agreed on with this sub.` :
           project.status === "CONSTRUCTION"
-            ? "Pick a sub and enter the contract amount to add them directly."
+            ? "Pick a sub to add them mid-construction. You'll enter the negotiated Direct Award amount next."
             : undefined
         }
       >
@@ -2225,7 +2225,7 @@ export default function ProjectDetail() {
               <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-green-800 dark:text-green-300">{directSuccess.companyName} added to {project.name}</p>
-                <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">Subcontract created — they've been notified and can start submitting invoices.</p>
+                <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">Direct Award subcontract created — they've been notified and can start submitting invoices.</p>
               </div>
             </div>
             <div className="flex justify-end">
@@ -2278,7 +2278,8 @@ export default function ProjectDetail() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-semibold mb-1 block">Contract Amount *</label>
+              <label className="text-sm font-semibold mb-1 block">Direct Award Amount *</label>
+              <p className="text-xs text-muted-foreground mb-2">The negotiated contract amount agreed upon with this subcontractor for mid-construction work. This bypasses the normal bidding process.</p>
               <Input
                 type="text"
                 inputMode="decimal"
@@ -2319,7 +2320,7 @@ export default function ProjectDetail() {
                 ← Back
               </Button>
               <Button type="submit" isLoading={directLoading} className="min-h-[44px] px-6">
-                Create Subcontract
+                Create Direct Award Subcontract
               </Button>
             </div>
           </form>
@@ -2329,7 +2330,7 @@ export default function ProjectDetail() {
           <div className="mt-4">
             {project.status === "CONSTRUCTION" && (
               <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                Project is In Construction — you'll enter a contract amount after selecting the sub.
+                Adding a sub mid-construction? You'll enter a negotiated Direct Award amount after selecting them.
               </div>
             )}
             <div className="flex rounded-xl border border-border overflow-hidden mb-4">
@@ -2421,7 +2422,7 @@ export default function ProjectDetail() {
                 </div>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
                   <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
-                  <Button type="submit" className="min-h-[44px]">Next — Enter Contract Amount →</Button>
+                  <Button type="submit" className="min-h-[44px]">Next — Enter Award Amount →</Button>
                 </div>
               </form>
             ) : (
