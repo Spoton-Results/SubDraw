@@ -13,6 +13,7 @@ import profileRouter from "./profile.js";
 import stripeRouter from "./stripe.js";
 import teamRouter from "./team.js";
 import complianceRouter from "./compliance.js";
+import bidComparisonRouter from "./bid-comparisons.js";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ router.use("/projects/:projectId/bids", bidsRouter);
 router.use("/projects/:projectId/plan-files", planFilesRouter);
 router.use("/projects/:projectId/scope-documents", scopeDocumentsRouter);
 router.use("/projects/:projectId/compliance-items", complianceRouter);
+router.use("/projects/:projectId/bid-comparison", bidComparisonRouter);
 router.use("/subcontracts", subcontractsRouter);
 router.use("/storage", storageRouter);
 router.use("/contacts", contactsRouter);

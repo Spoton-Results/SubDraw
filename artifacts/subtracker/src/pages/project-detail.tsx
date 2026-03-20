@@ -33,7 +33,7 @@ import {
   Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
   Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare, ListChecks, SquareCheck,
-  UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff,
+  UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff, Scale,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -2054,10 +2054,19 @@ export default function ProjectDetail() {
           {(isGC || project.status === "BIDDING" || myBid) && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  {isGC ? "Bids" : myBid ? "Your Bid" : "Submit Your Bid"}
-                </CardTitle>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    {isGC ? "Bids" : myBid ? "Your Bid" : "Submit Your Bid"}
+                  </CardTitle>
+                  {isGC && (project.bids?.filter(b => b.status !== "REJECTED").length ?? 0) >= 2 && (
+                    <Link href={`/projects/${projectId}/bid-comparison`}>
+                      <Button variant="outline" size="sm" className="gap-1.5 min-h-[36px]">
+                        <Scale className="h-4 w-4" /> Compare Bids
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {isGC ? (
