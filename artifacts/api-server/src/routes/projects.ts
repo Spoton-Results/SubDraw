@@ -5,7 +5,7 @@ import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
 import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
-import { getEffectiveGcId, isProjectManager, getActorName } from "../lib/auth.js";
+import { getEffectiveGcId, isProjectManager, getActorName, canSeeAllProjects, isBiddingOnlyRole } from "../lib/auth.js";
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
@@ -195,8 +195,12 @@ router.get("/", requireAuth, async (req, res) => {
     const effectiveGcId = getEffectiveGcId(user);
 
     let gcProjectsList;
-    if (isProjectManager(user)) {
-      // PMs only see projects they are explicitly assigned to
+    if (canSeeAllProjects(user)) {
+      // Owner, VP of Operations, Contract Administrator, Accountant — see all GC projects
+      gcProjectsList = await db.select().from(projectsTable)
+        .where(and(eq(projectsTable.gcId, effectiveGcId), isNull(projectsTable.archivedAt)));
+    } else {
+      // Project-assigned roles (PM, PE, Superintendent, Estimator) — only assigned projects
       const assignments = await db
         .select({ projectId: gcProjectAssignmentsTable.projectId })
         .from(gcProjectAssignmentsTable)
@@ -206,12 +210,14 @@ router.get("/", requireAuth, async (req, res) => {
         res.json([]);
         return;
       }
-      gcProjectsList = await db.select().from(projectsTable)
-        .where(and(inArray(projectsTable.id, assignedIds), isNull(projectsTable.archivedAt)));
-    } else {
-      // Account owner sees all their projects
-      gcProjectsList = await db.select().from(projectsTable)
-        .where(and(eq(projectsTable.gcId, effectiveGcId), isNull(projectsTable.archivedAt)));
+      if (isBiddingOnlyRole(user)) {
+        // Estimators only see projects in the BIDDING phase
+        gcProjectsList = await db.select().from(projectsTable)
+          .where(and(inArray(projectsTable.id, assignedIds), isNull(projectsTable.archivedAt), eq(projectsTable.status, "BIDDING")));
+      } else {
+        gcProjectsList = await db.select().from(projectsTable)
+          .where(and(inArray(projectsTable.id, assignedIds), isNull(projectsTable.archivedAt)));
+      }
     }
 
     projects = await Promise.all(gcProjectsList.map(async (p) => {

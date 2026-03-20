@@ -73,7 +73,8 @@ function ProtectedRoute({
 
   if (gcOnly && user.role !== "GC") return <RedirectTo path="/" />;
 
-  const isOwner = user.role === "GC" && (user as any).gcTeamRole !== "project_manager";
+  const gcTeamRole = (user as any).gcTeamRole as string | null | undefined;
+  const isOwner = user.role === "GC" && (gcTeamRole === "owner" || gcTeamRole == null);
   if (ownerOnly && !isOwner) return <RedirectTo path="/" />;
 
   return <Component />;

@@ -5,9 +5,17 @@ import { eq, and, isNull } from "drizzle-orm";
 import crypto from "crypto";
 import { requireAuth, requireGCOwner } from "../middlewares/requireAuth.js";
 import { sendTeamMemberInviteEmail } from "../lib/email.js";
-import { getEffectiveGcId } from "../lib/auth.js";
+import { getEffectiveGcId, GC_TEAM_ROLES, GC_TEAM_ROLE_META } from "../lib/auth.js";
 
 const router = Router();
+
+// GET /team/roles — public list of all available roles and their metadata
+router.get("/roles", (req, res) => {
+  const roles = (Object.entries(GC_TEAM_ROLE_META) as [string, { label: string; description: string }][]).map(
+    ([id, meta]) => ({ id, ...meta })
+  );
+  res.json(roles);
+});
 
 // GET /team — list all team members for this GC account (owner only)
 router.get("/", requireAuth, requireGCOwner, async (req, res) => {
@@ -77,8 +85,8 @@ router.post("/invite", requireAuth, requireGCOwner, async (req, res) => {
     res.status(400).json({ error: "email, fullName, and gcTeamRole are required" });
     return;
   }
-  if (!["owner", "project_manager"].includes(gcTeamRole)) {
-    res.status(400).json({ error: "gcTeamRole must be owner or project_manager" });
+  if (!GC_TEAM_ROLES.includes(gcTeamRole)) {
+    res.status(400).json({ error: `gcTeamRole must be one of: ${GC_TEAM_ROLES.join(", ")}` });
     return;
   }
 
@@ -148,7 +156,7 @@ router.patch("/:memberId", requireAuth, requireGCOwner, async (req, res) => {
   }
 
   const updates: Record<string, any> = { updatedAt: new Date() };
-  if (gcTeamRole && ["owner", "project_manager"].includes(gcTeamRole)) {
+  if (gcTeamRole && GC_TEAM_ROLES.includes(gcTeamRole)) {
     updates.gcTeamRole = gcTeamRole;
   }
   if (fullName) {

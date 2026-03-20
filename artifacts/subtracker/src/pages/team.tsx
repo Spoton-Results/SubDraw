@@ -31,27 +31,37 @@ import {
   Pencil,
   Trash2,
   Loader2,
-  Shield,
   FolderOpen,
   X,
   Crown,
+  Globe,
+  Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { GC_TEAM_ROLE_META, ROLE_ORDER } from "@/hooks/usePermissions";
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
-  project_manager: "Project Manager",
-};
+type GCTeamRole = keyof typeof GC_TEAM_ROLE_META;
+
+const ALL_PROJECT_ROLES: GCTeamRole[] = ["vp_operations", "contract_administrator", "accountant"];
+
+function isAllProjectRole(role: string): boolean {
+  return ALL_PROJECT_ROLES.includes(role as GCTeamRole);
+}
 
 function RoleBadge({ role }: { role: string }) {
+  const meta = GC_TEAM_ROLE_META[role as GCTeamRole];
+  if (!meta) {
+    return <Badge variant="secondary" className="text-xs">{role}</Badge>;
+  }
   return (
-    <Badge variant={role === "owner" ? "default" : "secondary"} className="text-xs gap-1">
-      {role === "owner" && <Crown className="h-3 w-3" />}
-      {role === "project_manager" && <Shield className="h-3 w-3" />}
-      {ROLE_LABELS[role] ?? role}
+    <Badge variant="outline" className={`text-xs border ${meta.color}`}>
+      {role === "owner" && <Crown className="h-3 w-3 mr-1" />}
+      {meta.label}
     </Badge>
   );
 }
+
+const INVITABLE_ROLES = ROLE_ORDER.filter((r) => r !== "owner");
 
 export default function Team() {
   usePageTitle("Team");
@@ -66,11 +76,11 @@ export default function Team() {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteFullName, setInviteFullName] = React.useState("");
-  const [inviteRole, setInviteRole] = React.useState("project_manager");
+  const [inviteRole, setInviteRole] = React.useState<GCTeamRole>("project_manager");
 
   const [editMember, setEditMember] = React.useState<TeamMember | null>(null);
   const [editFullName, setEditFullName] = React.useState("");
-  const [editRole, setEditRole] = React.useState("project_manager");
+  const [editRole, setEditRole] = React.useState<GCTeamRole>("project_manager");
 
   const [deleteMember, setDeleteMember] = React.useState<TeamMember | null>(null);
   const [assignMember, setAssignMember] = React.useState<TeamMember | null>(null);
@@ -142,7 +152,7 @@ export default function Team() {
   const openEdit = (m: TeamMember) => {
     setEditMember(m);
     setEditFullName(m.displayName ?? "");
-    setEditRole(m.gcTeamRole ?? "project_manager");
+    setEditRole((m.gcTeamRole ?? "project_manager") as GCTeamRole);
   };
 
   const handleInviteSubmit = () => {
@@ -178,6 +188,9 @@ export default function Team() {
     );
   }, [currentAssignMember, projects]);
 
+  const selectedRoleMeta = GC_TEAM_ROLE_META[inviteRole];
+  const editRoleMeta = GC_TEAM_ROLE_META[editRole];
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -204,7 +217,7 @@ export default function Team() {
               <Users className="h-12 w-12 text-muted-foreground/40 mb-4" />
               <p className="font-semibold text-lg">No team members yet</p>
               <p className="text-muted-foreground text-sm mt-1 max-w-xs">
-                Invite a Project Manager to give them scoped access to your projects.
+                Invite team members to give them access to your projects.
               </p>
               <Button className="mt-4 gap-2" onClick={() => setInviteOpen(true)}>
                 <UserPlus className="h-4 w-4" />
@@ -214,95 +227,106 @@ export default function Team() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {members.map((member) => (
-              <Card key={member.id} className="overflow-hidden">
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-base shrink-0 mt-0.5">
-                      {(member.displayName || member.companyName).charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold">
-                          {member.displayName || member.companyName}
-                        </span>
-                        <RoleBadge role={member.gcTeamRole} />
-                        {member.isCurrentUser && (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">
-                            You
-                          </Badge>
+            {members.map((member) => {
+              const memberRole = member.gcTeamRole as GCTeamRole;
+              const allProjects = isAllProjectRole(memberRole);
+              return (
+                <Card key={member.id} className="overflow-hidden">
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-base shrink-0 mt-0.5">
+                        {(member.displayName || member.companyName).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">
+                            {member.displayName || member.companyName}
+                          </span>
+                          <RoleBadge role={member.gcTeamRole} />
+                          {member.isCurrentUser && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              You
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-0.5">{member.email}</p>
+                        {allProjects ? (
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-xs text-muted-foreground">Access to all projects</span>
+                          </div>
+                        ) : member.assignedProjects.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 mt-2.5">
+                            {member.assignedProjects.map((p) => (
+                              <span
+                                key={p.id}
+                                className="inline-flex items-center gap-1 bg-secondary text-xs rounded-lg px-2 py-1 font-medium"
+                              >
+                                <FolderOpen className="h-3 w-3 text-muted-foreground shrink-0" />
+                                {p.name}
+                                {!member.isCurrentUser && (
+                                  <button
+                                    className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                                    onClick={() =>
+                                      unassignMutation.mutate({
+                                        projectId: p.id,
+                                        memberId: member.id,
+                                      })
+                                    }
+                                    title="Remove from project"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          !member.isCurrentUser && (
+                            <p className="text-xs text-muted-foreground/60 mt-1.5 italic">
+                              No projects assigned
+                            </p>
+                          )
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">{member.email}</p>
-                      {member.assignedProjects.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {member.assignedProjects.map((p) => (
-                            <span
-                              key={p.id}
-                              className="inline-flex items-center gap-1 bg-secondary text-xs rounded-lg px-2 py-1 font-medium"
+                      {!member.isCurrentUser && (
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                          {!allProjects && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-xs h-8"
+                              onClick={() => setAssignMember(member)}
                             >
-                              <FolderOpen className="h-3 w-3 text-muted-foreground shrink-0" />
-                              {p.name}
-                              {!member.isCurrentUser && (
-                                <button
-                                  className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors"
-                                  onClick={() =>
-                                    unassignMutation.mutate({
-                                      projectId: p.id,
-                                      memberId: member.id,
-                                    })
-                                  }
-                                  title="Remove from project"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              )}
-                            </span>
-                          ))}
+                              <FolderOpen className="h-3.5 w-3.5" />
+                              Projects
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEdit(member)}
+                            title="Edit member"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteMember(member)}
+                            title="Remove member"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                      ) : (
-                        !member.isCurrentUser && (
-                          <p className="text-xs text-muted-foreground/60 mt-1.5 italic">
-                            No projects assigned
-                          </p>
-                        )
                       )}
                     </div>
-                    {!member.isCurrentUser && (
-                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 text-xs h-8"
-                          onClick={() => setAssignMember(member)}
-                        >
-                          <FolderOpen className="h-3.5 w-3.5" />
-                          Projects
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEdit(member)}
-                          title="Edit member"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteMember(member)}
-                          title="Remove member"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
@@ -312,7 +336,7 @@ export default function Team() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         title="Invite Team Member"
-        description="They'll receive an email with a temporary password to log in."
+        description="They'll receive an email with a magic link to log in."
       >
         <div className="mt-4 space-y-4">
           <div className="space-y-1.5">
@@ -334,17 +358,24 @@ export default function Team() {
           </div>
           <div className="space-y-1.5">
             <Label>Role</Label>
-            <Select value={inviteRole} onValueChange={setInviteRole}>
+            <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as GCTeamRole)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="project_manager">Project Manager</SelectItem>
+                {INVITABLE_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {GC_TEAM_ROLE_META[r].label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Project Managers can access assigned projects and their subcontracts.
-            </p>
+            {selectedRoleMeta && (
+              <div className="flex items-start gap-2 rounded-xl bg-secondary/60 p-3 mt-1">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">{selectedRoleMeta.description}</p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="outline" onClick={() => setInviteOpen(false)}>
@@ -375,14 +406,24 @@ export default function Team() {
           </div>
           <div className="space-y-1.5">
             <Label>Role</Label>
-            <Select value={editRole} onValueChange={setEditRole}>
+            <Select value={editRole} onValueChange={(v) => setEditRole(v as GCTeamRole)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="project_manager">Project Manager</SelectItem>
+                {INVITABLE_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {GC_TEAM_ROLE_META[r].label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {editRoleMeta && (
+              <div className="flex items-start gap-2 rounded-xl bg-secondary/60 p-3 mt-1">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">{editRoleMeta.description}</p>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="outline" onClick={() => setEditMember(null)}>

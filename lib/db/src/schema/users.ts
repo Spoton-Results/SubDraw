@@ -10,7 +10,7 @@ export const usersTable = pgTable("users", {
   companyName: text("company_name").notNull(),
   displayName: text("display_name"), // For GC team members: their full personal name (e.g. "Mike Johnson")
   gcParentId: text("gc_parent_id"), // For GC team members: the owning GC account's userId
-  gcTeamRole: text("gc_team_role"), // "owner" | "project_manager" — null means legacy GC (treated as owner)
+  gcTeamRole: text("gc_team_role"), // "owner"|"vp_operations"|"project_manager"|"project_engineer"|"superintendent"|"estimator"|"contract_administrator"|"accountant" — null means legacy GC (treated as owner)
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   passwordResetToken: text("password_reset_token"),
   passwordResetExpires: timestamp("password_reset_expires"),

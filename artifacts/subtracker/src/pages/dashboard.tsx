@@ -195,7 +195,8 @@ export default function Dashboard() {
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
   const isGC = user?.role === "GC";
-  const isOwner = isGC && (user as any)?.gcTeamRole !== "project_manager";
+  const gcTeamRole = (user as any)?.gcTeamRole as string | null | undefined;
+  const isOwner = isGC && (gcTeamRole === "owner" || gcTeamRole == null);
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
 
   const BASE_DASH = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";

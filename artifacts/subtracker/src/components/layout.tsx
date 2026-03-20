@@ -14,21 +14,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { TrialExpiredGate } from "@/components/trial-expired-gate";
+import { usePermissions, GC_TEAM_ROLE_META } from "@/hooks/usePermissions";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const logout = useLogout();
+  const perms = usePermissions();
 
-  const isOwner = user?.role === "GC" && (user as any).gcTeamRole !== "project_manager";
-  const isPM = user?.role === "GC" && (user as any).gcTeamRole === "project_manager";
-  const displayName = isPM ? ((user as any).displayName || user?.companyName) : user?.companyName;
+  const isTeamMember = perms.isGC && !perms.isOwner;
+  const roleMeta = perms.role ? GC_TEAM_ROLE_META[perms.role] : null;
+  const displayName = isTeamMember ? ((user as any)?.displayName || user?.companyName) : user?.companyName;
 
   const { data: subStatus } = useQuery({
     queryKey: ["subscription-status"],
     queryFn: getSubscriptionStatus,
-    enabled: isOwner,
+    enabled: perms.isOwner,
     staleTime: 60_000,
   });
 
@@ -54,11 +56,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Show trial-expired gate for GCs whose trial has ended and have no paid subscription.
-  // Allow access to /billing so they can manage/reactivate a subscription.
-  // Never show the gate to demo accounts.
   const showTrialGate =
-    isOwner &&
+    perms.isOwner &&
     !(user as any).isDemo &&
     subStatus?.trialExpired === true &&
     !subStatus?.subscribed &&
@@ -89,6 +88,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </Link>
   );
 
+  const roleLabel = roleMeta?.label ?? (user.role === "GC" ? "GC" : "SUB");
+
   return (
     <div className="min-h-screen bg-secondary/30 flex">
       {/* Sidebar — desktop only */}
@@ -104,11 +105,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-3 px-2">Menu</div>
           <nav className="space-y-1">
             {navItem("/", <LayoutDashboard className="h-5 w-5" />, "Projects")}
-            {isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
+            {perms.isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
-            {isOwner && navItem("/team", <Users className="h-5 w-5" />, "Team")}
-            {isOwner && navItem("/billing", <CreditCard className="h-5 w-5" />, "Billing")}
+            {perms.canManageTeam && navItem("/team", <Users className="h-5 w-5" />, "Team")}
+            {perms.canAccessBilling && navItem("/billing", <CreditCard className="h-5 w-5" />, "Billing")}
           </nav>
         </div>
 
@@ -121,8 +122,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <span className="font-semibold text-sm block truncate">{displayName}</span>
               <span className="text-xs text-muted-foreground block truncate">{user.email}</span>
             </div>
-            <Badge variant={user.role === "GC" ? "default" : "secondary"} className="text-[10px] shrink-0">
-              {isPM ? "PM" : user.role}
+            <Badge
+              variant="secondary"
+              className={`text-[10px] shrink-0 border ${roleMeta?.color ?? ""}`}
+            >
+              {perms.isOwner ? "GC" : perms.role === "vp_operations" ? "VP" : perms.role === "project_manager" ? "PM" : perms.role === "project_engineer" ? "PE" : perms.role === "contract_administrator" ? "CA" : perms.role ? perms.role.slice(0, 3).toUpperCase() : user.role}
             </Badge>
           </div>
           <button
@@ -153,7 +157,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="hidden md:flex flex-col items-start">
                   <span className="text-sm font-semibold leading-tight">{displayName}</span>
-                  <span className="text-xs text-muted-foreground leading-tight">{isPM ? "Project Manager" : user.role}</span>
+                  <span className="text-xs text-muted-foreground leading-tight">{roleLabel}</span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
               </button>
@@ -165,7 +169,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Account Settings
                 </Link>
               </DropdownMenuItem>
-              {isOwner && (
+              {perms.canManageTeam && (
                 <DropdownMenuItem asChild>
                   <Link href="/team" className="flex items-center gap-2 cursor-pointer">
                     <Users className="h-4 w-4" />
@@ -173,7 +177,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </Link>
                 </DropdownMenuItem>
               )}
-              {isOwner && (
+              {perms.canAccessBilling && (
                 <DropdownMenuItem asChild>
                   <Link href="/billing" className="flex items-center gap-2 cursor-pointer">
                     <CreditCard className="h-4 w-4" />
@@ -225,7 +229,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <LayoutDashboard className={`h-5 w-5 ${isActive("/") ? "text-primary" : ""}`} />
           Projects
         </Link>
-        {isOwner && (
+        {perms.isOwner && (
           <Link
             href="/contacts"
             className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
@@ -236,7 +240,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Contacts
           </Link>
         )}
-        {isOwner && (
+        {perms.canManageTeam && (
           <Link
             href="/team"
             className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
