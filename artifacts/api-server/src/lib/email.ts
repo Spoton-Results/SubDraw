@@ -791,3 +791,77 @@ export function buildOwnerReplyPage(opts: {
     </table>
   </body></html>`;
 }
+
+// ─── Compliance notifications ─────────────────────────────────────────────────
+
+export async function sendComplianceDocUploadedEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  itemTitle: string;
+  documentName: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Compliance document submitted")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has uploaded a compliance document on <strong>${opts.projectName}</strong> for your review.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Requirement", value: opts.itemTitle },
+      { label: "Subcontractor", value: opts.subCompanyName },
+      { label: "Document", value: opts.documentName },
+    ])}
+    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">Please review the document and either approve it or request a revision with your feedback.</p>
+    ${ctaButton("Review Compliance", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Compliance document submitted by ${opts.subCompanyName} on ${opts.projectName}`, html);
+}
+
+export async function sendComplianceApprovedEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  itemTitle: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Compliance document approved")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has approved your compliance document on <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Requirement", value: opts.itemTitle },
+      { label: "Status", value: "Approved" },
+    ])}
+    ${ctaButton("View Subcontract", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Compliance approved: ${opts.itemTitle} on ${opts.projectName}`, html);
+}
+
+export async function sendComplianceRevisionEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  subCompanyName: string;
+  projectName: string;
+  itemTitle: string;
+  revisionNote: string;
+  appUrl: string;
+}) {
+  const html = layout(`
+    ${heading("Revision requested on compliance document")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has reviewed your compliance document on <strong>${opts.projectName}</strong> and is requesting a revision.`)}
+    ${warningBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Requirement", value: opts.itemTitle },
+      { label: "Status", value: "Revision Needed" },
+    ])}
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin:0 0 24px 0;">
+      <p style="font-size:13px;font-weight:700;color:#dc2626;margin:0 0 6px 0;text-transform:uppercase;letter-spacing:0.05em;">GC Feedback</p>
+      <p style="font-size:15px;color:#7f1d1d;margin:0;line-height:1.5;">${opts.revisionNote}</p>
+    </div>
+    <p style="font-size:13px;color:#64748b;margin-bottom:24px;">Please review the feedback above and re-upload a corrected document.</p>
+    ${ctaButton("Re-Upload Document", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Revision requested: ${opts.itemTitle} on ${opts.projectName}`, html);
+}

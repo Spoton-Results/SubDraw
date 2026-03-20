@@ -5,13 +5,31 @@ import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
 import { getActorName, getActorRoleLabel } from "../lib/auth.js";
+import {
+  sendComplianceDocUploadedEmail,
+  sendComplianceApprovedEmail,
+  sendComplianceRevisionEmail,
+} from "../lib/email.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
 
-async function getEffectiveGcIdForProject(projectId: string, userId: string): Promise<boolean> {
+function getAppUrl(req: any) {
+  return process.env.APP_URL ?? `${req.protocol}://${req.get("host")}`;
+}
+
+async function getProjectAndAuth(projectId: string, user: any): Promise<{ project: any; isGC: boolean; isSub: boolean } | null> {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  return project?.gcId === userId;
+  if (!project) return null;
+  const effectiveGcId: string = user.gcParentId ?? user.id;
+  const isGC = user.role === "GC" && project.gcId === effectiveGcId;
+  const isSub = user.role === "SUB";
+  return { project, isGC, isSub };
+}
+
+async function isItemEffectivelyApproved(c: any): Promise<boolean> {
+  if (!c) return false;
+  return c.status === "APPROVED" || (c.isComplete && !c.status);
 }
 
 // ─── Project-level checklist item management (GC only) ────────────────────────
@@ -52,7 +70,9 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
   const { title, description, required, allowDocumentUpload, sortOrder } = req.body;
 
   if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
-  if (!await getEffectiveGcIdForProject(projectId, user.id)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [item] = await db.insert(complianceChecklistItemsTable).values({
     projectId,
@@ -66,13 +86,14 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
   res.status(201).json(item);
 });
 
-// PATCH /projects/:projectId/compliance-items/:itemId — GC updates a checklist item (alias for PUT)
+// PATCH /projects/:projectId/compliance-items/:itemId — GC updates a checklist item
 router.patch("/:itemId", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { projectId, itemId } = req.params as any;
   const { title, description, required, allowDocumentUpload, sortOrder } = req.body;
 
-  if (!await getEffectiveGcIdForProject(projectId, user.id)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [existing] = await db.select().from(complianceChecklistItemsTable)
     .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
@@ -96,7 +117,8 @@ router.put("/:itemId", requireAuth, requireGC, async (req, res) => {
   const { projectId, itemId } = req.params as any;
   const { title, description, required, allowDocumentUpload, sortOrder } = req.body;
 
-  if (!await getEffectiveGcIdForProject(projectId, user.id)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [existing] = await db.select().from(complianceChecklistItemsTable)
     .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
@@ -119,13 +141,13 @@ router.delete("/:itemId", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { projectId, itemId } = req.params as any;
 
-  if (!await getEffectiveGcIdForProject(projectId, user.id)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [item] = await db.select().from(complianceChecklistItemsTable)
     .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
   if (!item) { res.status(404).json({ error: "Checklist item not found" }); return; }
 
-  // Delete any uploaded documents from storage
   const completions = await db.select().from(complianceCompletionsTable).where(eq(complianceCompletionsTable.checklistItemId, itemId));
   for (const c of completions) {
     if (c.documentPath) {
@@ -147,10 +169,11 @@ router.get("/subcontract/:subcontractId", requireAuth, async (req, res) => {
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
 
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  const isGC = user.role === "GC" && project?.gcId === user.id;
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth) { res.status(404).json({ error: "Project not found" }); return; }
+
   const isSub = user.role === "SUB" && sc.subId === user.id;
-  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (!auth.isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const items = await db
     .select()
@@ -165,120 +188,18 @@ router.get("/subcontract/:subcontractId", requireAuth, async (req, res) => {
 
   const completionMap = Object.fromEntries(completions.map(c => [c.checklistItemId, c]));
 
-  const itemsWithStatus = items.map(item => ({
-    ...item,
-    completion: completionMap[item.id] ?? null,
-  }));
+  const itemsWithStatus = items.map(item => {
+    const completion = completionMap[item.id] ?? null;
+    const derivedStatus = completion
+      ? (completion.status ?? (completion.isComplete ? "APPROVED" : "NOT_STARTED"))
+      : "NOT_STARTED";
+    return { ...item, completion: completion ? { ...completion, status: derivedStatus } : null };
+  });
 
   res.json(itemsWithStatus);
 });
 
-// POST /projects/:projectId/compliance-items/:itemId/complete/:subcontractId — mark complete
-router.post("/:itemId/complete/:subcontractId", requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const { projectId, itemId, subcontractId } = req.params as any;
-  const { notes, documentPath, documentName } = req.body;
-
-  const [item] = await db.select().from(complianceChecklistItemsTable)
-    .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
-  if (!item) { res.status(404).json({ error: "Checklist item not found" }); return; }
-
-  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
-  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
-
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  const isGC = user.role === "GC" && project?.gcId === user.id;
-  const isSub = user.role === "SUB" && sc.subId === user.id;
-  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
-
-  const actorRole = isGC ? getActorRoleLabel(user) : "SUB";
-  const actorName = getActorName(user);
-  const now = new Date();
-
-  const [existing] = await db.select().from(complianceCompletionsTable)
-    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
-
-  let completion;
-  if (existing) {
-    const [updated] = await db.update(complianceCompletionsTable).set({
-      isComplete: true,
-      completedByRole: actorRole,
-      completedByName: actorName,
-      completedAt: now,
-      notes: notes ?? existing.notes,
-      documentPath: documentPath ?? existing.documentPath,
-      documentName: documentName ?? existing.documentName,
-      updatedAt: now,
-    }).where(eq(complianceCompletionsTable.id, existing.id)).returning();
-    completion = updated;
-  } else {
-    const [inserted] = await db.insert(complianceCompletionsTable).values({
-      checklistItemId: itemId,
-      subcontractId,
-      isComplete: true,
-      completedByRole: actorRole,
-      completedByName: actorName,
-      completedAt: now,
-      notes: notes ?? null,
-      documentPath: documentPath ?? null,
-      documentName: documentName ?? null,
-    }).returning();
-    completion = inserted;
-  }
-
-  await db.insert(activityLogsTable).values({
-    subcontractId,
-    type: "COMPLIANCE_COMPLETED",
-    description: `Compliance item "${item.title}" marked complete by ${actorName}`,
-    actorName,
-    actorRole,
-  }).catch(() => {});
-
-  res.json(completion);
-});
-
-// DELETE /projects/:projectId/compliance-items/:itemId/complete/:subcontractId — mark incomplete (GC or sub themselves)
-router.delete("/:itemId/complete/:subcontractId", requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const { projectId, itemId, subcontractId } = req.params as any;
-
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
-  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
-  const isGC = user.role === "GC" && project?.gcId === user.id;
-  const isSub = user.role === "SUB" && sc.subId === user.id;
-  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
-
-  const [existing] = await db.select().from(complianceCompletionsTable)
-    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
-
-  if (existing) {
-    if (existing.documentPath) {
-      try { const f = await objectStorageService.getObjectEntityFile(existing.documentPath); await f.delete(); } catch { }
-    }
-    await db.update(complianceCompletionsTable).set({
-      isComplete: false,
-      completedByRole: null,
-      completedByName: null,
-      completedAt: null,
-      documentPath: null,
-      documentName: null,
-      updatedAt: new Date(),
-    }).where(eq(complianceCompletionsTable.id, existing.id));
-  }
-
-  await db.insert(activityLogsTable).values({
-    subcontractId,
-    type: "COMPLIANCE_RESET",
-    description: `Compliance item marked incomplete by ${getActorName(user)}`,
-    actorName: getActorName(user),
-    actorRole: getActorRoleLabel(user),
-  }).catch(() => {});
-
-  res.status(204).send();
-});
-
-// POST /projects/:projectId/compliance-items/:itemId/document/:subcontractId — save uploaded document
+// POST /projects/:projectId/compliance-items/:itemId/document/:subcontractId — sub uploads document → SUBMITTED
 router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { projectId, itemId, subcontractId } = req.params as any;
@@ -293,19 +214,19 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
   const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
   if (!sc) { res.status(404).json({ error: "Not found" }); return; }
 
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  const isGC = user.role === "GC" && project?.gcId === user.id;
-  const isSub = user.role === "SUB" && sc.subId === user.id;
-  if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth) { res.status(404).json({ error: "Project not found" }); return; }
 
-  const actorRole = isGC ? getActorRoleLabel(user) : "SUB";
+  const isSub = user.role === "SUB" && sc.subId === user.id;
+  if (!auth.isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const actorRole = auth.isGC ? getActorRoleLabel(user) : "SUB";
   const actorName = getActorName(user);
   const now = new Date();
 
   const [existing] = await db.select().from(complianceCompletionsTable)
     .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
 
-  // Delete old document from storage if replacing
   if (existing?.documentPath) {
     try { const f = await objectStorageService.getObjectEntityFile(existing.documentPath); await f.delete(); } catch { }
   }
@@ -315,10 +236,10 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
     const [updated] = await db.update(complianceCompletionsTable).set({
       documentPath,
       documentName,
-      isComplete: true,
-      completedByRole: actorRole,
-      completedByName: actorName,
-      completedAt: now,
+      documentUploadedAt: now,
+      isComplete: false,
+      status: "SUBMITTED",
+      revisionNote: null,
       updatedAt: now,
     }).where(eq(complianceCompletionsTable.id, existing.id)).returning();
     completion = updated;
@@ -326,12 +247,11 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
     const [inserted] = await db.insert(complianceCompletionsTable).values({
       checklistItemId: itemId,
       subcontractId,
-      isComplete: true,
-      completedByRole: actorRole,
-      completedByName: actorName,
-      completedAt: now,
+      isComplete: false,
+      status: "SUBMITTED",
       documentPath,
       documentName,
+      documentUploadedAt: now,
     }).returning();
     completion = inserted;
   }
@@ -344,7 +264,290 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
     actorRole,
   }).catch(() => {});
 
-  res.json(completion);
+  // Notify GC when sub uploads
+  if (isSub) {
+    try {
+      const [gcUser] = await db.select({ email: usersTable.email, companyName: usersTable.companyName })
+        .from(usersTable).where(eq(usersTable.id, auth.project.gcId)).limit(1);
+      const [subUser] = await db.select({ companyName: usersTable.companyName })
+        .from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+      if (gcUser?.email) {
+        sendComplianceDocUploadedEmail({
+          toEmail: gcUser.email,
+          gcCompanyName: gcUser.companyName ?? "GC",
+          subCompanyName: subUser?.companyName ?? "Subcontractor",
+          projectName: auth.project.name,
+          itemTitle: item.title,
+          documentName,
+          appUrl: `${getAppUrl(req)}/subcontracts/${subcontractId}`,
+        }).catch(() => {});
+      }
+    } catch { }
+  }
+
+  res.json({ ...completion, status: "SUBMITTED" });
+});
+
+// POST /projects/:projectId/compliance-items/:itemId/approve/:subcontractId — GC approves
+router.post("/:itemId/approve/:subcontractId", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId, subcontractId } = req.params as any;
+
+  const [item] = await db.select().from(complianceChecklistItemsTable)
+    .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
+  if (!item) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Not found" }); return; }
+
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const actorName = getActorName(user);
+  const actorRole = getActorRoleLabel(user);
+  const now = new Date();
+
+  const [existing] = await db.select().from(complianceCompletionsTable)
+    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
+
+  let completion;
+  if (existing) {
+    const [updated] = await db.update(complianceCompletionsTable).set({
+      isComplete: true,
+      status: "APPROVED",
+      completedByRole: actorRole,
+      completedByName: actorName,
+      completedAt: now,
+      revisionNote: null,
+      updatedAt: now,
+    }).where(eq(complianceCompletionsTable.id, existing.id)).returning();
+    completion = updated;
+  } else {
+    const [inserted] = await db.insert(complianceCompletionsTable).values({
+      checklistItemId: itemId,
+      subcontractId,
+      isComplete: true,
+      status: "APPROVED",
+      completedByRole: actorRole,
+      completedByName: actorName,
+      completedAt: now,
+    }).returning();
+    completion = inserted;
+  }
+
+  await db.insert(activityLogsTable).values({
+    subcontractId,
+    type: "COMPLIANCE_APPROVED",
+    description: `Compliance item "${item.title}" approved by ${actorName}`,
+    actorName,
+    actorRole,
+  }).catch(() => {});
+
+  // Notify sub
+  try {
+    const [gcUser] = await db.select({ companyName: usersTable.companyName })
+      .from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+    const [subUser] = await db.select({ email: usersTable.email, companyName: usersTable.companyName })
+      .from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    if (subUser?.email) {
+      sendComplianceApprovedEmail({
+        toEmail: subUser.email,
+        gcCompanyName: gcUser?.companyName ?? "GC",
+        subCompanyName: subUser.companyName ?? "Subcontractor",
+        projectName: auth.project.name,
+        itemTitle: item.title,
+        appUrl: `${getAppUrl(req)}/subcontracts/${subcontractId}`,
+      }).catch(() => {});
+    }
+  } catch { }
+
+  res.json({ ...completion, status: "APPROVED" });
+});
+
+// POST /projects/:projectId/compliance-items/:itemId/revision/:subcontractId — GC requests revision
+router.post("/:itemId/revision/:subcontractId", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId, subcontractId } = req.params as any;
+  const { revisionNote } = req.body;
+
+  if (!revisionNote?.trim()) { res.status(400).json({ error: "revisionNote is required" }); return; }
+
+  const [item] = await db.select().from(complianceChecklistItemsTable)
+    .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
+  if (!item) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Not found" }); return; }
+
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const actorName = getActorName(user);
+  const actorRole = getActorRoleLabel(user);
+  const now = new Date();
+
+  const [existing] = await db.select().from(complianceCompletionsTable)
+    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
+
+  let completion;
+  if (existing) {
+    const [updated] = await db.update(complianceCompletionsTable).set({
+      isComplete: false,
+      status: "REVISION_NEEDED",
+      revisionNote: revisionNote.trim(),
+      completedByRole: null,
+      completedByName: null,
+      completedAt: null,
+      updatedAt: now,
+    }).where(eq(complianceCompletionsTable.id, existing.id)).returning();
+    completion = updated;
+  } else {
+    const [inserted] = await db.insert(complianceCompletionsTable).values({
+      checklistItemId: itemId,
+      subcontractId,
+      isComplete: false,
+      status: "REVISION_NEEDED",
+      revisionNote: revisionNote.trim(),
+    }).returning();
+    completion = inserted;
+  }
+
+  await db.insert(activityLogsTable).values({
+    subcontractId,
+    type: "COMPLIANCE_REVISION_REQUESTED",
+    description: `Revision requested on "${item.title}" by ${actorName}: ${revisionNote}`,
+    actorName,
+    actorRole,
+  }).catch(() => {});
+
+  // Notify sub
+  try {
+    const [gcUser] = await db.select({ companyName: usersTable.companyName })
+      .from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+    const [subUser] = await db.select({ email: usersTable.email, companyName: usersTable.companyName })
+      .from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+    if (subUser?.email) {
+      sendComplianceRevisionEmail({
+        toEmail: subUser.email,
+        gcCompanyName: gcUser?.companyName ?? "GC",
+        subCompanyName: subUser.companyName ?? "Subcontractor",
+        projectName: auth.project.name,
+        itemTitle: item.title,
+        revisionNote: revisionNote.trim(),
+        appUrl: `${getAppUrl(req)}/subcontracts/${subcontractId}`,
+      }).catch(() => {});
+    }
+  } catch { }
+
+  res.json({ ...completion, status: "REVISION_NEEDED" });
+});
+
+// POST /projects/:projectId/compliance-items/:itemId/complete/:subcontractId — GC manual completion (no document)
+router.post("/:itemId/complete/:subcontractId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId, subcontractId } = req.params as any;
+  const { notes } = req.body;
+
+  const [item] = await db.select().from(complianceChecklistItemsTable)
+    .where(and(eq(complianceChecklistItemsTable.id, itemId), eq(complianceChecklistItemsTable.projectId, projectId))).limit(1);
+  if (!item) { res.status(404).json({ error: "Checklist item not found" }); return; }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const isSub = user.role === "SUB" && sc.subId === user.id;
+  if (!auth.isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const actorRole = auth.isGC ? getActorRoleLabel(user) : "SUB";
+  const actorName = getActorName(user);
+  const now = new Date();
+
+  const [existing] = await db.select().from(complianceCompletionsTable)
+    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
+
+  let completion;
+  if (existing) {
+    const [updated] = await db.update(complianceCompletionsTable).set({
+      isComplete: true,
+      status: "APPROVED",
+      completedByRole: actorRole,
+      completedByName: actorName,
+      completedAt: now,
+      notes: notes ?? existing.notes,
+      revisionNote: null,
+      updatedAt: now,
+    }).where(eq(complianceCompletionsTable.id, existing.id)).returning();
+    completion = updated;
+  } else {
+    const [inserted] = await db.insert(complianceCompletionsTable).values({
+      checklistItemId: itemId,
+      subcontractId,
+      isComplete: true,
+      status: "APPROVED",
+      completedByRole: actorRole,
+      completedByName: actorName,
+      completedAt: now,
+      notes: notes ?? null,
+    }).returning();
+    completion = inserted;
+  }
+
+  await db.insert(activityLogsTable).values({
+    subcontractId,
+    type: "COMPLIANCE_COMPLETED",
+    description: `Compliance item "${item.title}" manually marked complete by ${actorName}${notes ? `: ${notes}` : ""}`,
+    actorName,
+    actorRole,
+  }).catch(() => {});
+
+  res.json({ ...completion, status: "APPROVED" });
+});
+
+// DELETE /projects/:projectId/compliance-items/:itemId/complete/:subcontractId — reset to NOT_STARTED (GC only)
+router.delete("/:itemId/complete/:subcontractId", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, itemId, subcontractId } = req.params as any;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [existing] = await db.select().from(complianceCompletionsTable)
+    .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
+
+  if (existing) {
+    if (existing.documentPath) {
+      try { const f = await objectStorageService.getObjectEntityFile(existing.documentPath); await f.delete(); } catch { }
+    }
+    await db.update(complianceCompletionsTable).set({
+      isComplete: false,
+      status: "NOT_STARTED",
+      completedByRole: null,
+      completedByName: null,
+      completedAt: null,
+      documentPath: null,
+      documentName: null,
+      documentUploadedAt: null,
+      notes: null,
+      revisionNote: null,
+      updatedAt: new Date(),
+    }).where(eq(complianceCompletionsTable.id, existing.id));
+  }
+
+  await db.insert(activityLogsTable).values({
+    subcontractId,
+    type: "COMPLIANCE_RESET",
+    description: `Compliance item reset by ${getActorName(user)}`,
+    actorName: getActorName(user),
+    actorRole: getActorRoleLabel(user),
+  }).catch(() => {});
+
+  res.status(204).send();
 });
 
 // GET /projects/:projectId/compliance-items/summary — per-subcontract compliance status (GC only)
@@ -352,8 +555,8 @@ router.get("/summary", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { projectId } = req.params as any;
 
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
-  if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  const auth = await getProjectAndAuth(projectId, user);
+  if (!auth?.isGC) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const items = await db.select().from(complianceChecklistItemsTable)
     .where(eq(complianceChecklistItemsTable.projectId, projectId));
@@ -367,21 +570,24 @@ router.get("/summary", requireAuth, requireGC, async (req, res) => {
     ? await db.select().from(complianceCompletionsTable).where(inArray(complianceCompletionsTable.subcontractId, scIds))
     : [];
 
-  // Get sub names
   const subIds = [...new Set(subcontracts.map(s => s.subId))];
   const subUsers = subIds.length > 0 ? await db.select({ id: usersTable.id, companyName: usersTable.companyName }).from(usersTable).where(inArray(usersTable.id, subIds)) : [];
   const subNameMap = Object.fromEntries(subUsers.map(u => [u.id, u.companyName ?? "Unknown"]));
 
   const summary = subcontracts.map(sc => {
-    const scCompletions = allCompletions.filter(c => c.subcontractId === sc.id && c.isComplete);
-    const completedIds = new Set(scCompletions.map(c => c.checklistItemId));
+    const scCompletions = allCompletions.filter(c => c.subcontractId === sc.id);
+    const approvedIds = new Set(
+      scCompletions
+        .filter(c => c.status === "APPROVED" || (c.isComplete && !c.status))
+        .map(c => c.checklistItemId)
+    );
 
     const totalRequired = requiredItems.length;
-    const completedRequired = requiredItems.filter(i => completedIds.has(i.id)).length;
+    const completedRequired = requiredItems.filter(i => approvedIds.has(i.id)).length;
 
-    let status: "COMPLIANT" | "INCOMPLETE" | "BLOCKED";
+    let status: "FULLY_COMPLIANT" | "INCOMPLETE" | "BLOCKED";
     if (totalRequired === 0 || completedRequired === totalRequired) {
-      status = "COMPLIANT";
+      status = "FULLY_COMPLIANT";
     } else if (completedRequired === 0) {
       status = "BLOCKED";
     } else {

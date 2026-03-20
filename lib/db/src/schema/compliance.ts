@@ -24,7 +24,10 @@ export const complianceCompletionsTable = pgTable("compliance_completions", {
   completedAt: timestamp("completed_at"),
   documentPath: text("document_path"),
   documentName: text("document_name"),
+  documentUploadedAt: timestamp("document_uploaded_at"),
   notes: text("notes"),
+  status: text("status"),
+  revisionNote: text("revision_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
