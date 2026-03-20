@@ -2035,153 +2035,158 @@ export default function ProjectDetail() {
                     { base: 0, coTotal: 0, approved: 0, invoiced: 0, remaining: 0 }
                   );
                   return (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Subcontractor</th>
-                            {isGC && <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Insurance</th>}
-                            {isGC && <th className="hidden xl:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">License</th>}
-                            {isGC && complianceItems.length > 0 && <th className="hidden md:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Compliance</th>}
-                            <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Base</th>
-                            <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">COs</th>
-                            <th className="hidden sm:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Approved Total</th>
-                            <th className="hidden md:table-cell text-right px-4 py-3 font-semibold text-muted-foreground">Invoiced</th>
-                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Remaining</th>
-                            <th className="px-4 py-3"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {visible.map(sub => {
-                            const sb = sub.scoreboard;
-                            const remaining = sb?.remaining ?? sub.baseContractAmount;
-                            const hasFlagged = (sb as any)?.hasFlaggedInvoices as boolean | undefined;
-                            const isNeg = remaining < 0 || hasFlagged;
-                            const insInfo = projectInsurance.find(i => i.subcontractId === sub.id);
-                            const licInfo = projectLicenses.find(l => l.subcontractId === sub.id);
-                            const compRow = complianceSummary.find(c => c.subcontractId === sub.id);
-                            return (
-                              <tr key={sub.id} className="hover:bg-muted/30 transition-colors group">
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold group-hover:text-primary transition-colors">{sub.sub?.companyName}</span>
-                                      {hasFlagged && (
-                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
-                                          <AlertTriangle className="h-2.5 w-2.5" /> Flagged
-                                        </span>
-                                      )}
-                                      {((sub as any).unreadCommentCount ?? 0) > 0 && (
-                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
-                                          <MessageSquare className="h-2.5 w-2.5" /> {(sub as any).unreadCommentCount}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {(sub as any).tradeCategory && (
-                                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border w-fit ${TRADE_COLORS[(sub as any).tradeCategory] ?? TRADE_COLORS.Other}`}>
-                                        {(sub as any).tradeCategory}
+                    <div className="p-4 sm:p-6 space-y-4">
+                      {/* Card grid — 1 col mobile, 2 col desktop */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {visible.map(sub => {
+                          const sb = sub.scoreboard;
+                          const remaining = sb?.remaining ?? sub.baseContractAmount;
+                          const hasFlagged = (sb as any)?.hasFlaggedInvoices as boolean | undefined;
+                          const insInfo = projectInsurance.find(i => i.subcontractId === sub.id);
+                          const licInfo = projectLicenses.find(l => l.subcontractId === sub.id);
+                          const compRow = complianceSummary.find(c => c.subcontractId === sub.id);
+                          const complianceIncomplete = compRow && compRow.status !== "FULLY_COMPLIANT";
+                          return (
+                            <Link key={sub.id} href={`/subcontracts/${sub.id}`} className="block">
+                              <div className="relative flex flex-col rounded-xl border border-border bg-white dark:bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer min-h-[160px] overflow-hidden group">
+                                {/* Card body */}
+                                <div className="flex-1 p-4">
+                                  {/* Company name + unread badge */}
+                                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                                    <span className="font-bold text-base leading-tight group-hover:text-primary transition-colors">{sub.sub?.companyName}</span>
+                                    {((sub as any).unreadCommentCount ?? 0) > 0 && (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full shrink-0">
+                                        <MessageSquare className="h-2.5 w-2.5" /> {(sub as any).unreadCommentCount}
                                       </span>
                                     )}
                                   </div>
-                                </td>
-                                {isGC && (
-                                  <td className="hidden lg:table-cell px-4 py-3">
-                                    {!insInfo || insInfo.status === "NO_INSURANCE" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Shield className="h-3 w-3" /> None
+
+                                  {/* Trade + Insurance + License badges */}
+                                  <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                                    {(sub as any).tradeCategory && (
+                                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${TRADE_COLORS[(sub as any).tradeCategory] ?? TRADE_COLORS.Other}`}>
+                                        {(sub as any).tradeCategory}
+                                      </span>
+                                    )}
+                                    {isGC && (!insInfo || insInfo.status === "NO_INSURANCE" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-full">
+                                        <Shield className="h-3 w-3" /> Ins: None
                                       </span>
                                     ) : insInfo.status === "VALID" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-                                        <ShieldCheck className="h-3.5 w-3.5" /> Valid
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-1.5 py-0.5 rounded-full">
+                                        <ShieldCheck className="h-3 w-3" /> Ins: Valid
                                       </span>
                                     ) : insInfo.status === "EXPIRING_SOON" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
-                                        <Shield className="h-3.5 w-3.5" /> Expiring
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-1.5 py-0.5 rounded-full">
+                                        <Shield className="h-3 w-3" /> Ins: Expiring
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                        <ShieldX className="h-3.5 w-3.5" /> Expired
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
+                                        <ShieldX className="h-3 w-3" /> Ins: Expired
                                       </span>
-                                    )}
-                                  </td>
-                                )}
-                                {isGC && (
-                                  <td className="hidden xl:table-cell px-4 py-3">
-                                    {!licInfo || licInfo.status === "NO_LICENSE" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                        <BadgeCheck className="h-3 w-3" /> None
+                                    ))}
+                                    {isGC && (!licInfo || licInfo.status === "NO_LICENSE" ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded-full">
+                                        <BadgeCheck className="h-3 w-3" /> Lic: None
                                       </span>
                                     ) : licInfo.status === "VALID" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-400">
-                                        <BadgeCheck className="h-3.5 w-3.5" /> Valid
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+                                        <BadgeCheck className="h-3 w-3" /> Lic: Valid
                                       </span>
                                     ) : licInfo.status === "EXPIRING_SOON" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
-                                        <BadgeCheck className="h-3.5 w-3.5" /> Expiring
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-1.5 py-0.5 rounded-full">
+                                        <BadgeCheck className="h-3 w-3" /> Lic: Expiring
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                        <BadgeCheck className="h-3.5 w-3.5" /> Expired
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-1.5 py-0.5 rounded-full">
+                                        <BadgeCheck className="h-3 w-3" /> Lic: Expired
                                       </span>
-                                    )}
-                                  </td>
+                                    ))}
+                                  </div>
+
+                                  {/* Financial 2×2 grid */}
+                                  {perms.hasFinancialAccess ? (
+                                    <>
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-2">
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-0.5">Base Contract</p>
+                                          <p className="font-mono text-sm">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-xs text-muted-foreground mb-0.5">Change Orders</p>
+                                          <p className="font-mono text-sm text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-0.5">Approved Total</p>
+                                          <p className="font-mono text-sm font-bold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-xs text-muted-foreground mb-0.5">Remaining Balance</p>
+                                          <p className={cn("font-mono text-sm font-bold", remaining >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                                            {formatCurrency(remaining)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        Invoiced: <span className="font-mono">{formatCurrency(sb?.invoicedTotal ?? 0)}</span>
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground mt-1">Financial details restricted</p>
+                                  )}
+                                </div>
+
+                                {/* Warning banners — stacked at bottom */}
+                                {hasFlagged && (
+                                  <div className="bg-red-600 text-white text-xs font-bold px-4 py-2 flex items-center gap-1.5">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Invoice Needs Review
+                                  </div>
                                 )}
-                                {isGC && complianceItems.length > 0 && (
-                                  <td className="hidden md:table-cell px-4 py-3">
-                                    {!compRow ? (
-                                      <span className="text-xs text-muted-foreground">—</span>
-                                    ) : compRow.status === "FULLY_COMPLIANT" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-                                        <CheckCircle2 className="h-3.5 w-3.5" /> Fully Compliant
-                                      </span>
-                                    ) : compRow.status === "BLOCKED" ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                        <AlertTriangle className="h-3.5 w-3.5" /> Blocked
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
-                                        <Clock className="h-3.5 w-3.5" /> Incomplete
-                                      </span>
-                                    )}
-                                  </td>
+                                {complianceIncomplete && (
+                                  <div className="bg-yellow-400 dark:bg-yellow-500 text-yellow-950 text-xs font-bold px-4 py-2 flex items-center gap-1.5">
+                                    <Clock className="h-3.5 w-3.5 shrink-0" /> Compliance Incomplete
+                                  </div>
                                 )}
-                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(sb?.base ?? sub.baseContractAmount) : <span className="text-muted-foreground text-xs">—</span>}</td>
-                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{perms.hasFinancialAccess ? formatCurrency(sb?.coTotal ?? 0) : <span className="text-xs">—</span>}</td>
-                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{perms.hasFinancialAccess ? formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount) : <span className="text-muted-foreground text-xs">—</span>}</td>
-                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(sb?.invoicedTotal ?? 0) : <span className="text-muted-foreground text-xs">—</span>}</td>
-                                <td className={cn("px-4 py-3 text-right font-mono font-semibold", perms.hasFinancialAccess && (isNeg ? "text-red-600" : "text-green-600"))}>
-                                  {perms.hasFinancialAccess ? formatCurrency(remaining) : <span className="text-muted-foreground text-xs">—</span>}
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <Link href={`/subcontracts/${sub.id}`}>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 group-hover:bg-primary/10">
-                                      <ChevronRight className="h-4 w-4" />
-                                    </Button>
-                                  </Link>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        {visible.length > 1 && (
-                          <tfoot>
-                            <tr className="border-t-2 border-border bg-muted/50 font-bold">
-                              <td className="px-4 py-3 text-sm uppercase tracking-wider text-muted-foreground">Totals</td>
-                              {isGC && <td className="hidden lg:table-cell"></td>}
-                              {isGC && <td className="hidden xl:table-cell"></td>}
-                              {isGC && complianceItems.length > 0 && <td className="hidden md:table-cell"></td>}
-                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.base) : "—"}</td>
-                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{perms.hasFinancialAccess ? formatCurrency(totals.coTotal) : "—"}</td>
-                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.approved) : "—"}</td>
-                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.invoiced) : "—"}</td>
-                              <td className={cn("px-4 py-3 text-right font-mono", perms.hasFinancialAccess && (totals.remaining < 0 ? "text-red-600" : "text-green-600"))}>
-                                {perms.hasFinancialAccess ? formatCurrency(totals.remaining) : "—"}
-                              </td>
-                              <td></td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+
+                      {/* Totals bar */}
+                      {visible.length > 1 && (
+                        <div className="rounded-xl border border-border bg-muted/50 px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Totals — {visible.length} Subcontracts</p>
+                          {perms.hasFinancialAccess ? (
+                            <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                              <div>
+                                <p className="text-xs text-muted-foreground">Base Contracts</p>
+                                <p className="font-mono font-semibold">{formatCurrency(totals.base)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Change Orders</p>
+                                <p className="font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Approved Total</p>
+                                <p className="font-mono font-bold">{formatCurrency(totals.approved)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Total Invoiced</p>
+                                <p className="font-mono">{formatCurrency(totals.invoiced)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Remaining Balance</p>
+                                <p className={cn("font-mono font-bold", totals.remaining >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                                  {formatCurrency(totals.remaining)}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Financial details restricted</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
