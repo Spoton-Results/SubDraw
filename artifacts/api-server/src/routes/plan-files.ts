@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { planFilesTable, planFileViewsTable, activityLogsTable, subcontractsTable, scopeDocumentsTable } from "@workspace/db/schema";
+import { planFilesTable, planFileViewsTable, activityLogsTable, subcontractsTable, scopeDocumentsTable, projectsTable, projectMembersTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -11,6 +11,24 @@ const router = Router({ mergeParams: true });
 
 router.get("/", requireAuth, async (req, res) => {
   const { projectId } = req.params as any;
+  const user = (req as any).user;
+
+  const [project] = await db.select({ gcId: projectsTable.gcId }).from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  if (user.role === "GC") {
+    const effectiveGcId: string = user.gcParentId ?? user.id;
+    if (project.gcId !== effectiveGcId) { res.status(403).json({ error: "Forbidden" }); return; }
+  } else if (user.role === "SUB") {
+    const [member] = await db.select({ projectId: projectMembersTable.projectId })
+      .from(projectMembersTable)
+      .where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, user.id)))
+      .limit(1);
+    if (!member) { res.status(403).json({ error: "Forbidden" }); return; }
+  } else {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+
   const plans = await db.select().from(planFilesTable).where(eq(planFilesTable.projectId, projectId));
   res.json(plans);
 });

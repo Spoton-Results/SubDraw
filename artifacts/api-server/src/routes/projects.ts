@@ -601,11 +601,25 @@ router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => 
 
 router.get("/:projectId", requireAuth, async (req, res) => {
   const user = (req as any).user;
+
+  // For subs: verify they are a project member before loading any project data
+  if (user.role === "SUB") {
+    const [membership] = await db.select({ projectId: projectMembersTable.projectId })
+      .from(projectMembersTable)
+      .where(and(eq(projectMembersTable.projectId, req.params.projectId), eq(projectMembersTable.userId, user.id)))
+      .limit(1);
+    if (!membership) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+
   const detail = await getProjectWithDetails(req.params.projectId, user.id);
   if (!detail) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
+
   const effectiveGcId = getEffectiveGcId(user);
   const isGC = user.role === "GC" && effectiveGcId === (detail as any).gcId;
 
@@ -620,9 +634,8 @@ router.get("/:projectId", requireAuth, async (req, res) => {
       });
       return;
     }
-    // Non-owner GC (shouldn't normally hit this but strip notes to be safe)
-    const { notes: _notes, ...rest } = detail as any;
-    res.json(rest);
+    // GC team member (different GC account) — reject outright
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   res.json(detail);
