@@ -159,6 +159,22 @@ export default function ProjectDetail() {
   const scopeFileInputRef = React.useRef<HTMLInputElement>(null);
   const [deleteScopeConfirm, setDeleteScopeConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
+  // GC Credentials state
+  const [gcCredSaving, setGcCredSaving] = React.useState(false);
+  const [gcCredInsCompany, setGcCredInsCompany] = React.useState("");
+  const [gcCredInsPolicyNumber, setGcCredInsPolicyNumber] = React.useState("");
+  const [gcCredInsGLCoverage, setGcCredInsGLCoverage] = React.useState("");
+  const [gcCredInsWCCoverage, setGcCredInsWCCoverage] = React.useState("");
+  const [gcCredInsExpDate, setGcCredInsExpDate] = React.useState("");
+  const [gcCredInsCertPath, setGcCredInsCertPath] = React.useState<string | null>(null);
+  const [gcCredLicNumber, setGcCredLicNumber] = React.useState("");
+  const [gcCredLicType, setGcCredLicType] = React.useState("");
+  const [gcCredLicState, setGcCredLicState] = React.useState("");
+  const [gcCredLicExpDate, setGcCredLicExpDate] = React.useState("");
+  const [gcCredLicDocPath, setGcCredLicDocPath] = React.useState<string | null>(null);
+  const [gcCredInsSection, setGcCredInsSection] = React.useState(false);
+  const [gcCredLicSection, setGcCredLicSection] = React.useState(false);
+
   // Compliance checklist state
   const [newComplianceTitle, setNewComplianceTitle] = React.useState("");
   const [newComplianceRequired, setNewComplianceRequired] = React.useState(true);
@@ -241,6 +257,117 @@ export default function ProjectDetail() {
     enabled: !!projectId && user?.role === "GC",
     staleTime: 0,
   });
+
+  type GcCredentials = {
+    id: string; projectId: string;
+    insCompany: string | null; insPolicyNumber: string | null; insGLCoverage: string | null; insWCCoverage: string | null; insExpDate: string | null; insCertPath: string | null;
+    licNumber: string | null; licType: string | null; licState: string | null; licExpDate: string | null; licDocPath: string | null;
+  } | null;
+
+  const { data: gcCredentials, refetch: refetchGcCredentials } = useQuery<GcCredentials>({
+    queryKey: ["gc-credentials", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials`, { credentials: "include" });
+      if (res.status === 404 || res.status === 403) return null;
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!projectId && user?.role === "GC",
+    staleTime: 30000,
+  });
+
+  React.useEffect(() => {
+    if (!gcCredentials) return;
+    setGcCredInsCompany(gcCredentials.insCompany ?? "");
+    setGcCredInsPolicyNumber(gcCredentials.insPolicyNumber ?? "");
+    setGcCredInsGLCoverage(gcCredentials.insGLCoverage ?? "");
+    setGcCredInsWCCoverage(gcCredentials.insWCCoverage ?? "");
+    setGcCredInsExpDate(gcCredentials.insExpDate ?? "");
+    setGcCredInsCertPath(gcCredentials.insCertPath ?? null);
+    setGcCredLicNumber(gcCredentials.licNumber ?? "");
+    setGcCredLicType(gcCredentials.licType ?? "");
+    setGcCredLicState(gcCredentials.licState ?? "");
+    setGcCredLicExpDate(gcCredentials.licExpDate ?? "");
+    setGcCredLicDocPath(gcCredentials.licDocPath ?? null);
+  }, [gcCredentials]);
+
+  const { uploadFile: uploadGcInsCert, isUploading: gcInsCertUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Certificate upload failed"),
+  });
+  const { uploadFile: uploadGcLicDoc, isUploading: gcLicDocUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "License document upload failed"),
+  });
+
+  function gcCredDaysUntilExpiry(dateStr: string | null | undefined): number | null {
+    if (!dateStr) return null;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const exp = new Date(dateStr); exp.setHours(0, 0, 0, 0);
+    return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  function gcCredBadge(dateStr: string | null | undefined) {
+    if (!dateStr) return null;
+    const days = gcCredDaysUntilExpiry(dateStr);
+    if (days === null) return null;
+    if (days < 0) return <span className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 px-2 py-0.5 rounded-full"><ShieldX className="h-3 w-3" /> Expired</span>;
+    if (days <= 30) return <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-800 dark:text-yellow-200 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 px-2 py-0.5 rounded-full"><Shield className="h-3 w-3" /> Expiring in {days}d</span>;
+    return <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2 py-0.5 rounded-full"><ShieldCheck className="h-3 w-3" /> Valid</span>;
+  }
+
+  async function handleSaveGcCredentials() {
+    setGcCredSaving(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          insCompany: gcCredInsCompany || null,
+          insPolicyNumber: gcCredInsPolicyNumber || null,
+          insGLCoverage: gcCredInsGLCoverage || null,
+          insWCCoverage: gcCredInsWCCoverage || null,
+          insExpDate: gcCredInsExpDate || null,
+          insCertPath: gcCredInsCertPath || null,
+          licNumber: gcCredLicNumber || null,
+          licType: gcCredLicType || null,
+          licState: gcCredLicState || null,
+          licExpDate: gcCredLicExpDate || null,
+          licDocPath: gcCredLicDocPath || null,
+        }),
+      });
+      if (!res.ok) { toast.error("Failed to save credentials"); return; }
+      refetchGcCredentials();
+      setGcCredInsSection(false);
+      setGcCredLicSection(false);
+      toast.success("GC credentials saved");
+    } finally { setGcCredSaving(false); }
+  }
+
+  async function handleUploadGcInsCert(file: File) {
+    const result = await uploadGcInsCert(file);
+    if (!result?.objectPath) { toast.error("Upload failed"); return; }
+    setGcCredInsCertPath(result.objectPath);
+    toast.success("Certificate uploaded — click Save to confirm");
+  }
+
+  async function handleUploadGcLicDoc(file: File) {
+    const result = await uploadGcLicDoc(file);
+    if (!result?.objectPath) { toast.error("Upload failed"); return; }
+    setGcCredLicDocPath(result.objectPath);
+    toast.success("License document uploaded — click Save to confirm");
+  }
+
+  async function handleDownloadGcDoc(docType: "cert" | "license") {
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials/download/${docType}`, { credentials: "include" });
+      if (!res.ok) { toast.error("Failed to download document"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = docType === "cert" ? "gc-insurance-certificate.pdf" : "gc-contractor-license.pdf";
+      a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Download failed"); }
+  }
 
   async function handleAddComplianceItem(e: React.FormEvent) {
     e.preventDefault();
@@ -1659,6 +1786,197 @@ export default function ProjectDetail() {
               </div>
             </div>
           )}
+
+          {/* GC CREDENTIALS SECTION — GC only */}
+          {isGC && (() => {
+            const insExpired = gcCredentials?.insExpDate ? gcCredDaysUntilExpiry(gcCredentials.insExpDate)! < 0 : false;
+            const licExpired = gcCredentials?.licExpDate ? gcCredDaysUntilExpiry(gcCredentials.licExpDate)! < 0 : false;
+            const insExpiring = gcCredentials?.insExpDate ? (gcCredDaysUntilExpiry(gcCredentials.insExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.insExpDate)! >= 0) : false;
+            const licExpiring = gcCredentials?.licExpDate ? (gcCredDaysUntilExpiry(gcCredentials.licExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.licExpDate)! >= 0) : false;
+            const insMissing = !gcCredentials?.insCompany && !gcCredentials?.insExpDate;
+            const licMissing = !gcCredentials?.licNumber && !gcCredentials?.licExpDate;
+            const hasWarning = insExpired || licExpired || insExpiring || licExpiring || insMissing || licMissing;
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5 text-primary" /> GC Credentials
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      {(insExpired || licExpired) && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 px-2.5 py-1 rounded-full">
+                          <ShieldX className="h-3.5 w-3.5" /> Credentials Expired
+                        </span>
+                      )}
+                      {!insExpired && !licExpired && (insExpiring || licExpiring) && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-800 dark:text-yellow-200 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 px-2.5 py-1 rounded-full">
+                          <Shield className="h-3.5 w-3.5" /> Expiring Soon
+                        </span>
+                      )}
+                      {!insExpired && !licExpired && !insExpiring && !licExpiring && (insMissing || licMissing) && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground bg-muted border border-border px-2.5 py-1 rounded-full">
+                          <Shield className="h-3.5 w-3.5" /> Credentials Incomplete
+                        </span>
+                      )}
+                      {!hasWarning && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2.5 py-1 rounded-full">
+                          <ShieldCheck className="h-3.5 w-3.5" /> All Valid
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Enter your insurance certificate and contractor license once per project — this information is automatically shown to all subcontractors.</p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+
+                  {/* INSURANCE CERTIFICATE */}
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                      onClick={() => setGcCredInsSection(v => !v)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Shield className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-semibold">Insurance Certificate</p>
+                          {gcCredentials?.insCompany && <p className="text-xs text-muted-foreground">{gcCredentials.insCompany}{gcCredentials.insExpDate ? ` · Exp: ${gcCredentials.insExpDate}` : ""}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {gcCredBadge(gcCredentials?.insExpDate)}
+                        {gcCredInsSection ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                    </button>
+                    {gcCredInsSection && (
+                      <div className="p-4 space-y-4 bg-background">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Insurance Company</label>
+                            <Input value={gcCredInsCompany} onChange={e => setGcCredInsCompany(e.target.value)} placeholder="e.g. Travelers, Hartford" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Policy Number</label>
+                            <Input value={gcCredInsPolicyNumber} onChange={e => setGcCredInsPolicyNumber(e.target.value)} placeholder="e.g. GL-1234567" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">General Liability Coverage</label>
+                            <Input value={gcCredInsGLCoverage} onChange={e => setGcCredInsGLCoverage(e.target.value)} placeholder="e.g. $2,000,000" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Workers Comp Coverage</label>
+                            <Input value={gcCredInsWCCoverage} onChange={e => setGcCredInsWCCoverage(e.target.value)} placeholder="e.g. $1,000,000" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Certificate Expiration Date</label>
+                            <Input type="date" value={gcCredInsExpDate} onChange={e => setGcCredInsExpDate(e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Certificate PDF</label>
+                            <div className="flex gap-2">
+                              {gcCredInsCertPath ? (
+                                <>
+                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("cert")}>
+                                    <Download className="h-3.5 w-3.5" /> Download
+                                  </Button>
+                                  <label className="cursor-pointer">
+                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none">
+                                      <Upload className="h-3.5 w-3.5" /> Replace
+                                    </Button>
+                                    <input type="file" accept=".pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
+                                  </label>
+                                </>
+                              ) : (
+                                <label className="cursor-pointer">
+                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcInsCertUploading}>
+                                    {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload Certificate</>}
+                                  </Button>
+                                  <input type="file" accept=".pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CONTRACTOR LICENSE */}
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                      onClick={() => setGcCredLicSection(v => !v)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <BadgeCheck className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-semibold">Contractor License</p>
+                          {gcCredentials?.licNumber && <p className="text-xs text-muted-foreground">#{gcCredentials.licNumber}{gcCredentials.licState ? ` · ${gcCredentials.licState}` : ""}{gcCredentials.licExpDate ? ` · Exp: ${gcCredentials.licExpDate}` : ""}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {gcCredBadge(gcCredentials?.licExpDate)}
+                        {gcCredLicSection ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                    </button>
+                    {gcCredLicSection && (
+                      <div className="p-4 space-y-4 bg-background">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">License Number</label>
+                            <Input value={gcCredLicNumber} onChange={e => setGcCredLicNumber(e.target.value)} placeholder="e.g. B-123456" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">License Type</label>
+                            <Input value={gcCredLicType} onChange={e => setGcCredLicType(e.target.value)} placeholder="e.g. General B, Electrical C-10" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Issuing State</label>
+                            <Input value={gcCredLicState} onChange={e => setGcCredLicState(e.target.value)} placeholder="e.g. CA, TX, NY" maxLength={2} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Expiration Date</label>
+                            <Input type="date" value={gcCredLicExpDate} onChange={e => setGcCredLicExpDate(e.target.value)} />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">License Document (optional PDF)</label>
+                            <div className="flex gap-2">
+                              {gcCredLicDocPath ? (
+                                <>
+                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("license")}>
+                                    <Download className="h-3.5 w-3.5" /> Download
+                                  </Button>
+                                  <label className="cursor-pointer">
+                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none">
+                                      <Upload className="h-3.5 w-3.5" /> Replace
+                                    </Button>
+                                    <input type="file" accept=".pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
+                                  </label>
+                                </>
+                              ) : (
+                                <label className="cursor-pointer">
+                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcLicDocUploading}>
+                                    {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload License Doc</>}
+                                  </Button>
+                                  <input type="file" accept=".pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button onClick={handleSaveGcCredentials} disabled={gcCredSaving} className="gap-2">
+                      {gcCredSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> Save Credentials</>}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* SUBCONTRACTS SECTION */}
           {(isGC || project.subcontracts?.some(s => s.subId === user.id)) && (

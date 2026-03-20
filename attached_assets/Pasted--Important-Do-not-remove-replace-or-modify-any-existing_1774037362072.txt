@@ -1,0 +1,36 @@
+"Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only add the new sections described below to what already exists. Keep all existing scoreboard calculation, invoice flagging, payment confirmation, compliance checklist, and all other existing features exactly as they are.
+Add a GC Credentials section to the project page so the GC enters their own insurance certificate and contractor license once per project and it automatically appears on every subcontractor's dashboard for that project. Requirements:
+GC SIDE — PROJECT PAGE:
+
+Add a GC Credentials card on the project overview page below the existing project summary cards
+This card has two sections:
+
+GC INSURANCE CERTIFICATE section:
+
+Upload Certificate button — GC uploads their own insurance certificate PDF
+Fields for their insurance company name, policy number, general liability coverage amount, workers comp coverage amount, certificate expiration date
+Once entered show the details with a green valid badge, yellow expiring within 30 days, or red expired badge
+Alert GC 30 days and 7 days before their own certificate expires
+
+GC CONTRACTOR LICENSE section:
+
+Fields for their license number, license type, issuing state, expiration date
+Upload License Document button — optional PDF
+Once entered show with green valid yellow expiring or red expired badge
+Alert GC 30 days and 7 days before their license expires
+
+
+The GC only needs to enter this information ONCE per project — not once per subcontract — it applies to the entire project
+
+SUB SIDE — AUTOMATICALLY SHOWN:
+4. On every subcontractor's dashboard and subcontract detail page add a GC Credentials section showing:
+
+The GC's insurance certificate details — company, coverage amounts, expiration date with color coded badge
+The GC's contractor license details — number, type, state, expiration with color coded badge
+A Download Certificate button if the GC uploaded the PDF
+If the GC has not yet entered their credentials show a friendly message: Your GC has not yet uploaded their credentials for this project
+
+
+This information pulls automatically from the project level — the GC never has to enter it separately for each subcontractor
+If the GC's insurance or license is expired show a red warning banner on the sub's dashboard saying GC credentials require attention — contact your GC
+On the GC project page show a warning badge if their own credentials are missing or expired so they are reminded to keep them current"

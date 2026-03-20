@@ -32,6 +32,7 @@ The project is built as a pnpm monorepo using Node.js 24 and TypeScript 5.9. The
 -   **Multi-file Plan Upload & Scope Documents:** Supports multi-file uploads for both project plans and scope of work documents, with tracking and visibility for subcontractors in bid forms.
 -   **Compliance Checklist:** A project-level system for GCs to define required tasks and documents that subcontractors must complete before invoicing, with document upload support and status tracking.
 -   **Comment Thread (Messages):** A per-subcontract messaging system for direct communication, including read-tracking, email notifications, and unread message indicators.
+-   **GC Credentials (Insurance & License):** GCs enter their own insurance certificate and contractor license details once per project. Both are automatically visible to all subcontractors on their subcontract detail pages. Supports PDF document upload (cert and license doc). Expiry badges: green Valid / yellow Expiring in Xd / red Expired. GC project page shows a warning badge if credentials are incomplete or expiring. Sub views show a red warning banner if any GC credential is expired. Automated email notifications (30-day and 7-day warnings) are sent to the GC before expiry. New DB table: `gc_project_credentials` (one row per project). New API: `GET/PUT /api/projects/:projectId/gc-credentials`, `GET /api/projects/:projectId/gc-credentials/download/:type`, `DELETE /api/projects/:projectId/gc-credentials/document/:type`.
 
 ## External Dependencies
 

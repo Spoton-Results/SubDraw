@@ -865,3 +865,51 @@ export async function sendComplianceRevisionEmail(opts: {
   `);
   await send(opts.toEmail, `Revision requested: ${opts.itemTitle} on ${opts.projectName}`, html);
 }
+
+export async function sendGCCredentialExpiryWarningEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  projectName: string;
+  credentialType: "insurance" | "license";
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const typeLabel = opts.credentialType === "insurance" ? "Insurance Certificate" : "Contractor License";
+  const html = layout(`
+    ${heading(`Your ${typeLabel} is expiring soon`)}
+    ${subtext(`Your ${typeLabel.toLowerCase()} for <strong>${opts.projectName}</strong> expires in <strong>${opts.daysUntilExpiry} days</strong>. Please renew and update your credentials before it expires.`)}
+    ${warningBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Credential", value: typeLabel },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: String(opts.daysUntilExpiry) },
+    ])}
+    ${ctaButton("Update Credentials", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `Action needed: Your ${typeLabel} expires in ${opts.daysUntilExpiry} days — ${opts.projectName}`, html);
+}
+
+export async function sendGCCredentialUrgentExpiryEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  projectName: string;
+  credentialType: "insurance" | "license";
+  expirationDate: string;
+  daysUntilExpiry: number;
+  appUrl: string;
+}) {
+  const typeLabel = opts.credentialType === "insurance" ? "Insurance Certificate" : "Contractor License";
+  const html = layout(`
+    ${heading(`Urgent: Your ${typeLabel} expires in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry === 1 ? "" : "s"}`)}
+    ${subtext(`Your ${typeLabel.toLowerCase()} for <strong>${opts.projectName}</strong> is expiring very soon. Update your credentials immediately to avoid disruption.`)}
+    ${warningBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Credential", value: typeLabel },
+      { label: "Expiration Date", value: opts.expirationDate },
+      { label: "Days Remaining", value: String(opts.daysUntilExpiry) },
+    ])}
+    ${ctaButton("Update Credentials Now", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `URGENT: Your ${typeLabel} expires in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry === 1 ? "" : "s"} — ${opts.projectName}`, html);
+}

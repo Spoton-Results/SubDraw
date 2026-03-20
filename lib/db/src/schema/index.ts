@@ -11,3 +11,4 @@ export * from "./compliance";
 export * from "./owner-notifications";
 export * from "./completion-documents";
 export * from "./bid-comparisons";
+export * from "./gc-credentials";

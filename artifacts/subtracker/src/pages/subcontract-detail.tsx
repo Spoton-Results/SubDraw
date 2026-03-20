@@ -236,6 +236,52 @@ export default function SubcontractDetail() {
   const complianceRequiredCount = complianceItems.filter(i => i.required).length;
   const complianceFullyCompliant = complianceRequiredCount > 0 && complianceApprovedCount === complianceRequiredCount;
 
+  type GcCredentialsSub = {
+    insCompany: string | null; insPolicyNumber: string | null; insGLCoverage: string | null; insWCCoverage: string | null; insExpDate: string | null; insCertPath: string | null;
+    licNumber: string | null; licType: string | null; licState: string | null; licExpDate: string | null; licDocPath: string | null;
+  } | null;
+
+  const { data: gcCredentialsSub } = useQuery<GcCredentialsSub>({
+    queryKey: ["gc-credentials-sub", sub?.projectId],
+    queryFn: async () => {
+      if (!sub?.projectId) return null;
+      const res = await fetch(`${BASE_URL_SUB}/api/projects/${sub.projectId}/gc-credentials`, { credentials: "include" });
+      if (res.status === 404 || res.status === 403) return null;
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!sub?.projectId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  function subCredDaysUntilExpiry(dateStr: string | null | undefined): number | null {
+    if (!dateStr) return null;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const exp = new Date(dateStr); exp.setHours(0, 0, 0, 0);
+    return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  function subCredBadge(dateStr: string | null | undefined) {
+    const days = subCredDaysUntilExpiry(dateStr);
+    if (days === null) return <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">No Date</span>;
+    if (days < 0) return <span className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 px-2 py-0.5 rounded-full">Expired</span>;
+    if (days <= 30) return <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-800 dark:text-yellow-200 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 px-2 py-0.5 rounded-full">Expiring in {days}d</span>;
+    return <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2 py-0.5 rounded-full">Valid</span>;
+  }
+
+  async function handleDownloadGcCredDoc(projectId: string, docType: "cert" | "license") {
+    try {
+      const res = await fetch(`${BASE_URL_SUB}/api/projects/${projectId}/gc-credentials/download/${docType}`, { credentials: "include" });
+      if (!res.ok) { toast.error("Failed to download document"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = docType === "cert" ? "gc-insurance-certificate.pdf" : "gc-contractor-license.pdf";
+      a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Download failed"); }
+  }
+
   async function handleUploadComplianceDoc(itemId: string, file: File) {
     setComplianceUploadingId(itemId);
     try {
@@ -2259,6 +2305,102 @@ export default function SubcontractDetail() {
           </div>
         </div>
       </Dialog>
+
+      {/* GC CREDENTIALS SECTION — shown to both GC and Sub */}
+      {sub?.projectId && (() => {
+        const hasIns = !!(gcCredentialsSub?.insCompany || gcCredentialsSub?.insExpDate);
+        const hasLic = !!(gcCredentialsSub?.licNumber || gcCredentialsSub?.licExpDate);
+        const hasAny = hasIns || hasLic;
+        const insExpired = gcCredentialsSub?.insExpDate ? subCredDaysUntilExpiry(gcCredentialsSub.insExpDate)! < 0 : false;
+        const licExpired = gcCredentialsSub?.licExpDate ? subCredDaysUntilExpiry(gcCredentialsSub.licExpDate)! < 0 : false;
+        const anyExpired = insExpired || licExpired;
+        return (
+          <div className="mb-8 space-y-4">
+            {anyExpired && (
+              <div className="rounded-2xl border-2 border-red-500 bg-red-50 dark:bg-red-950/30 p-4 flex items-start gap-3">
+                <ShieldX className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-700 dark:text-red-400 text-sm">GC credentials require attention</p>
+                  <p className="text-xs text-red-600 dark:text-red-300 mt-0.5">One or more of your GC's credentials has expired. Please contact your GC to update their information.</p>
+                </div>
+              </div>
+            )}
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="text-base font-bold font-display flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" /> GC Credentials
+                </h3>
+                {anyExpired && <span className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 px-2.5 py-1 rounded-full"><ShieldX className="h-3.5 w-3.5" /> Attention Required</span>}
+              </div>
+              {!hasAny ? (
+                <div className="py-6 text-center text-muted-foreground">
+                  <Shield className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Your GC has not yet uploaded their credentials for this project.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Insurance Card */}
+                  <div className="rounded-xl border border-border p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold flex items-center gap-2"><Shield className="h-4 w-4 text-primary" /> Insurance Certificate</p>
+                      {subCredBadge(gcCredentialsSub?.insExpDate)}
+                    </div>
+                    {!hasIns ? (
+                      <p className="text-xs text-muted-foreground">Not yet entered by GC.</p>
+                    ) : (
+                      <dl className="space-y-1.5 text-sm">
+                        {gcCredentialsSub?.insCompany && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Company</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.insCompany}</dd></div>}
+                        {gcCredentialsSub?.insPolicyNumber && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Policy #</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.insPolicyNumber}</dd></div>}
+                        {gcCredentialsSub?.insGLCoverage && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Gen. Liability</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.insGLCoverage}</dd></div>}
+                        {gcCredentialsSub?.insWCCoverage && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Workers Comp</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.insWCCoverage}</dd></div>}
+                        {gcCredentialsSub?.insExpDate && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Expires</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.insExpDate}</dd></div>}
+                        {gcCredentialsSub?.insCertPath && (
+                          <div className="pt-1">
+                            <button
+                              onClick={() => handleDownloadGcCredDoc(sub.projectId, "cert")}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Download Certificate
+                            </button>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </div>
+
+                  {/* License Card */}
+                  <div className="rounded-xl border border-border p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-primary" /> Contractor License</p>
+                      {subCredBadge(gcCredentialsSub?.licExpDate)}
+                    </div>
+                    {!hasLic ? (
+                      <p className="text-xs text-muted-foreground">Not yet entered by GC.</p>
+                    ) : (
+                      <dl className="space-y-1.5 text-sm">
+                        {gcCredentialsSub?.licNumber && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">License #</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.licNumber}</dd></div>}
+                        {gcCredentialsSub?.licType && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Type</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.licType}</dd></div>}
+                        {gcCredentialsSub?.licState && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">State</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.licState}</dd></div>}
+                        {gcCredentialsSub?.licExpDate && <div className="flex justify-between gap-2"><dt className="text-muted-foreground text-xs">Expires</dt><dd className="font-medium text-xs text-right">{gcCredentialsSub.licExpDate}</dd></div>}
+                        {gcCredentialsSub?.licDocPath && (
+                          <div className="pt-1">
+                            <button
+                              onClick={() => handleDownloadGcCredDoc(sub.projectId, "license")}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Download License Doc
+                            </button>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* FLAGGED INVOICES BANNER */}
       {flaggedInvoices.length > 0 && (
