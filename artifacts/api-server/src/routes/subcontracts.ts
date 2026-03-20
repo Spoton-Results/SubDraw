@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable, complianceChecklistItemsTable, complianceCompletionsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and, gt, count } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
-import { getEffectiveGcId, getActorName } from "../lib/auth.js";
+import { getEffectiveGcId, getActorName, getActorRoleLabel } from "../lib/auth.js";
 import {
   sendChangeOrderCreatedEmail,
   sendChangeOrderSubmittedBySubEmail,
@@ -287,7 +287,7 @@ router.post("/:subcontractId/contract-document", requireAuth, requireGC, async (
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
 
-  await logActivity(subcontractId, "CONTRACT_UPLOADED", `Subcontract agreement uploaded: ${fileName}`, getActorName(user), "GC");
+  await logActivity(subcontractId, "CONTRACT_UPLOADED", `Subcontract agreement uploaded: ${fileName}`, getActorName(user), getActorRoleLabel(user));
 
   // Notify sub
   const [subUser] = await db.select().from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
@@ -327,7 +327,7 @@ router.delete("/:subcontractId/contract-document", requireAuth, requireGC, async
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
 
-  await logActivity(subcontractId, "CONTRACT_REMOVED", "Subcontract agreement removed by GC", getActorName(user), "GC");
+  await logActivity(subcontractId, "CONTRACT_REMOVED", "Subcontract agreement removed by GC", getActorName(user), getActorRoleLabel(user));
   res.json(updated);
 });
 
@@ -391,7 +391,7 @@ router.delete("/:subcontractId/signed-contract", requireAuth, requireGC, async (
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
 
-  await logActivity(subcontractId, "CONTRACT_REMOVED", "Signed contract removed by GC", getActorName(user), "GC");
+  await logActivity(subcontractId, "CONTRACT_REMOVED", "Signed contract removed by GC", getActorName(user), getActorRoleLabel(user));
   res.json(updated);
 });
 
@@ -410,7 +410,7 @@ router.post("/:subcontractId/waive-contract", requireAuth, requireGC, async (req
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
 
-  await logActivity(subcontractId, "CONTRACT_WAIVED", "Contract signature requirement waived by GC", getActorName(user), "GC");
+  await logActivity(subcontractId, "CONTRACT_WAIVED", "Contract signature requirement waived by GC", getActorName(user), getActorRoleLabel(user));
   res.json(updated);
 });
 
@@ -429,7 +429,7 @@ router.delete("/:subcontractId/waive-contract", requireAuth, requireGC, async (r
     .where(eq(subcontractsTable.id, subcontractId))
     .returning();
 
-  await logActivity(subcontractId, "CONTRACT_UNWAIVED", "Contract signature requirement reinstated by GC", getActorName(user), "GC");
+  await logActivity(subcontractId, "CONTRACT_UNWAIVED", "Contract signature requirement reinstated by GC", getActorName(user), getActorRoleLabel(user));
   res.json(updated);
 });
 
@@ -458,8 +458,8 @@ router.patch("/:subcontractId/payment-terms", requireAuth, requireGC, async (req
     subcontractId,
     "PAYMENT_TERMS_UPDATED",
     `Payment terms updated to Net ${paymentTermsDays}`,
-    (user as any).companyName ?? "GC",
-    "GC"
+    getActorName(user),
+    getActorRoleLabel(user)
   );
 
   res.json(updated);
@@ -517,7 +517,7 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     "CO_CREATED",
     `Change order "${description}" for $${Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2 })} created`,
     user.role === "GC" ? getActorName(user) : sc.sub.companyName,
-    user.role
+    user.role === "GC" ? getActorRoleLabel(user) : "SUB"
   );
 
   const appUrl = getAppUrl(req);
@@ -984,7 +984,7 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
 
   const rawSc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
   const sc = await getSubcontractWithRelations(rawSc);
-  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, getActorName(gcUser), "GC");
+  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} marked as paid via ${paymentMethod} on ${paymentDate} — awaiting sub confirmation`, getActorName(gcUser), getActorRoleLabel(gcUser));
 
   sendPaymentRecordedEmail({
     toEmail: sc.sub.email,

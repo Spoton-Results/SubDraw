@@ -5,7 +5,7 @@ import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
 import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
-import { getEffectiveGcId, isProjectManager, getActorName, canSeeAllProjects, isBiddingOnlyRole } from "../lib/auth.js";
+import { getEffectiveGcId, isProjectManager, getActorName, getActorRoleLabel, canSeeAllProjects, isBiddingOnlyRole } from "../lib/auth.js";
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
 import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
@@ -890,7 +890,7 @@ router.post("/:projectId/subcontracts/direct", requireAuth, requireGC, async (re
     type: "SUBCONTRACT_CREATED",
     description: `Subcontract created for ${sub.companyName} for $${Number(baseContractAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
     actorName: getActorName(gcUser),
-    actorRole: "GC",
+    actorRole: getActorRoleLabel(gcUser),
   }).catch(err => console.error("[activity] Failed to log direct subcontract creation:", err));
 
   // Send added-to-project email with magic link
@@ -1089,8 +1089,8 @@ router.post("/:projectId/change-orders/bulk", requireAuth, requireGC, async (req
       subcontractId: entry.subcontractId,
       type: "CO_CREATED",
       description: `Change order "${description}" for $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} created`,
-      actorName: gcUserData?.companyName ?? "GC",
-      actorRole: "GC",
+      actorName: getActorName(gcUser),
+      actorRole: getActorRoleLabel(gcUser),
     }).catch(() => {});
 
     // Send email to sub

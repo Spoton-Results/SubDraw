@@ -39,6 +39,7 @@ import toast from "react-hot-toast";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { useUpload } from "@workspace/object-storage-web";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -92,6 +93,7 @@ export default function ProjectDetail() {
   const projectId = params?.id || "";
 
   const { data: user } = useGetMe();
+  const perms = usePermissions();
   const { data: project, isLoading } = useGetProject(projectId);
   usePageTitle(project?.name ?? "Project");
   const queryClient = useQueryClient();
@@ -1282,7 +1284,7 @@ export default function ProjectDetail() {
       )}
 
       {/* GC FINANCIAL OVERVIEW */}
-      {isGC && project.subcontracts && project.subcontracts.length > 0 && (() => {
+      {isGC && perms.hasFinancialAccess && project.subcontracts && project.subcontracts.length > 0 && (() => {
         const subs = project.subcontracts!;
         const totalBase = subs.reduce((s, c) => s + c.baseContractAmount, 0);
         const totalApproved = subs.reduce((s, c) => s + (c.scoreboard?.currentApprovedTotal ?? c.baseContractAmount), 0);
@@ -1825,12 +1827,12 @@ export default function ProjectDetail() {
                                     )}
                                   </td>
                                 )}
-                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.base ?? sub.baseContractAmount)}</td>
-                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(sb?.coTotal ?? 0)}</td>
-                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount)}</td>
-                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{formatCurrency(sb?.invoicedTotal ?? 0)}</td>
-                                <td className={cn("px-4 py-3 text-right font-mono font-semibold", isNeg ? "text-red-600" : "text-green-600")}>
-                                  {formatCurrency(remaining)}
+                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(sb?.base ?? sub.baseContractAmount) : <span className="text-muted-foreground text-xs">—</span>}</td>
+                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{perms.hasFinancialAccess ? formatCurrency(sb?.coTotal ?? 0) : <span className="text-xs">—</span>}</td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-right font-mono font-semibold">{perms.hasFinancialAccess ? formatCurrency(sb?.currentApprovedTotal ?? sub.baseContractAmount) : <span className="text-muted-foreground text-xs">—</span>}</td>
+                                <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(sb?.invoicedTotal ?? 0) : <span className="text-muted-foreground text-xs">—</span>}</td>
+                                <td className={cn("px-4 py-3 text-right font-mono font-semibold", perms.hasFinancialAccess && (isNeg ? "text-red-600" : "text-green-600"))}>
+                                  {perms.hasFinancialAccess ? formatCurrency(remaining) : <span className="text-muted-foreground text-xs">—</span>}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <Link href={`/subcontracts/${sub.id}`}>
@@ -1850,12 +1852,12 @@ export default function ProjectDetail() {
                               {isGC && <td className="hidden lg:table-cell"></td>}
                               {isGC && <td className="hidden xl:table-cell"></td>}
                               {isGC && complianceItems.length > 0 && <td className="hidden md:table-cell"></td>}
-                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.base)}</td>
-                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{formatCurrency(totals.coTotal)}</td>
-                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.approved)}</td>
-                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{formatCurrency(totals.invoiced)}</td>
-                              <td className={cn("px-4 py-3 text-right font-mono", totals.remaining < 0 ? "text-red-600" : "text-green-600")}>
-                                {formatCurrency(totals.remaining)}
+                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.base) : "—"}</td>
+                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono text-muted-foreground">{perms.hasFinancialAccess ? formatCurrency(totals.coTotal) : "—"}</td>
+                              <td className="hidden sm:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.approved) : "—"}</td>
+                              <td className="hidden md:table-cell px-4 py-3 text-right font-mono">{perms.hasFinancialAccess ? formatCurrency(totals.invoiced) : "—"}</td>
+                              <td className={cn("px-4 py-3 text-right font-mono", perms.hasFinancialAccess && (totals.remaining < 0 ? "text-red-600" : "text-green-600"))}>
+                                {perms.hasFinancialAccess ? formatCurrency(totals.remaining) : "—"}
                               </td>
                               <td></td>
                             </tr>

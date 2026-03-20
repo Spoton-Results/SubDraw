@@ -115,6 +115,12 @@ export function getActorName(user: TokenPayload): string {
   return user.displayName || user.companyName;
 }
 
+/** Returns the human-readable role label for activity log entries (e.g. "Project Manager", "Superintendent"). */
+export function getActorRoleLabel(user: TokenPayload): string {
+  if (user.role !== "GC") return user.role;
+  return GC_TEAM_ROLE_META[getGCTeamRole(user)].label;
+}
+
 // ── Permission helpers ────────────────────────────────────────────────────────
 
 /** Sees ALL projects without needing project assignments (owner sees all by being the GC). */

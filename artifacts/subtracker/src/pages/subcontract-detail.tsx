@@ -28,6 +28,7 @@ import {
   ListChecks, SquareCheck, Download,
 } from "lucide-react";
 import { useUpload } from "@workspace/object-storage-web";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
 
@@ -63,6 +64,7 @@ export default function SubcontractDetail() {
   const subcontractId = params?.id || "";
 
   const { data: user } = useGetMe();
+  const perms = usePermissions();
   const { data: sub, isLoading } = useGetSubcontract(subcontractId);
   usePageTitle(sub?.description ?? "Subcontract");
   const { data: activityLog = [], isLoading: activityLoading } = useGetSubcontractActivity(subcontractId);
@@ -971,7 +973,9 @@ export default function SubcontractDetail() {
           <div className="px-6 pt-4 pb-2">
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm text-muted-foreground">Invoiced so far</span>
-              <span className="font-mono text-base tabular-nums text-muted-foreground">{formatCurrency(grossInvoiced)}</span>
+              <span className="font-mono text-base tabular-nums text-muted-foreground">
+                {isGC && !perms.hasFinancialAccess ? "—" : formatCurrency(grossInvoiced)}
+              </span>
             </div>
           </div>
 
@@ -979,12 +983,16 @@ export default function SubcontractDetail() {
           <div className="px-6 pb-5">
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm font-bold text-foreground">Still to be paid</span>
-              <span className={cn(
-                "font-mono font-bold tabular-nums text-3xl leading-none",
-                sb.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
-              )}>
-                {sb.remaining < 0 ? `−${formatCurrency(Math.abs(sb.remaining))}` : formatCurrency(sb.remaining)}
-              </span>
+              {isGC && !perms.hasFinancialAccess ? (
+                <span className="text-muted-foreground italic text-sm">Restricted</span>
+              ) : (
+                <span className={cn(
+                  "font-mono font-bold tabular-nums text-3xl leading-none",
+                  sb.remaining <= 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                )}>
+                  {sb.remaining < 0 ? `−${formatCurrency(Math.abs(sb.remaining))}` : formatCurrency(sb.remaining)}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -1041,14 +1049,16 @@ export default function SubcontractDetail() {
           <div className="px-6 pt-5 pb-0 space-y-2.5">
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm font-bold text-foreground uppercase tracking-wide">Base Contract</span>
-              <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(sb.base)}</span>
+              <span className="font-mono text-base tabular-nums text-foreground">
+                {isGC && !perms.hasFinancialAccess ? <span className="text-muted-foreground italic text-sm">Restricted</span> : formatCurrency(sb.base)}
+              </span>
             </div>
 
             {/* APPROVED CHANGE ORDERS — always shown */}
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm text-foreground">Approved Change Orders</span>
               <span className="font-mono text-base tabular-nums text-foreground">
-                {sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal)}
+                {isGC && !perms.hasFinancialAccess ? "—" : (sb.coTotal > 0 ? `+${formatCurrency(sb.coTotal)}` : formatCurrency(sb.coTotal))}
               </span>
             </div>
           </div>
@@ -1059,7 +1069,9 @@ export default function SubcontractDetail() {
           <div className="px-6 py-3.5">
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-base font-bold text-foreground uppercase tracking-wide">Approved Total</span>
-              <span className="font-mono text-lg font-bold tabular-nums text-foreground">{formatCurrency(sb.currentApprovedTotal)}</span>
+              <span className="font-mono text-lg font-bold tabular-nums text-foreground">
+                {isGC && !perms.hasFinancialAccess ? <span className="text-muted-foreground italic text-sm">Restricted</span> : formatCurrency(sb.currentApprovedTotal)}
+              </span>
             </div>
           </div>
 
@@ -1068,7 +1080,9 @@ export default function SubcontractDetail() {
             {/* TOTAL INVOICED */}
             <div className="flex items-baseline justify-between gap-4">
               <span className="text-sm text-foreground">Total Invoiced</span>
-              <span className="font-mono text-base tabular-nums text-foreground">{formatCurrency(grossInvoiced)}</span>
+              <span className="font-mono text-base tabular-nums text-foreground">
+                {isGC && !perms.hasFinancialAccess ? "—" : formatCurrency(grossInvoiced)}
+              </span>
             </div>
 
             {/* SCOPE COMPLETE — from sub's latest invoice */}
@@ -1953,7 +1967,7 @@ export default function SubcontractDetail() {
         <Card className="flex flex-col min-h-[360px] lg:h-[600px]">
           <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
             <CardTitle>Change Orders</CardTitle>
-            {isGC && (
+            {isGC && perms.canCreateChangeOrders && (
               <Button size="sm" onClick={() => setCoDialogOpen(true)} className="gap-1 min-h-[44px]">
                 <PlusCircle className="h-4 w-4" /> Create CO
               </Button>
@@ -2165,7 +2179,7 @@ export default function SubcontractDetail() {
                         )}
                       </div>
                       <div className="flex flex-col gap-2 items-end shrink-0">
-                        {isGC && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
+                        {isGC && perms.canApproveInvoices && (inv.status === "PENDING" || inv.status === "FLAGGED") && (
                           <>
                             {inv.status === "FLAGGED" ? (
                               <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white min-h-[44px] text-xs" onClick={() => setOverrideDialogOpen({ open: true, id: inv.id })}>
@@ -2186,7 +2200,7 @@ export default function SubcontractDetail() {
                             </Button>
                           </>
                         )}
-                        {isGC && inv.status === "APPROVED" && (
+                        {isGC && perms.canApproveInvoices && inv.status === "APPROVED" && (
                           <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
                             <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
                           </Button>
@@ -2460,7 +2474,13 @@ export default function SubcontractDetail() {
                           <Building2 className="h-3 w-3" />
                           {entry.actorName}
                         </span>
-                        <Badge variant={entry.actorRole === "GC" ? "default" : "secondary"} className="text-[10px] py-0 h-4">
+                        <Badge
+                          variant={entry.actorRole === "SUB" ? "secondary" : "default"}
+                          className={cn(
+                            "text-[10px] py-0 h-4",
+                            entry.actorRole === "OWNER" && "bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100"
+                          )}
+                        >
                           {entry.actorRole}
                         </Badge>
                         <span className="text-xs text-muted-foreground">

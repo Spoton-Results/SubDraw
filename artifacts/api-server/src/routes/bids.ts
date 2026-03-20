@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { bidsTable, subcontractsTable, projectsTable, usersTable, activityLogsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
+import { getActorRoleLabel } from "../lib/auth.js";
 import { sendBidAwardedEmail } from "../lib/email.js";
 
 const router = Router({ mergeParams: true });
@@ -39,6 +40,7 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
+  const gcActor = (req as any).user;
   const { bidId } = req.params;
   const [bid] = await db.select().from(bidsTable).where(eq(bidsTable.id, bidId)).limit(1);
   if (!bid) {
@@ -68,7 +70,7 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     type: "SUBCONTRACT_CREATED",
     description: `Subcontract awarded to ${sub.companyName} for $${bid.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
     actorName: gc.companyName,
-    actorRole: "GC",
+    actorRole: getActorRoleLabel(gcActor),
   }).catch(err => console.error("[activity] Failed to log subcontract creation:", err));
 
   const appUrl = process.env.APP_URL || `https://${req.hostname}`;

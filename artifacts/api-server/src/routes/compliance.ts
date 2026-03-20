@@ -4,7 +4,7 @@ import { complianceChecklistItemsTable, complianceCompletionsTable, subcontracts
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
-import { getActorName } from "../lib/auth.js";
+import { getActorName, getActorRoleLabel } from "../lib/auth.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
@@ -173,7 +173,7 @@ router.post("/:itemId/complete/:subcontractId", requireAuth, async (req, res) =>
   const isSub = user.role === "SUB" && sc.subId === user.id;
   if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const actorRole = isGC ? "GC" : "SUB";
+  const actorRole = isGC ? getActorRoleLabel(user) : "SUB";
   const actorName = getActorName(user);
   const now = new Date();
 
@@ -254,7 +254,7 @@ router.delete("/:itemId/complete/:subcontractId", requireAuth, async (req, res) 
     type: "COMPLIANCE_RESET",
     description: `Compliance item marked incomplete by ${getActorName(user)}`,
     actorName: getActorName(user),
-    actorRole: "GC",
+    actorRole: getActorRoleLabel(user),
   }).catch(() => {});
 
   res.status(204).send();
@@ -280,7 +280,7 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
   const isSub = user.role === "SUB" && sc.subId === user.id;
   if (!isGC && !isSub) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  const actorRole = isGC ? "GC" : "SUB";
+  const actorRole = isGC ? getActorRoleLabel(user) : "SUB";
   const actorName = getActorName(user);
   const now = new Date();
 
