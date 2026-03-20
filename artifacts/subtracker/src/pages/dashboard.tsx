@@ -76,6 +76,7 @@ function getItemIcon(type: string) {
     case "PAST_DUE_INVOICE":   return <Banknote className="h-4 w-4 shrink-0" />;
     case "UNSIGNED_CONTRACT":  return <PenLine className="h-4 w-4 shrink-0" />;
     case "INSURANCE_EXPIRING": return <Shield className="h-4 w-4 shrink-0" />;
+    case "PROJECTED_OVERRUN":  return <AlertTriangle className="h-4 w-4 shrink-0" />;
     default:                   return <AlertTriangle className="h-4 w-4 shrink-0" />;
   }
 }

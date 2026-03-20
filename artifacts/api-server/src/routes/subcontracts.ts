@@ -84,6 +84,39 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
   const latestPctInv = sortedInvs.find(i => !i.isRetentionRelease && i.status !== "REJECTED" && i.status !== "CANCELLED" && i.percentageComplete != null);
   const latestPercentageComplete: number | null = latestPctInv?.percentageComplete ?? null;
 
+  // Projection: cost-per-percentage-point extrapolated to 100%
+  let projectedFinalCost: number | null = null;
+  let projectedVariance: number | null = null;
+  let isProjectedOverrun = false;
+  let projectionBasisDate: string | null = null;
+  let projectionBasisInvoiceNumber: string | null = null;
+  if (latestPctInv && latestPercentageComplete != null && latestPercentageComplete > 0 && grossInvoiced > 0) {
+    const costPerPoint = grossInvoiced / latestPercentageComplete;
+    projectedFinalCost = costPerPoint * 100;
+    projectedVariance = currentApprovedTotal - projectedFinalCost;
+    isProjectedOverrun = projectedFinalCost > currentApprovedTotal;
+    projectionBasisDate = latestPctInv.createdAt instanceof Date
+      ? latestPctInv.createdAt.toISOString()
+      : String(latestPctInv.createdAt);
+    projectionBasisInvoiceNumber = latestPctInv.invoiceNumber;
+  }
+
+  // Percentage complete history — chronological list of all invoices that reported a %, for charting
+  const percentageCompleteHistory = invs
+    .filter(i => !i.isRetentionRelease && i.status !== "REJECTED" && i.status !== "CANCELLED" && i.percentageComplete != null)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map(i => ({
+      date: i.createdAt instanceof Date ? i.createdAt.toISOString() : String(i.createdAt),
+      percentageComplete: i.percentageComplete!,
+      invoiceNumber: i.invoiceNumber,
+      amount: i.amount,
+    }));
+
+  // Billing vs scope divergence flags
+  const billingPercent = currentApprovedTotal > 0 ? (grossInvoiced / currentApprovedTotal) * 100 : 0;
+  const billingAheadWarning = latestPercentageComplete != null && billingPercent > latestPercentageComplete + 15;
+  const underbillingNote = latestPercentageComplete != null && latestPercentageComplete > billingPercent + 20;
+
   return {
     base: baseContractAmount,
     coTotal,
@@ -100,6 +133,14 @@ async function computeScoreboard(subcontractId: string, baseContractAmount: numb
     lastInvoice,
     retentionPercentage,
     latestPercentageComplete,
+    projectedFinalCost,
+    projectedVariance,
+    isProjectedOverrun,
+    projectionBasisDate,
+    projectionBasisInvoiceNumber,
+    percentageCompleteHistory,
+    billingAheadWarning,
+    underbillingNote,
   };
 }
 

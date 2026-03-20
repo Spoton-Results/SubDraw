@@ -521,6 +521,43 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
     }
   }
 
+  // UPCOMING: Projected overruns — subcontracts where billing pace projects exceeding approved total
+  for (const sc of subcontracts) {
+    const scInvs = allInvoices.filter(i => i.subcontractId === sc.id);
+    const cos = allCOs.filter(c => c.subcontractId === sc.id && c.status === "APPROVED");
+    const coTotal = cos.reduce((s, c) => s + c.amount, 0);
+    const currentApprovedTotal = sc.baseContractAmount + coTotal;
+    const grossInvoiced = scInvs
+      .filter(i => ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status))
+      .reduce((s, i) => s + i.amount, 0);
+    const sortedScInvs = [...scInvs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const latestPctInv = sortedScInvs.find(i =>
+      !i.isRetentionRelease && i.status !== "REJECTED" && i.status !== "CANCELLED" && i.percentageComplete != null
+    );
+    if (latestPctInv && latestPctInv.percentageComplete != null && latestPctInv.percentageComplete > 0 && grossInvoiced > 0) {
+      const projectedFinalCost = (grossInvoiced / latestPctInv.percentageComplete) * 100;
+      if (projectedFinalCost > currentApprovedTotal) {
+        const overrunAmount = projectedFinalCost - currentApprovedTotal;
+        const project = projectMap[sc.projectId];
+        if (!project) continue;
+        const subName = subUserMap[sc.subId] ?? "Unknown";
+        items.push({
+          id: `overrun-${sc.id}`,
+          type: "PROJECTED_OVERRUN",
+          urgency: "UPCOMING",
+          projectId: project.id,
+          projectName: project.name,
+          subcontractId: sc.id,
+          subCompanyName: subName,
+          description: `${subName} is projected to exceed their approved contract at the current billing rate`,
+          amount: Math.round(projectedFinalCost),
+          overAmount: Math.round(overrunAmount),
+          href: `/subcontracts/${sc.id}`,
+        });
+      }
+    }
+  }
+
   // Sort: URGENT first, PENDING second, UPCOMING third
   const urgencyOrder = { URGENT: 0, PENDING: 1, UPCOMING: 2 };
   items.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);

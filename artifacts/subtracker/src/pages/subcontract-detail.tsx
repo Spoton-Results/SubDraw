@@ -21,12 +21,13 @@ import { formatCurrency, cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, Check, X, AlertTriangle, FileText, PlusCircle,
-  Activity, Receipt, TrendingUp, Trash2, Hash, ClipboardList, MessageSquare,
+  Activity, Receipt, TrendingUp, TrendingDown, Trash2, Hash, ClipboardList, MessageSquare,
   Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
   Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
   ListChecks, SquareCheck, Download,
 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useUpload } from "@workspace/object-storage-web";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Textarea } from "@/components/ui/textarea";
@@ -451,6 +452,17 @@ export default function SubcontractDetail() {
   const grossInvoiced: number = sb.grossInvoiced ?? 0;
   const totalRetentionHeld: number = sb.totalRetentionHeld ?? 0;
   const netPaid: number = sb.netPaid ?? 0;
+
+  // Projection data from backend scoreboard
+  const projectedFinalCost: number | null = (sb as any).projectedFinalCost ?? null;
+  const projectedVariance: number | null = (sb as any).projectedVariance ?? null;
+  const isProjectedOverrun: boolean = (sb as any).isProjectedOverrun ?? false;
+  const projectionBasisDate: string | null = (sb as any).projectionBasisDate ?? null;
+  const projectionBasisInvoiceNumber: string | null = (sb as any).projectionBasisInvoiceNumber ?? null;
+  const percentageCompleteHistory: Array<{ date: string; percentageComplete: number; invoiceNumber: string; amount: number }> =
+    (sb as any).percentageCompleteHistory ?? [];
+  const billingAheadWarning: boolean = (sb as any).billingAheadWarning ?? false;
+  const underbillingNote: boolean = (sb as any).underbillingNote ?? false;
   const projectStatus: string = (sub as any).project?.status ?? "";
 
   const canReleaseRetention = isGC && projectStatus === "CLOSED" && retentionBalance > 0;
@@ -1037,6 +1049,23 @@ export default function SubcontractDetail() {
         </div>
       )}
 
+      {/* PROJECTED OVERRUN BANNER */}
+      {isGC && isProjectedOverrun && projectedFinalCost !== null && projectedVariance !== null && perms.hasFinancialAccess && (
+        <div className="mb-6 flex items-start gap-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-300 dark:border-yellow-700 rounded-2xl px-5 py-4">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-yellow-700 dark:text-yellow-300 text-sm">
+              This subcontract is projected to exceed the approved total by {formatCurrency(Math.abs(projectedVariance))} based on current billing rate — consider a change order now
+            </p>
+            {projectionBasisDate && (
+              <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-0.5">
+                Projection based on {projectionBasisInvoiceNumber ? `Invoice #${projectionBasisInvoiceNumber}` : "last invoice"} dated {format(new Date(projectionBasisDate), "MMM d, yyyy")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* SCOREBOARD — receipt / calculator-tape — single vertical column */}
       <div className="mb-6">
         <h2 className="text-xl font-bold font-display flex items-center gap-2 mb-3">
@@ -1099,6 +1128,48 @@ export default function SubcontractDetail() {
                   {latestPercentageComplete}%
                 </span>
               </div>
+            )}
+
+            {/* PROJECTION ROWS — only when there's billing history with a % reported */}
+            {projectedFinalCost !== null && (!isGC || perms.hasFinancialAccess) && (
+              <>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-sm text-foreground flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3 text-blue-500" />
+                    Projected Final Cost
+                  </span>
+                  <span className="font-mono text-base tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+                    {formatCurrency(projectedFinalCost)}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-sm text-foreground flex items-center gap-1">
+                    {projectedVariance !== null && projectedVariance >= 0
+                      ? <TrendingDown className="h-3 w-3 text-green-500" />
+                      : <AlertTriangle className="h-3 w-3 text-red-500" />
+                    }
+                    Projected Variance
+                  </span>
+                  <span className={cn(
+                    "font-mono text-base tabular-nums font-semibold",
+                    projectedVariance !== null && projectedVariance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                  )}>
+                    {projectedVariance !== null
+                      ? projectedVariance >= 0
+                        ? `+${formatCurrency(projectedVariance)}`
+                        : `−${formatCurrency(Math.abs(projectedVariance))}`
+                      : "—"
+                    }
+                  </span>
+                </div>
+                {projectionBasisDate && (
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    Based on sub reported % complete on{" "}
+                    {projectionBasisInvoiceNumber ? `Invoice #${projectionBasisInvoiceNumber}` : "last invoice"}{" "}
+                    ({format(new Date(projectionBasisDate), "MMM d, yyyy")})
+                  </p>
+                )}
+              </>
             )}
 
             {/* RETENTION HELD — only if retention is active and held */}
@@ -1270,6 +1341,24 @@ export default function SubcontractDetail() {
             </div>
           </>
         )}
+        {/* BILLING DIVERGENCE WARNINGS */}
+        {isGC && billingAheadWarning && latestPercentageComplete != null && (
+          <div className="flex items-start gap-2 pt-2 border-t border-border">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+            <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+              Sub is billing ahead of reported progress — verify completion on site ({invoicedPercent}% invoiced vs {latestPercentageComplete}% reported complete)
+            </p>
+          </div>
+        )}
+        {isGC && underbillingNote && latestPercentageComplete != null && (
+          <div className="flex items-start gap-2 pt-2 border-t border-border">
+            <AlertTriangle className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+              Sub may be underbilling — consider discussing billing schedule ({latestPercentageComplete}% reported complete but only {invoicedPercent}% invoiced)
+            </p>
+          </div>
+        )}
+
         {lastInvoice && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
             <Receipt className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1280,6 +1369,57 @@ export default function SubcontractDetail() {
           </div>
         )}
       </div>
+
+      {/* PERCENTAGE COMPLETE HISTORY CHART */}
+      {percentageCompleteHistory.length >= 2 && (
+        <div className="bg-card border border-border/50 rounded-2xl p-5 mb-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Percent className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-muted-foreground">Scope Progress History</span>
+            <span className="text-xs text-muted-foreground ml-auto">% complete per invoice</span>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={percentageCompleteHistory} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <XAxis
+                dataKey="date"
+                tickFormatter={(d) => format(new Date(d), "M/d")}
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tickFormatter={(v) => `${v}%`}
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-md text-xs">
+                      <p className="font-bold text-foreground">{d.percentageComplete}% complete</p>
+                      <p className="text-muted-foreground">Invoice #{d.invoiceNumber}</p>
+                      <p className="text-muted-foreground">{format(new Date(d.date), "MMM d, yyyy")}</p>
+                    </div>
+                  );
+                }}
+              />
+              <ReferenceLine y={100} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+              <Line
+                type="monotone"
+                dataKey="percentageComplete"
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
+                dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* INSURANCE DETAILS CARD */}
       <Card className={cn(
