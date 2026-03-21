@@ -97,7 +97,8 @@ async function getProjectWithDetails(projectId: string, requestingUserId?: strin
   const bids = await db.select().from(bidsTable).where(eq(bidsTable.projectId, projectId));
   const bidsWithSubs = await Promise.all(bids.map(async (b) => {
     const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, b.subId)).limit(1);
-    return { ...b, sub };
+    const [member] = await db.select({ tradeCategory: projectMembersTable.tradeCategory }).from(projectMembersTable).where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, b.subId))).limit(1);
+    return { ...b, sub, tradeCategory: member?.tradeCategory ?? null };
   }));
 
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
@@ -278,7 +279,7 @@ router.get("/archived", requireAuth, requireGC, async (req, res) => {
 router.post("/", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const effectiveGcId = getEffectiveGcId(user);
-  const { name, address, description, estimatedStartDate } = req.body;
+  const { name, address, description, estimatedStartDate, laborType } = req.body;
   if (!name) {
     res.status(400).json({ error: "name is required" });
     return;
@@ -312,12 +313,14 @@ router.post("/", requireAuth, requireGCOwner, async (req, res) => {
     }
   }
 
+  const validLaborType = laborType === "union" ? "union" : "non-union";
   const [project] = await db.insert(projectsTable).values({
     name,
     gcId: effectiveGcId,
     address: address || null,
     description: description || null,
     estimatedStartDate: estimatedStartDate || null,
+    laborType: validLaborType,
   }).returning();
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, effectiveGcId)).limit(1);
   res.status(201).json({ ...project, gc });

@@ -17,6 +17,7 @@ import bidComparisonRouter from "./bid-comparisons.js";
 import gcCredentialsRouter from "./gc-credentials.js";
 import tradeScopesRouter from "./trade-scopes.js";
 import scopeTemplatesRouter from "./scope-templates.js";
+import aiAnalysisRouter from "./ai-analysis.js";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use("/projects/:projectId/compliance-items", complianceRouter);
 router.use("/projects/:projectId/bid-comparison", bidComparisonRouter);
 router.use("/projects/:projectId/gc-credentials", gcCredentialsRouter);
 router.use("/projects/:projectId/trade-scopes", tradeScopesRouter);
+router.use("/projects/:projectId/ai-analysis", aiAnalysisRouter);
 router.use("/scope-templates", scopeTemplatesRouter);
 router.use("/subcontracts", subcontractsRouter);
 router.use("/storage", storageRouter);

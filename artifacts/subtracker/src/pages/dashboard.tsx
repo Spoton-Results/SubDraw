@@ -434,6 +434,7 @@ export default function Dashboard() {
   const [newAddress, setNewAddress] = React.useState("");
   const [newDescription, setNewDescription] = React.useState("");
   const [newStartDate, setNewStartDate] = React.useState("");
+  const [newLaborType, setNewLaborType] = React.useState<"non-union" | "union">("non-union");
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,7 +445,8 @@ export default function Dashboard() {
         address: newAddress.trim() || undefined,
         description: newDescription.trim() || undefined,
         estimatedStartDate: newStartDate || undefined,
-      }});
+        laborType: newLaborType,
+      } as any});
       toast.success("Project created!");
       queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
       setIsCreateOpen(false);
@@ -452,6 +454,7 @@ export default function Dashboard() {
       setNewAddress("");
       setNewDescription("");
       setNewStartDate("");
+      setNewLaborType("non-union");
     } catch (err: any) {
       const errCode = err?.data?.error;
       if (err?.status === 402 || errCode === "SUBSCRIPTION_REQUIRED" || errCode === "PLAN_LIMIT_REACHED") {
@@ -1167,6 +1170,36 @@ export default function Dashboard() {
               value={newStartDate}
               onChange={e => setNewStartDate(e.target.value)}
             />
+          </div>
+          <div>
+            <label className="text-sm font-semibold mb-2 block">Labor Type</label>
+            <div className="flex rounded-xl border border-input overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setNewLaborType("non-union")}
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-semibold transition-colors",
+                  newLaborType === "non-union"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted"
+                )}
+              >
+                Non-Union Open Shop
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewLaborType("union")}
+                className={cn(
+                  "flex-1 py-2.5 text-sm font-semibold border-l border-input transition-colors",
+                  newLaborType === "union"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted"
+                )}
+              >
+                Union Prevailing Wage
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">Used for AI bid range analysis. You can change this in project settings later.</p>
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)} className="min-h-[44px]">Cancel</Button>

@@ -188,6 +188,49 @@ export async function sendInviteEmail(opts: {
   await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
 }
 
+// ─── 2a. GC notified of new bid submission ────────────────────────────────────
+export async function sendNewBidEmail(opts: {
+  toEmail: string;
+  gcCompanyName: string;
+  projectName: string;
+  subCompanyName: string;
+  bidAmount: number;
+  tradeCategory?: string | null;
+  aiLow?: number | null;
+  aiHigh?: number | null;
+  appUrl: string;
+}) {
+  const { aiLow, aiHigh, bidAmount } = opts;
+  let aiBlock = "";
+  if (aiLow != null && aiHigh != null) {
+    const isWithin = bidAmount >= aiLow && bidAmount <= aiHigh;
+    const isAbove = bidAmount > aiHigh * 1.15;
+    const isBelow = bidAmount < aiLow * 0.85;
+    let rangeStatus = "";
+    if (isAbove) rangeStatus = "⚠️ Above expected range (more than 15% above high estimate)";
+    else if (isBelow) rangeStatus = "⚠️ Below expected range (more than 15% below low estimate — worth reviewing)";
+    else rangeStatus = "✅ Within expected range";
+    aiBlock = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#0c4a6e;">AI Bid Benchmark</p>
+      <p style="margin:0 0 4px;font-size:14px;color:#0369a1;">Range: ${formatCurrency(aiLow)} – ${formatCurrency(aiHigh)}</p>
+      <p style="margin:0;font-size:13px;color:#075985;">${rangeStatus}</p>
+    </div>`;
+  }
+  const html = layout(`
+    ${heading("New bid submitted")}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has submitted a bid on <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Subcontractor", value: opts.subCompanyName },
+      ...(opts.tradeCategory ? [{ label: "Trade", value: opts.tradeCategory }] : []),
+      { label: "Bid Amount", value: formatCurrency(bidAmount) },
+    ])}
+    ${aiBlock}
+    ${ctaButton("Review Bid", opts.appUrl)}
+  `);
+  await send(opts.toEmail, `New bid on ${opts.projectName} — ${opts.subCompanyName}`, html);
+}
+
 // ─── 2. Sub's bid awarded ──────────────────────────────────────────────────────
 export async function sendBidAwardedEmail(opts: {
   toEmail: string;

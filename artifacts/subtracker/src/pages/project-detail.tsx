@@ -30,10 +30,10 @@ import {
   Mail, DollarSign, Building, Award, FileSignature, FileText,
   ChevronRight, Copy, Check, KeyRound, Upload, Trash2, Calendar, AlertTriangle,
   Pencil, MapPin, CalendarDays, StickyNote, Save, Download, PartyPopper, XCircle,
-  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
+  Archive, ArchiveRestore, Lock, ClipboardList, TrendingUp, TrendingDown, Plus, Clock, Stamp, FileDown, Loader2, CheckCircle2,
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
   Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare, ListChecks, SquareCheck,
-  UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff, Scale,
+  UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff, Scale, BrainCircuit, RefreshCw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -223,6 +223,12 @@ export default function ProjectDetail() {
   const [ownerCoThreshold, setOwnerCoThreshold] = React.useState("");
   const [ownerSaving, setOwnerSaving] = React.useState(false);
 
+  // AI Bid Analysis state
+  const [aiAnalyzing, setAiAnalyzing] = React.useState(false);
+  const [aiArchiveExpanded, setAiArchiveExpanded] = React.useState(false);
+  const [aiFeedbackDropdown, setAiFeedbackDropdown] = React.useState<Record<string, boolean>>({});
+  const [aiFeedbackSaving, setAiFeedbackSaving] = React.useState<Record<string, boolean>>({});
+
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
   const isGC_for_views = user?.role === "GC";
@@ -399,6 +405,46 @@ export default function ProjectDetail() {
       setGcCredLicSection(false);
       toast.success("GC credentials saved");
     } finally { setGcCredSaving(false); }
+  }
+
+  async function handleRunAiAnalysis() {
+    if (!projectId) return;
+    setAiAnalyzing(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/ai-analysis`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "AI analysis failed");
+      toast.success("AI bid analysis complete!");
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+    } catch (err: any) {
+      toast.error(err.message || "AI analysis failed");
+    } finally {
+      setAiAnalyzing(false);
+    }
+  }
+
+  async function handleAiFeedback(trade: string, helpful: boolean, reason?: string) {
+    if (!projectId) return;
+    setAiFeedbackSaving(prev => ({ ...prev, [trade]: true }));
+    try {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/ai-analysis/feedback`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trade, helpful, reason }),
+      });
+      if (!res.ok) throw new Error("Failed to save feedback");
+      toast.success("Feedback saved");
+      setAiFeedbackDropdown(prev => ({ ...prev, [trade]: false }));
+      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save feedback");
+    } finally {
+      setAiFeedbackSaving(prev => ({ ...prev, [trade]: false }));
+    }
   }
 
   async function handleUploadGcInsCert(file: File) {
@@ -2774,6 +2820,205 @@ export default function ProjectDetail() {
                   </p>
                 )}
               </CardContent>
+            </Card>
+          )}
+
+          {/* AI BID BENCHMARKS — GC only, shown in BIDDING phase as live panel; archived in CONSTRUCTION+ */}
+          {isGC && project.status === "BIDDING" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <CardTitle className="flex items-center gap-2">
+                    <BrainCircuit className="h-5 w-5 text-primary" />
+                    AI Bid Benchmarks
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {(project as any).aiAnalysisAt && (
+                      <span className="text-xs text-muted-foreground hidden sm:block">
+                        Last run {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy h:mm a")}
+                      </span>
+                    )}
+                    <Button
+                      variant={(project as any).aiAnalysis ? "outline" : "default"}
+                      size="sm"
+                      className="gap-1.5 min-h-[36px]"
+                      onClick={handleRunAiAnalysis}
+                      disabled={aiAnalyzing || !planFiles.length}
+                    >
+                      {aiAnalyzing ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing…</>
+                      ) : (project as any).aiAnalysis ? (
+                        <><RefreshCw className="h-4 w-4" /> Re-analyze</>
+                      ) : (
+                        <><BrainCircuit className="h-4 w-4" /> Run AI Analysis</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!planFiles.length ? (
+                  <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
+                    <BrainCircuit className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-muted-foreground">Upload plan files to run AI analysis</p>
+                    <p className="text-xs text-muted-foreground mt-1">AI will analyze your plans and generate trade-by-trade bid benchmarks.</p>
+                  </div>
+                ) : aiAnalyzing ? (
+                  <div className="py-8 flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm font-semibold text-muted-foreground">Analyzing plan files…</p>
+                    <p className="text-xs text-muted-foreground">This may take up to 60 seconds</p>
+                  </div>
+                ) : !(project as any).aiAnalysis ? (
+                  <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
+                    <BrainCircuit className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-muted-foreground">No analysis yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click <strong>Run AI Analysis</strong> to generate trade-by-trade bid ranges from your {planFiles.length} plan {planFiles.length === 1 ? "file" : "files"}.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Labor type: <strong>{(project as any).laborType === "union" ? "Union Prevailing Wage" : "Non-Union Open Shop"}</strong></p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      AI-generated estimates based on {planFiles.length} plan {planFiles.length === 1 ? "file" : "files"} · {(project as any).laborType === "union" ? "Union Prevailing Wage" : "Non-Union Open Shop"} labor · Visible to GC team only
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {((project as any).aiAnalysis as Array<{ trade: string; lowEstimate: number; highEstimate: number; costDrivers: string; rangeFactors: string }>).map((item) => {
+                        const feedback = (project as any).aiAnalysisFeedback as Record<string, { helpful: boolean; reason?: string }> | null;
+                        const tradeFeedback = feedback?.[item.trade];
+                        const bidsForTrade = project.bids?.filter(b => (b.tradeCategory ?? "").toLowerCase() === item.trade.toLowerCase()) ?? [];
+                        return (
+                          <div key={item.trade} className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-semibold text-sm">{item.trade}</div>
+                              <div className="font-bold text-sm text-primary font-mono">
+                                {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
+                            {item.rangeFactors && (
+                              <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
+                            )}
+                            {bidsForTrade.length > 0 && (
+                              <div className="space-y-1.5 pt-1 border-t border-border/50">
+                                {bidsForTrade.map(bid => {
+                                  const status = bid.amount > item.highEstimate * 1.15 ? "above" : bid.amount < item.lowEstimate * 0.85 ? "below" : "within";
+                                  return (
+                                    <div key={bid.id} className="flex items-center justify-between gap-2">
+                                      <span className="text-xs text-muted-foreground truncate">{bid.sub?.companyName}</span>
+                                      <div className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full",
+                                        status === "within" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" :
+                                        "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-500"
+                                      )}>
+                                        {status === "within" ? <CheckCircle2 className="h-3 w-3" /> : status === "above" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                        {formatCurrency(bid.amount)} · {status === "within" ? "Within range" : status === "above" ? "Above range" : "Below range"}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between pt-1">
+                              {tradeFeedback ? (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  {tradeFeedback.helpful ? <ThumbsUp className="h-3 w-3 text-green-500" /> : <ThumbsDown className="h-3 w-3 text-amber-500" />}
+                                  {tradeFeedback.helpful ? "Marked helpful" : "Marked not helpful"}
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-1 relative">
+                                  <span className="text-xs text-muted-foreground">Helpful?</span>
+                                  <button
+                                    className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
+                                    title="Mark helpful"
+                                    onClick={() => handleAiFeedback(item.trade, true)}
+                                    disabled={aiFeedbackSaving[item.trade]}
+                                  >
+                                    {aiFeedbackSaving[item.trade] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground hover:text-green-600" />}
+                                  </button>
+                                  <div className="relative">
+                                    <button
+                                      className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors"
+                                      title="Mark not helpful"
+                                      onClick={() => setAiFeedbackDropdown(prev => ({ ...prev, [item.trade]: !prev[item.trade] }))}
+                                      disabled={aiFeedbackSaving[item.trade]}
+                                    >
+                                      <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600" />
+                                    </button>
+                                    {aiFeedbackDropdown[item.trade] && (
+                                      <div className="absolute left-0 bottom-8 z-20 w-52 bg-popover border border-border rounded-xl shadow-lg p-2 space-y-1">
+                                        <p className="text-xs font-semibold text-muted-foreground px-2 pb-1">Why wasn't this helpful?</p>
+                                        {["Range too wide", "Range too narrow", "Wrong trade", "Inaccurate for my market", "Other"].map(reason => (
+                                          <button
+                                            key={reason}
+                                            className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-muted transition-colors"
+                                            onClick={() => handleAiFeedback(item.trade, false, reason)}
+                                          >
+                                            {reason}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* AI BID BENCHMARKS ARCHIVED — CONSTRUCTION phase, read-only collapsed */}
+          {isGC && project.status === "CONSTRUCTION" && (project as any).aiAnalysis && (
+            <Card className="border-blue-200 dark:border-blue-800">
+              <button
+                className="w-full"
+                onClick={() => setAiArchiveExpanded(e => !e)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                      <BrainCircuit className="h-5 w-5" />
+                      AI Bid Benchmarks (Archived)
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      {(project as any).aiAnalysisAt && (
+                        <span className="text-xs text-muted-foreground hidden sm:block">
+                          Ran {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy")}
+                        </span>
+                      )}
+                      <Badge variant="secondary">Read-only</Badge>
+                      {aiArchiveExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                  </div>
+                </CardHeader>
+              </button>
+              {aiArchiveExpanded && (
+                <CardContent>
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">Historical AI estimates from the bidding phase. These ranges are archived and cannot be regenerated while the project is in construction.</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {((project as any).aiAnalysis as Array<{ trade: string; lowEstimate: number; highEstimate: number; costDrivers: string; rangeFactors: string }>).map((item) => (
+                        <div key={item.trade} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-semibold text-sm">{item.trade}</div>
+                            <div className="font-bold text-sm text-blue-700 dark:text-blue-400 font-mono">
+                              {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
+                          {item.rangeFactors && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
             </Card>
           )}
 

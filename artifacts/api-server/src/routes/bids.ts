@@ -4,7 +4,7 @@ import { bidsTable, subcontractsTable, projectsTable, usersTable, activityLogsTa
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { getActorRoleLabel } from "../lib/auth.js";
-import { sendBidAwardedEmail } from "../lib/email.js";
+import { sendBidAwardedEmail, sendNewBidEmail } from "../lib/email.js";
 
 const router = Router({ mergeParams: true });
 
@@ -60,6 +60,51 @@ router.post("/", requireAuth, async (req, res) => {
 
   const bidWithSub = await getBidWithSub(bid);
   res.status(201).json(bidWithSub);
+
+  // Notify GC of new bid (after responding to the sub)
+  setImmediate(async () => {
+    try {
+      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+      if (!project) return;
+      const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
+      if (!gc) return;
+
+      // Find trade category for this sub on this project
+      const [member] = await db.select().from(projectMembersTable).where(
+        and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, user.id))
+      ).limit(1);
+      const tradeCategory = member?.tradeCategory ?? null;
+
+      // Look up AI estimate range for this trade
+      let aiLow: number | null = null;
+      let aiHigh: number | null = null;
+      const aiAnalysis = project.aiAnalysis as any[] | null;
+      if (aiAnalysis && tradeCategory) {
+        const tradeEstimate = aiAnalysis.find((t: any) =>
+          t.trade?.toLowerCase() === tradeCategory.toLowerCase()
+        );
+        if (tradeEstimate) {
+          aiLow = tradeEstimate.lowEstimate ?? null;
+          aiHigh = tradeEstimate.highEstimate ?? null;
+        }
+      }
+
+      const appUrl = process.env.APP_URL || "https://subtracker.app";
+      await sendNewBidEmail({
+        toEmail: gc.email,
+        gcCompanyName: gc.companyName,
+        projectName: project.name,
+        subCompanyName: user.companyName,
+        bidAmount: Number(amount),
+        tradeCategory,
+        aiLow,
+        aiHigh,
+        appUrl: `${appUrl}/projects/${projectId}`,
+      });
+    } catch (err) {
+      console.error("[email] sendNewBidEmail failed:", err);
+    }
+  });
 });
 
 router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {

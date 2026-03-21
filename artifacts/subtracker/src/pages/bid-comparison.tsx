@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
-  ArrowLeft, Plus, Trash2, Printer, Download, BadgeCheck, AlertTriangle,
-  FileText, ChevronRight, GripVertical, Info, Scale,
+  ArrowLeft, Plus, Trash2, Printer, BadgeCheck, AlertTriangle,
+  FileText, GripVertical, Scale, TrendingUp, TrendingDown, CheckCircle2, BrainCircuit,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -52,6 +52,33 @@ function useBidComparison(projectId: string) {
     },
     enabled: !!projectId,
   });
+}
+
+type AiTradeEstimate = {
+  trade: string;
+  lowEstimate: number;
+  highEstimate: number;
+  costDrivers: string;
+  rangeFactors: string;
+};
+
+function useProjectAiAnalysis(projectId: string) {
+  return useQuery<{ aiAnalysis: AiTradeEstimate[] | null; aiAnalysisAt: string | null }>({
+    queryKey: ["project-ai-analysis", projectId],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/projects/${projectId}`, { credentials: "include" });
+      if (!r.ok) return { aiAnalysis: null, aiAnalysisAt: null };
+      const project = await r.json();
+      return { aiAnalysis: project.aiAnalysis ?? null, aiAnalysisAt: project.aiAnalysisAt ?? null };
+    },
+    enabled: !!projectId,
+  });
+}
+
+function getBidRangeStatus(amount: number, low: number, high: number): "within" | "above" | "below" | "neutral" {
+  if (amount > high * 1.15) return "above";
+  if (amount < low * 0.85) return "below";
+  return "within";
 }
 
 function useSaveComparison(projectId: string) {
@@ -112,6 +139,8 @@ export default function BidComparison() {
   const isGC = user?.role === "GC";
 
   const { data, isLoading, error } = useBidComparison(projectId);
+  const { data: aiData } = useProjectAiAnalysis(projectId);
+  const aiAnalysis = aiData?.aiAnalysis ?? null;
   const saveComparison = useSaveComparison(projectId);
 
   const [levelingNotes, setLevelingNotes] = React.useState("");
@@ -308,16 +337,52 @@ export default function BidComparison() {
               <td className="px-4 py-3 text-sm font-semibold text-foreground sticky left-0 bg-card z-10">Bid Amount</td>
               {submittedBids.map(bid => {
                 const variance = bid.amount - avgBidAmount;
+                const aiEstimate = aiAnalysis?.find(e => e.trade.toLowerCase() === (bid.tradeCategory ?? "").toLowerCase()) ?? null;
+                const rangeStatus = aiEstimate ? getBidRangeStatus(bid.amount, aiEstimate.lowEstimate, aiEstimate.highEstimate) : "neutral";
                 return (
                   <td key={bid.id} className="px-4 py-3 text-center">
                     <div className="font-bold font-mono text-lg text-foreground">{formatCurrency(bid.amount)}</div>
                     <div className={cn("text-xs font-semibold mt-0.5", variance > 0 ? "text-red-600 dark:text-red-400" : variance < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
                       {variance === 0 ? "avg" : variance > 0 ? `+${formatCurrency(variance)} above avg` : `${formatCurrency(variance)} below avg`}
                     </div>
+                    {aiEstimate && (
+                      <div className={cn("inline-flex items-center gap-1 text-xs font-semibold mt-1.5 px-2 py-0.5 rounded-full",
+                        rangeStatus === "within" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" :
+                        "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-500"
+                      )}>
+                        {rangeStatus === "within" ? <CheckCircle2 className="h-3 w-3" /> : rangeStatus === "above" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        {rangeStatus === "within" ? "Within range" : rangeStatus === "above" ? "Above range" : "Below range"}
+                      </div>
+                    )}
                   </td>
                 );
               })}
             </tr>
+
+            {/* AI BENCHMARK RANGE — only shown when aiAnalysis exists */}
+            {aiAnalysis && (
+              <tr className="hover:bg-muted/20 bg-blue-50/30 dark:bg-blue-950/10">
+                <td className="px-4 py-3 sticky left-0 bg-blue-50/30 dark:bg-blue-950/10 z-10">
+                  <div className="flex items-center gap-1.5">
+                    <BrainCircuit className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">AI Benchmark</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Reference range</div>
+                </td>
+                {submittedBids.map(bid => {
+                  const aiEstimate = aiAnalysis.find(e => e.trade.toLowerCase() === (bid.tradeCategory ?? "").toLowerCase()) ?? null;
+                  if (!aiEstimate) return <td key={bid.id} className="px-4 py-3 text-center text-xs text-muted-foreground">—</td>;
+                  return (
+                    <td key={bid.id} className="px-4 py-3 text-center">
+                      <div className="font-semibold text-sm text-blue-700 dark:text-blue-400 font-mono">
+                        {formatCurrency(aiEstimate.lowEstimate)} – {formatCurrency(aiEstimate.highEstimate)}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 leading-snug max-w-[220px] mx-auto line-clamp-2">{aiEstimate.costDrivers}</div>
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
 
             {/* SCOPE NOTES */}
             <tr className="hover:bg-muted/20">
