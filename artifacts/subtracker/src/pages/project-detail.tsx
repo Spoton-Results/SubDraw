@@ -226,8 +226,14 @@ export default function ProjectDetail() {
   // AI Bid Analysis state
   const [aiAnalyzing, setAiAnalyzing] = React.useState(false);
   const [aiArchiveExpanded, setAiArchiveExpanded] = React.useState(false);
+  const [aiExpandedTrades, setAiExpandedTrades] = React.useState<Set<string>>(new Set());
   const [aiFeedbackDropdown, setAiFeedbackDropdown] = React.useState<Record<string, boolean>>({});
   const [aiFeedbackSaving, setAiFeedbackSaving] = React.useState<Record<string, boolean>>({});
+  const toggleAiTrade = (trade: string) => setAiExpandedTrades(prev => {
+    const next = new Set(prev);
+    next.has(trade) ? next.delete(trade) : next.add(trade);
+    return next;
+  });
 
   const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -2890,27 +2896,31 @@ export default function ProjectDetail() {
                         const feedback = (project as any).aiAnalysisFeedback as Record<string, { helpful: boolean; reason?: string }> | null;
                         const tradeFeedback = feedback?.[item.trade];
                         const bidsForTrade = project.bids?.filter(b => (b.tradeCategory ?? "").toLowerCase() === item.trade.toLowerCase()) ?? [];
+                        const isExpanded = aiExpandedTrades.has(item.trade);
                         return (
-                          <div key={item.trade} className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2 min-w-0">
-                            {/* Trade name + range — stacked on mobile, side-by-side when wide enough */}
-                            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-                              <div className="font-semibold text-sm">{item.trade}</div>
-                              <div className="font-bold text-sm text-primary font-mono whitespace-nowrap">
-                                {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
+                          <div key={item.trade} className="rounded-xl border border-border bg-secondary/30 min-w-0 overflow-hidden">
+                            {/* Always-visible header row — clickable to expand */}
+                            <button
+                              className="w-full text-left px-4 pt-3 pb-3"
+                              onClick={() => toggleAiTrade(item.trade)}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                <div className="font-semibold text-sm flex items-center gap-1">
+                                  {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  {item.trade}
+                                </div>
+                                <div className="font-bold text-sm text-primary font-mono whitespace-nowrap">
+                                  {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
+                                </div>
                               </div>
-                            </div>
-                            <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
-                            {item.rangeFactors && (
-                              <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
-                            )}
-                            {bidsForTrade.length > 0 && (
-                              <div className="space-y-2 pt-1 border-t border-border/50">
-                                {bidsForTrade.map(bid => {
-                                  const status = bid.amount > item.highEstimate * 1.15 ? "above" : bid.amount < item.lowEstimate * 0.85 ? "below" : "within";
-                                  return (
-                                    <div key={bid.id} className="space-y-0.5">
-                                      <span className="text-xs text-muted-foreground block truncate">{bid.sub?.companyName}</span>
-                                      <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Bid status indicators — always visible */}
+                              {bidsForTrade.length > 0 && (
+                                <div className="space-y-1 mt-2">
+                                  {bidsForTrade.map(bid => {
+                                    const status = bid.amount > item.highEstimate * 1.15 ? "above" : bid.amount < item.lowEstimate * 0.85 ? "below" : "within";
+                                    return (
+                                      <div key={bid.id} className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{bid.sub?.companyName}</span>
                                         <span className="text-xs font-mono font-semibold">{formatCurrency(bid.amount)}</span>
                                         <div className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full",
                                           status === "within" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" :
@@ -2920,55 +2930,64 @@ export default function ProjectDetail() {
                                           {status === "within" ? "Within range" : status === "above" ? "Above range" : "Below range"}
                                         </div>
                                       </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            <div className="flex items-center pt-1">
-                              {tradeFeedback ? (
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  {tradeFeedback.helpful ? <ThumbsUp className="h-3 w-3 text-green-500" /> : <ThumbsDown className="h-3 w-3 text-amber-500" />}
-                                  {tradeFeedback.helpful ? "Marked helpful" : "Marked not helpful"}
-                                </span>
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-muted-foreground">Helpful?</span>
-                                  <button
-                                    className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
-                                    title="Mark helpful"
-                                    onClick={() => handleAiFeedback(item.trade, true)}
-                                    disabled={aiFeedbackSaving[item.trade]}
-                                  >
-                                    {aiFeedbackSaving[item.trade] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" />}
-                                  </button>
-                                  <div className="relative">
-                                    <button
-                                      className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors"
-                                      title="Mark not helpful"
-                                      onClick={() => setAiFeedbackDropdown(prev => ({ ...prev, [item.trade]: !prev[item.trade] }))}
-                                      disabled={aiFeedbackSaving[item.trade]}
-                                    >
-                                      <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                    </button>
-                                    {aiFeedbackDropdown[item.trade] && (
-                                      <div className="absolute left-0 top-8 z-20 w-48 max-w-[calc(100vw-2rem)] bg-popover border border-border rounded-xl shadow-lg p-2 space-y-1">
-                                        <p className="text-xs font-semibold text-muted-foreground px-2 pb-1">Why wasn't this helpful?</p>
-                                        {["Range too wide", "Range too narrow", "Wrong trade", "Inaccurate for my market", "Other"].map(reason => (
-                                          <button
-                                            key={reason}
-                                            className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-muted transition-colors"
-                                            onClick={() => handleAiFeedback(item.trade, false, reason)}
-                                          >
-                                            {reason}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                    );
+                                  })}
                                 </div>
                               )}
-                            </div>
+                            </button>
+                            {/* Collapsible detail text + feedback */}
+                            {isExpanded && (
+                              <div className="px-4 pb-3 space-y-2 border-t border-border/50 pt-2">
+                                <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
+                                {item.rangeFactors && (
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
+                                )}
+                                <div className="flex items-center pt-1">
+                                  {tradeFeedback ? (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      {tradeFeedback.helpful ? <ThumbsUp className="h-3 w-3 text-green-500" /> : <ThumbsDown className="h-3 w-3 text-amber-500" />}
+                                      {tradeFeedback.helpful ? "Marked helpful" : "Marked not helpful"}
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-muted-foreground">Helpful?</span>
+                                      <button
+                                        className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
+                                        title="Mark helpful"
+                                        onClick={() => handleAiFeedback(item.trade, true)}
+                                        disabled={aiFeedbackSaving[item.trade]}
+                                      >
+                                        {aiFeedbackSaving[item.trade] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" />}
+                                      </button>
+                                      <div className="relative">
+                                        <button
+                                          className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors"
+                                          title="Mark not helpful"
+                                          onClick={() => setAiFeedbackDropdown(prev => ({ ...prev, [item.trade]: !prev[item.trade] }))}
+                                          disabled={aiFeedbackSaving[item.trade]}
+                                        >
+                                          <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        </button>
+                                        {aiFeedbackDropdown[item.trade] && (
+                                          <div className="absolute left-0 top-8 z-20 w-48 max-w-[calc(100vw-2rem)] bg-popover border border-border rounded-xl shadow-lg p-2 space-y-1">
+                                            <p className="text-xs font-semibold text-muted-foreground px-2 pb-1">Why wasn't this helpful?</p>
+                                            {["Range too wide", "Range too narrow", "Wrong trade", "Inaccurate for my market", "Other"].map(reason => (
+                                              <button
+                                                key={reason}
+                                                className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-muted transition-colors"
+                                                onClick={() => handleAiFeedback(item.trade, false, reason)}
+                                              >
+                                                {reason}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -3009,20 +3028,36 @@ export default function ProjectDetail() {
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">Historical AI estimates from the bidding phase. These ranges are archived and cannot be regenerated while the project is in construction.</p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {((project as any).aiAnalysis as Array<{ trade: string; lowEstimate: number; highEstimate: number; costDrivers: string; rangeFactors: string }>).map((item) => (
-                        <div key={item.trade} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-2 min-w-0">
-                          <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-                            <div className="font-semibold text-sm">{item.trade}</div>
-                            <div className="font-bold text-sm text-blue-700 dark:text-blue-400 font-mono whitespace-nowrap">
-                              {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
-                            </div>
+                      {((project as any).aiAnalysis as Array<{ trade: string; lowEstimate: number; highEstimate: number; costDrivers: string; rangeFactors: string }>).map((item) => {
+                        const archKey = `arch:${item.trade}`;
+                        const isArchExpanded = aiExpandedTrades.has(archKey);
+                        return (
+                          <div key={item.trade} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 min-w-0 overflow-hidden">
+                            <button
+                              className="w-full text-left px-4 py-3"
+                              onClick={() => toggleAiTrade(archKey)}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                <div className="font-semibold text-sm flex items-center gap-1">
+                                  {isArchExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  {item.trade}
+                                </div>
+                                <div className="font-bold text-sm text-blue-700 dark:text-blue-400 font-mono whitespace-nowrap">
+                                  {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
+                                </div>
+                              </div>
+                            </button>
+                            {isArchExpanded && (
+                              <div className="px-4 pb-3 space-y-2 border-t border-blue-200/50 dark:border-blue-800/50 pt-2">
+                                <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
+                                {item.rangeFactors && (
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{item.costDrivers}</p>
-                          {item.rangeFactors && (
-                            <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </CardContent>
