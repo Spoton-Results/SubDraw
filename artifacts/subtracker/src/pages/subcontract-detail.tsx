@@ -2306,6 +2306,37 @@ export default function SubcontractDetail() {
         </div>
       </Dialog>
 
+      {/* CONTRACTED SCOPE OF WORK SECTION */}
+      {((sub as any)?.contractedScope) && (
+        <div className="mb-8">
+          <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-base font-bold font-display flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-primary" /> Contracted Scope of Work
+                {(sub as any).contractedScopeTrade && (
+                  <span className={cn("text-xs font-semibold border px-2 py-0.5 rounded-full", TRADE_BADGE_COLORS[(sub as any).contractedScopeTrade] ?? "bg-muted text-muted-foreground border-border")}>
+                    {(sub as any).contractedScopeTrade}
+                  </span>
+                )}
+              </h3>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-full">
+                <FileSignature className="h-3 w-3" /> Frozen at Award
+              </span>
+            </div>
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{(sub as any).contractedScope}</p>
+            {(sub as any).scopeAcknowledgedAt && (sub as any).scopeAcknowledgedByName && (
+              <div className="flex items-center gap-2 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 px-4 py-3">
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                  Scope acknowledged by <strong>{(sub as any).scopeAcknowledgedByName}</strong> on{" "}
+                  {format(new Date((sub as any).scopeAcknowledgedAt), "MMMM d, yyyy")} before bidding.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* GC CREDENTIALS SECTION — shown to both GC and Sub */}
       {sub?.projectId && (() => {
         const hasIns = !!(gcCredentialsSub?.insCompany || gcCredentialsSub?.insExpDate);

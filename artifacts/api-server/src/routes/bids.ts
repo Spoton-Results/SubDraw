@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { bidsTable, subcontractsTable, projectsTable, usersTable, activityLogsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { bidsTable, subcontractsTable, projectsTable, usersTable, activityLogsTable, projectMembersTable, tradeScopesTable } from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { getActorRoleLabel } from "../lib/auth.js";
 import { sendBidAwardedEmail } from "../lib/email.js";
@@ -23,18 +23,41 @@ router.get("/", requireAuth, requireGC, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const { projectId } = req.params as any;
-  const { amount, notes, scopeOfWorkObjectPath } = req.body;
+  const { amount, notes, scopeOfWorkObjectPath, scopeAcknowledged } = req.body;
   if (!amount || isNaN(Number(amount))) {
     res.status(400).json({ error: "amount is required" });
     return;
   }
+  const acknowledged = scopeAcknowledged === true || scopeAcknowledged === "true";
+  const now = new Date();
   const [bid] = await db.insert(bidsTable).values({
     projectId,
     subId: user.id,
     amount: Number(amount),
     notes: notes?.trim() || null,
     scopeOfWorkObjectPath: scopeOfWorkObjectPath?.trim() || null,
+    scopeAcknowledged: acknowledged,
+    scopeAcknowledgedAt: acknowledged ? now : null,
   }).returning();
+
+  // Log scope acknowledgment to activity log (we don't have a subcontract yet so use a project-level note)
+  if (acknowledged) {
+    // Find which trade scope this sub is acknowledging
+    const [member] = await db.select().from(projectMembersTable).where(
+      and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, user.id))
+    ).limit(1);
+    if (member?.tradeCategory) {
+      const [scope] = await db.select().from(tradeScopesTable).where(
+        and(eq(tradeScopesTable.projectId, projectId), eq(tradeScopesTable.tradeCategory, member.tradeCategory))
+      ).limit(1);
+      if (scope) {
+        // Record on activityLogsTable once the subcontract exists (at award time)
+        // For now, store the acknowledgment on the bid itself (already done above)
+        console.log(`[scope-ack] ${user.companyName} acknowledged ${member.tradeCategory} scope at ${now.toISOString()}`);
+      }
+    }
+  }
+
   const bidWithSub = await getBidWithSub(bid);
   res.status(201).json(bidWithSub);
 });
@@ -57,12 +80,26 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
   const { tradeCategory, retentionPercentage } = req.body ?? {};
   const retPct = Math.min(15, Math.max(0, Number(retentionPercentage ?? 10)));
 
+  // Look up the trade scope to freeze it on the subcontract
+  const effectiveTrade = tradeCategory?.trim() || null;
+  let contractedScope: string | null = null;
+  if (effectiveTrade) {
+    const [scope] = await db.select().from(tradeScopesTable).where(
+      and(eq(tradeScopesTable.projectId, bid.projectId), eq(tradeScopesTable.tradeCategory, effectiveTrade))
+    ).limit(1);
+    contractedScope = scope?.description ?? null;
+  }
+
   const [subcontract] = await db.insert(subcontractsTable).values({
     projectId: bid.projectId,
     subId: bid.subId,
     baseContractAmount: bid.amount,
-    tradeCategory: tradeCategory ?? null,
+    tradeCategory: effectiveTrade,
     retentionPercentage: retPct,
+    contractedScope,
+    contractedScopeTrade: contractedScope ? effectiveTrade : null,
+    scopeAcknowledgedAt: bid.scopeAcknowledged ? bid.scopeAcknowledgedAt : null,
+    scopeAcknowledgedByName: bid.scopeAcknowledged ? sub.companyName : null,
   }).returning();
 
   await db.insert(activityLogsTable).values({
@@ -72,6 +109,18 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
     actorName: gc.companyName,
     actorRole: getActorRoleLabel(gcActor),
   }).catch(err => console.error("[activity] Failed to log subcontract creation:", err));
+
+  // Log scope acknowledgment on the subcontract activity log
+  if (bid.scopeAcknowledged && bid.scopeAcknowledgedAt && effectiveTrade) {
+    const ackDate = new Date(bid.scopeAcknowledgedAt);
+    await db.insert(activityLogsTable).values({
+      subcontractId: subcontract.id,
+      type: "SCOPE_ACKNOWLEDGED",
+      description: `${sub.companyName} acknowledged and accepted the scope of work for ${effectiveTrade} on ${ackDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} at ${ackDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
+      actorName: sub.companyName,
+      actorRole: "SUB",
+    }).catch(err => console.error("[activity] Failed to log scope acknowledgment:", err));
+  }
 
   const appUrl = process.env.APP_URL || `https://${req.hostname}`;
   sendBidAwardedEmail({

@@ -21,6 +21,10 @@ export const subcontractsTable = pgTable("subcontracts", {
   signedContractName: text("signed_contract_name"),
   signedContractUploadedAt: timestamp("signed_contract_uploaded_at"),
   contractWaived: boolean("contract_waived").default(false).notNull(),
+  contractedScope: text("contracted_scope"),
+  contractedScopeTrade: text("contracted_scope_trade"),
+  scopeAcknowledgedAt: timestamp("scope_acknowledged_at"),
+  scopeAcknowledgedByName: text("scope_acknowledged_by_name"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

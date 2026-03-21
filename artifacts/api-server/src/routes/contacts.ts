@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, projectsTable } from "@workspace/db/schema";
+import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, projectsTable, tradeScopesTable } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { sendAddedToProjectEmail } from "../lib/email.js";
@@ -191,7 +191,15 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     return;
   }
 
-  await db.insert(projectMembersTable).values({ projectId, userId: subId, roleOnProject: "SUB" });
+  const { tradeCategory } = req.body;
+  const effectiveTrade = tradeCategory?.trim() || null;
+  await db.insert(projectMembersTable).values({ projectId, userId: subId, roleOnProject: "SUB", tradeCategory: effectiveTrade });
+
+  let tradeScope: string | null = null;
+  if (effectiveTrade) {
+    const [scope] = await db.select().from(tradeScopesTable).where(and(eq(tradeScopesTable.projectId, projectId), eq(tradeScopesTable.tradeCategory, effectiveTrade))).limit(1);
+    tradeScope = scope?.description ?? null;
+  }
 
   const appUrl = `${req.protocol}://${req.get("host")}`;
   sendAddedToProjectEmail({
@@ -199,6 +207,8 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     subCompanyName: sub.companyName,
     projectName: project.name,
     appUrl,
+    tradeCategory: effectiveTrade,
+    tradeScope,
   }).catch((err) => console.error("[email] sendAddedToProjectEmail failed:", err));
 
   res.json({ message: "Subcontractor added to project" });

@@ -162,14 +162,24 @@ export async function sendInviteEmail(opts: {
   projectName: string;
   magicUrl: string;
   appUrl: string;
+  tradeCategory?: string | null;
+  tradeScope?: string | null;
 }) {
+  const scopeBlock = opts.tradeCategory && opts.tradeScope
+    ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#14532d;">Scope of Work for This Bid — ${opts.tradeCategory}</p>
+        <p style="margin:0;font-size:13px;color:#166534;white-space:pre-line;">${opts.tradeScope.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+      </div>`
+    : "";
   const html = layout(`
     ${heading("You've been invited to a project")}
-    ${subtext(`You've been added as a subcontractor on <strong>${opts.projectName}</strong>. Click below to log in instantly — no password needed.`)}
+    ${subtext(`You've been added as a subcontractor on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. Click below to log in instantly — no password needed.`)}
     ${infoBox([
       { label: "Login Email", value: opts.toEmail },
       { label: "Project", value: opts.projectName },
+      ...(opts.tradeCategory ? [{ label: "Trade", value: opts.tradeCategory }] : []),
     ])}
+    ${scopeBlock}
     <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
     </div>
@@ -377,13 +387,23 @@ export async function sendAddedToProjectEmail(opts: {
   subCompanyName: string;
   projectName: string;
   appUrl: string;
+  tradeCategory?: string | null;
+  tradeScope?: string | null;
 }) {
+  const scopeBlock = opts.tradeCategory && opts.tradeScope
+    ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#14532d;">Scope of Work for This Bid — ${opts.tradeCategory}</p>
+        <p style="margin:0;font-size:13px;color:#166534;white-space:pre-line;">${opts.tradeScope.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+      </div>`
+    : "";
   const html = layout(`
     ${heading("You've been added to a new project")}
-    ${subtext(`<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker.`)}
+    ${subtext(`<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}.`)}
     ${infoBox([
       { label: "Project", value: opts.projectName },
+      ...(opts.tradeCategory ? [{ label: "Trade", value: opts.tradeCategory }] : []),
     ])}
+    ${scopeBlock}
     ${ctaButton("View Project", opts.appUrl)}
   `);
   await send(opts.toEmail, `You've been added to ${opts.projectName} on SubTracker`, html);

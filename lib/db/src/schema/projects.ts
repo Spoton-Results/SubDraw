@@ -29,6 +29,7 @@ export const projectMembersTable = pgTable("project_members", {
   projectId: text("project_id").notNull().references(() => projectsTable.id),
   userId: text("user_id").notNull().references(() => usersTable.id),
   roleOnProject: text("role_on_project").notNull().default("SUB"),
+  tradeCategory: text("trade_category"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -4,13 +4,19 @@ import {
   useGetMe, useUpdateProfile, useChangePassword, getGetMeQueryKey
 } from "@workspace/api-client-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Eye, EyeOff, User, KeyRound, Building2, Lock } from "lucide-react";
+import { Eye, EyeOff, User, KeyRound, Building2, Lock, ClipboardList, Plus, Trash2, Save, Pencil } from "lucide-react";
 import toast from "react-hot-toast";
+
+const TRADE_CATEGORIES = [
+  "General", "Electrical", "Plumbing", "HVAC", "Framing", "Drywall",
+  "Roofing", "Flooring", "Painting", "Concrete", "Masonry", "Insulation",
+  "Windows and Doors", "Landscaping", "Other",
+] as const;
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -94,6 +100,74 @@ export default function Account() {
       setSetPasswordLoading(false);
     }
   };
+
+  // ── Scope Templates (GC only) ─────────────────────────────────────────────
+  type ScopeTemplate = { id: string; tradeCategory: string; name: string; description: string; createdAt: string };
+  const { data: scopeTemplates = [], refetch: refetchTemplates } = useQuery<ScopeTemplate[]>({
+    queryKey: ["scope-templates"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/api/scope-templates`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: user?.role === "GC",
+    staleTime: 0,
+  });
+
+  const [newTplTrade, setNewTplTrade] = React.useState<string>("Electrical");
+  const [newTplName, setNewTplName] = React.useState("");
+  const [newTplText, setNewTplText] = React.useState("");
+  const [newTplSaving, setNewTplSaving] = React.useState(false);
+  const [tplAddOpen, setTplAddOpen] = React.useState(false);
+  const [editTplId, setEditTplId] = React.useState<string | null>(null);
+  const [editTplText, setEditTplText] = React.useState("");
+  const [editTplName, setEditTplName] = React.useState("");
+  const [editTplSaving, setEditTplSaving] = React.useState(false);
+
+  const handleCreateTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTplName.trim() || !newTplText.trim()) return toast.error("Name and description required");
+    setNewTplSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/scope-templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tradeCategory: newTplTrade, name: newTplName.trim(), description: newTplText.trim() }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || "Failed to save"); return; }
+      await refetchTemplates();
+      setNewTplName(""); setNewTplText(""); setTplAddOpen(false);
+      toast.success("Template saved");
+    } finally { setNewTplSaving(false); }
+  };
+
+  const handleUpdateTemplate = async (id: string) => {
+    if (!editTplName.trim() || !editTplText.trim()) return toast.error("Name and description required");
+    setEditTplSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/scope-templates/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: editTplName.trim(), description: editTplText.trim() }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); toast.error(err.error || "Failed to update"); return; }
+      await refetchTemplates();
+      setEditTplId(null);
+      toast.success("Template updated");
+    } finally { setEditTplSaving(false); }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE}/api/scope-templates/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) { toast.error("Failed to delete"); return; }
+      await refetchTemplates();
+      toast.success("Template deleted");
+    } catch { toast.error("Failed to delete"); }
+  };
+  // ──────────────────────────────────────────────────────────────────────────
 
   if (!user) return null;
 
@@ -276,6 +350,139 @@ export default function Account() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* MY SCOPE TEMPLATES — GC only */}
+        {user.role === "GC" && (
+          <Card>
+            <CardHeader className="border-b pb-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-primary" /> My Scope of Work Templates
+                </CardTitle>
+                {!tplAddOpen && (
+                  <Button size="sm" variant="outline" className="gap-1.5 min-h-[36px]" onClick={() => setTplAddOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> New Template
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Save reusable scope descriptions for any trade. Use them to quickly fill in Trade Scope of Work on any project during the BIDDING phase.
+              </p>
+
+              {/* Add new template form */}
+              {tplAddOpen && (
+                <form onSubmit={handleCreateTemplate} className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="flex gap-3 flex-wrap">
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="text-xs font-semibold mb-1 block">Trade</label>
+                      <select
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        value={newTplTrade}
+                        onChange={e => setNewTplTrade(e.target.value)}
+                      >
+                        {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-[2] min-w-[180px]">
+                      <label className="text-xs font-semibold mb-1 block">Template Name</label>
+                      <Input
+                        required
+                        placeholder="e.g. Standard Electrical SOW"
+                        value={newTplName}
+                        onChange={e => setNewTplName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold mb-1 block">Scope Description</label>
+                    <textarea
+                      required
+                      className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none min-h-[120px]"
+                      placeholder="Describe the full scope of work for this trade…"
+                      value={newTplText}
+                      onChange={e => setNewTplText(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setTplAddOpen(false); setNewTplName(""); setNewTplText(""); }}>Cancel</Button>
+                    <Button type="submit" size="sm" isLoading={newTplSaving} className="gap-1.5">
+                      <Save className="h-3.5 w-3.5" /> Save Template
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Template list */}
+              {scopeTemplates.length === 0 && !tplAddOpen && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm font-medium">No templates yet</p>
+                  <p className="text-xs mt-1">Create your first scope template to reuse across projects.</p>
+                </div>
+              )}
+              {scopeTemplates.length > 0 && (
+                <div className="space-y-3">
+                  {scopeTemplates.map(tpl => (
+                    <div key={tpl.id} className="rounded-xl border border-border bg-secondary/40 p-4">
+                      {editTplId === tpl.id ? (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-semibold mb-1 block">Template Name</label>
+                            <Input value={editTplName} onChange={e => setEditTplName(e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold mb-1 block">Scope Description</label>
+                            <textarea
+                              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none min-h-[100px]"
+                              value={editTplText}
+                              onChange={e => setEditTplText(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setEditTplId(null)}>Cancel</Button>
+                            <Button size="sm" isLoading={editTplSaving} onClick={() => handleUpdateTemplate(tpl.id)} className="gap-1.5">
+                              <Save className="h-3.5 w-3.5" /> Save
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm">{tpl.name}</span>
+                              <Badge variant="secondary" className="text-xs">{tpl.tradeCategory}</Badge>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs gap-1"
+                                onClick={() => { setEditTplId(tpl.id); setEditTplName(tpl.name); setEditTplText(tpl.description); }}
+                              >
+                                <Pencil className="h-3 w-3" /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+                                onClick={() => handleDeleteTemplate(tpl.id)}
+                              >
+                                <Trash2 className="h-3 w-3" /> Delete
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line line-clamp-4">{tpl.description}</p>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

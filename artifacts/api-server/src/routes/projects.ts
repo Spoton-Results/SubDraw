@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -816,7 +816,9 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
     return;
   }
 
-  await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB" });
+  const { tradeCategory } = req.body;
+  const effectiveTrade = tradeCategory?.trim() || null;
+  await db.insert(projectMembersTable).values({ projectId: req.params.projectId, userId: invitedUser.id, roleOnProject: "SUB", tradeCategory: effectiveTrade });
 
   const gcUser = (req as any).user;
   const effectiveGcId = getEffectiveGcId(gcUser);
@@ -827,6 +829,15 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
   }
 
   const appUrl = process.env.APP_URL || `https://${req.hostname}`;
+
+  // Look up trade scope for this invite
+  let tradeScope: string | null = null;
+  if (effectiveTrade) {
+    const [scope] = await db.select().from(tradeScopesTable).where(
+      and(eq(tradeScopesTable.projectId, req.params.projectId), eq(tradeScopesTable.tradeCategory, effectiveTrade))
+    ).limit(1);
+    tradeScope = scope?.description ?? null;
+  }
 
   // Generate a magic link token for the invited user
   const magicToken = crypto.randomBytes(32).toString("hex");
@@ -840,6 +851,8 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
       projectName: project.name,
       magicUrl,
       appUrl,
+      tradeCategory: effectiveTrade,
+      tradeScope,
     }).catch((err) => console.error("[email] Failed to send invite email:", err));
   } else {
     sendAddedToProjectEmail({
@@ -847,6 +860,8 @@ router.post("/:projectId/invite", requireAuth, requireGC, async (req, res) => {
       subCompanyName: invitedUser.companyName,
       projectName: project.name,
       appUrl: magicUrl,
+      tradeCategory: effectiveTrade,
+      tradeScope,
     }).catch((err) => console.error("[email] Failed to send added-to-project email:", err));
   }
 

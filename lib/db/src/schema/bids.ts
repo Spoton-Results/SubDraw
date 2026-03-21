@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -12,6 +12,8 @@ export const bidsTable = pgTable("bids", {
   notes: text("notes"),
   status: text("status").notNull().default("PENDING"), // PENDING | AWARDED | REJECTED
   scopeOfWorkObjectPath: text("scope_of_work_object_path"),
+  scopeAcknowledged: boolean("scope_acknowledged").default(false).notNull(),
+  scopeAcknowledgedAt: timestamp("scope_acknowledged_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

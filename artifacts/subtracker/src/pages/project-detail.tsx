@@ -70,6 +70,22 @@ const TRADE_CATEGORIES = [
   "Other",
 ] as const;
 
+const DEFAULT_SCOPE_TEMPLATES: Partial<Record<string, string>> = {
+  Electrical: `All rough-in wiring per approved plans and specifications.\nElectrical panel installation and labeling.\nAll outlets, switches, and devices per plans.\nLight fixture installation — fixtures by owner unless noted.\nExterior lighting and smoke/carbon monoxide detector installation.\nFinal connections to all appliances and equipment shown on plans.`,
+  Plumbing: `All rough-in plumbing per approved plans and specifications.\nWater supply lines to all fixtures.\nDrain, waste, and vent (DWV) system installation.\nWater heater installation and connections.\nAll fixtures and trim — supply by owner unless noted.\nExterior hose bibs and final appliance connections.\nAll work to meet local plumbing code.`,
+  HVAC: `Complete HVAC system installation per approved mechanical plans.\nEquipment selection and sizing per engineering specifications.\nDuctwork fabrication and installation.\nRefrigerant piping and connections.\nThermostats and controls installation and programming.\nStart-up, commissioning, and testing.\nAll work to meet local mechanical and energy codes.`,
+  Framing: `Complete structural and rough framing per approved architectural plans.\nAll exterior and interior wall framing.\nFloor and roof framing per structural drawings.\nStair framing and header/beam/post installation.\nShear panel installation per structural engineer's plans.\nAll hardware and connections per specifications.`,
+  Drywall: `All drywall installation, taping, and finishing per plans.\nLevel 4 finish throughout unless otherwise noted.\nMoisture-resistant board in wet areas.\nFire-rated assemblies where required per code.\nPatching of all penetrations and blocking for fixtures as needed.`,
+  Roofing: `Complete roofing system installation per plans and specifications.\nTear-off of existing roofing as required.\nUnderlayment and moisture barrier installation.\nRoofing material installation per manufacturer specifications.\nFlashing at all roof penetrations, walls, and transitions.\nGutters and downspouts as specified.\n5-year workmanship warranty included.`,
+  Flooring: `All flooring installation per plans and specifications.\nSubfloor preparation and leveling.\nFlooring material installation — materials by owner unless noted.\nTransitions and trim installation.\nProtection of completed work during construction.\nFinal cleaning and inspection.`,
+  Painting: `All interior and exterior painting per specifications.\nSurface preparation including patching, sanding, and priming.\nTwo coats finish paint on all walls and ceilings.\nSemi-gloss on all doors, trim, and millwork.\nProtection of adjacent surfaces and flooring throughout.\nFinal cleanup and touch-up walk-through.`,
+  Concrete: `All concrete work per approved plans and structural drawings.\nFormwork, reinforcing steel, and pour.\nFlatwork including slabs, walks, and drives as shown on plans.\nFinishing and curing per specifications.\nSaw cutting and joint installation as required.\nAll concrete to achieve specified compressive strength.\n1-year warranty on all concrete work.`,
+  Masonry: `All masonry construction per approved plans and specifications.\nBlock or brick installation with mortar joints per architect's detail.\nLintels and reinforcing as specified by structural engineer.\nWaterproofing and flashing at all masonry-wood interfaces.\nCleaning of all masonry upon completion.`,
+  Insulation: `All insulation installation per energy compliance documentation.\nBatt insulation in all exterior walls, floors, and ceilings as specified.\nBlown insulation in attic areas to required R-value.\nAir sealing at all penetrations and transitions.\nFinal blower door test coordination if required.`,
+  Landscaping: `Complete landscaping per approved landscape plans.\nSite grading and drainage as shown.\nIrrigation system installation and programming.\nAll plantings per plant schedule and landscape architect's plans.\nSoil amendments and mulch per specifications.\nHardscape installation including walks, patios, and walls as shown.\n90-day plant establishment warranty.`,
+  Other: `Provide all labor, materials, equipment, and supervision necessary to complete the work as shown on the plans and specifications. Work to be performed in a professional manner in accordance with all applicable codes and regulations. Scope includes all items necessary for a complete and working installation.`,
+};
+
 const TRADE_COLORS: Record<string, string> = {
   General: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300",
   Electrical: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400",
@@ -138,6 +154,19 @@ export default function ProjectDetail() {
   const [bidNotes, setBidNotes] = React.useState("");
   const [bidScopeFile, setBidScopeFile] = React.useState<File | null>(null);
   const [bidScopeUploading, setBidScopeUploading] = React.useState(false);
+  const [bidScopeAcknowledged, setBidScopeAcknowledged] = React.useState(false);
+
+  // Trade scope editing (GC)
+  const [scopeEditTrade, setScopeEditTrade] = React.useState<string>("");
+  const [scopeEditText, setScopeEditText] = React.useState("");
+  const [scopeSaving, setScopeSaving] = React.useState(false);
+  const [scopeDeleteConfirm, setScopeDeleteConfirm] = React.useState<string | null>(null);
+  const [scopeSaveTemplateOpen, setScopeSaveTemplateOpen] = React.useState(false);
+  const [scopeTemplateName, setScopeTemplateName] = React.useState("");
+  const [scopeTemplateSaving, setScopeTemplateSaving] = React.useState(false);
+
+  // Invite trade category
+  const [inviteTrade, setInviteTrade] = React.useState("");
 
   const [isPlanOpen, setIsPlanOpen] = React.useState(false);
   const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
@@ -232,6 +261,35 @@ export default function ProjectDetail() {
     enabled: !!projectId,
     staleTime: 30000,
   });
+
+  type TradeScope = { id: string; tradeCategory: string; description: string; isLocked: boolean; updatedAt: string };
+  const { data: tradeScopes = [], refetch: refetchTradeScopes } = useQuery<TradeScope[]>({
+    queryKey: ["trade-scopes", projectId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/projects/${projectId}/trade-scopes`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId && !!project,
+    staleTime: 0,
+  });
+
+  type ScopeTemplate = { id: string; tradeCategory: string; name: string; description: string; createdAt: string };
+  const { data: scopeTemplates = [], refetch: refetchScopeTemplates } = useQuery<ScopeTemplate[]>({
+    queryKey: ["scope-templates"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/scope-templates`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: user?.role === "GC",
+    staleTime: 0,
+  });
+
+  // Sub's own trade scope (if assigned a trade)
+  const myMember = !isGC_for_views ? project?.members?.find((m: any) => m.id === user?.id) : null;
+  const myTradeCategory = (myMember as any)?.tradeCategory ?? null;
+  const myTradeScope = tradeScopes.find(s => s.tradeCategory === myTradeCategory) ?? null;
 
   type ComplianceItem = { id: string; projectId: string; title: string; description: string | null; required: boolean; allowDocumentUpload: boolean; sortOrder: number; createdAt: string };
   type ComplianceSummaryRow = { subcontractId: string; subId: string; subCompanyName: string; totalRequired: number; completedRequired: number; status: "FULLY_COMPLIANT" | "INCOMPLETE" | "BLOCKED" };
@@ -684,7 +742,7 @@ export default function ProjectDetail() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await inviteSub.mutateAsync({ projectId, data: { email: inviteEmail, companyName: inviteCompanyName } });
+      const result = await inviteSub.mutateAsync({ projectId, data: { email: inviteEmail, companyName: inviteCompanyName, tradeCategory: inviteTrade || undefined } as any });
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       if (result.isNewUser && result.temporaryPassword) {
         setInviteResult({ temporaryPassword: result.temporaryPassword, email: inviteEmail });
@@ -694,6 +752,7 @@ export default function ProjectDetail() {
         setIsInviteOpen(false);
         setInviteEmail("");
         setInviteCompanyName("");
+        setInviteTrade("");
       }
     } catch (err: any) {
       toast.error(err?.data?.error || err?.message || "Failed to send invite");
@@ -715,6 +774,7 @@ export default function ProjectDetail() {
     setDirectRetention("10");
     setDirectLoading(false);
     setDirectSuccess(null);
+    setInviteTrade("");
   };
 
   // Construction-phase: select sub from contact book → advance to contract details step
@@ -767,14 +827,100 @@ export default function ProjectDetail() {
 
   const handleContactInvite = async (subId: string, companyName: string) => {
     try {
-      await inviteContactToProject.mutateAsync({ subId, projectId });
+      const res = await fetch(`${BASE}/api/contacts/${subId}/invite/${projectId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tradeCategory: inviteTrade || undefined }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to add to project");
+      }
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       toast.success(`${companyName} added to project!`);
       handleInviteClose();
     } catch (err: any) {
-      toast.error(err?.data?.error ?? "Failed to add to project");
+      toast.error(err?.message ?? "Failed to add to project");
     }
   };
+
+  // ── Trade Scope Handlers ──────────────────────────────────────────────────
+  const handleSaveTradeScope = async () => {
+    if (!scopeEditTrade || !scopeEditText.trim()) return;
+    setScopeSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/trade-scopes/${encodeURIComponent(scopeEditTrade)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ description: scopeEditText.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to save scope");
+        return;
+      }
+      await refetchTradeScopes();
+      setScopeEditTrade("");
+      setScopeEditText("");
+      toast.success("Trade scope saved");
+    } finally {
+      setScopeSaving(false);
+    }
+  };
+
+  const handleDeleteTradeScope = async (trade: string) => {
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/trade-scopes/${encodeURIComponent(trade)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to delete scope");
+        return;
+      }
+      await refetchTradeScopes();
+      setScopeDeleteConfirm(null);
+      toast.success("Trade scope removed");
+    } catch {
+      toast.error("Failed to delete scope");
+    }
+  };
+
+  const handleSaveScopeTemplate = async () => {
+    if (!scopeTemplateName.trim() || !scopeEditText.trim()) return;
+    setScopeTemplateSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/scope-templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tradeCategory: scopeEditTrade, name: scopeTemplateName.trim(), description: scopeEditText.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to save template");
+        return;
+      }
+      await refetchScopeTemplates();
+      setScopeSaveTemplateOpen(false);
+      setScopeTemplateName("");
+      toast.success("Template saved to your account");
+    } finally {
+      setScopeTemplateSaving(false);
+    }
+  };
+
+  const handleDeleteScopeTemplate = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE}/api/scope-templates/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) return;
+      await refetchScopeTemplates();
+    } catch {}
+  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleCopyPassword = () => {
     if (inviteResult) {
@@ -788,6 +934,10 @@ export default function ProjectDetail() {
   const doBidSubmit = async () => {
     const amount = parseFloat(bidAmount);
     if (isNaN(amount) || amount <= 0) return toast.error("Invalid bid amount");
+    if (myTradeScope && !bidScopeAcknowledged) {
+      toast.error("You must acknowledge the GC's Scope of Work before submitting your bid.");
+      return;
+    }
     try {
       let scopeOfWorkObjectPath: string | undefined;
       if (bidScopeFile) {
@@ -796,12 +946,13 @@ export default function ProjectDetail() {
         scopeOfWorkObjectPath = result.objectPath;
         setBidScopeUploading(false);
       }
-      await submitBid.mutateAsync({ projectId, data: { amount, notes: bidNotes.trim() || undefined, scopeOfWorkObjectPath: scopeOfWorkObjectPath ?? null } });
+      await submitBid.mutateAsync({ projectId, data: { amount, notes: bidNotes.trim() || undefined, scopeOfWorkObjectPath: scopeOfWorkObjectPath ?? null, scopeAcknowledged: myTradeScope ? bidScopeAcknowledged : undefined } as any });
       toast.success("Bid submitted successfully!");
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
       setBidAmount("");
       setBidNotes("");
       setBidScopeFile(null);
+      setBidScopeAcknowledged(false);
       setShowNoPlanWarning(false);
     } catch {
       toast.error("Failed to submit bid");
@@ -2373,6 +2524,259 @@ export default function ProjectDetail() {
             </>
           )}
 
+          {/* TRADE SCOPES SECTION — visible in BIDDING phase */}
+          {project.status === "BIDDING" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-primary" />
+                    {isGC ? "Trade Scopes of Work" : myTradeCategory ? `Scope of Work — ${myTradeCategory}` : "Scope of Work"}
+                  </CardTitle>
+                  {isGC && !scopeEditTrade && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 min-h-[36px]"
+                      onClick={() => {
+                        const usedTrades = new Set(tradeScopes.map(s => s.tradeCategory));
+                        const next = TRADE_CATEGORIES.find(t => !usedTrades.has(t)) ?? TRADE_CATEGORIES[0];
+                        setScopeEditTrade(next);
+                        setScopeEditText(DEFAULT_SCOPE_TEMPLATES[next] ?? "");
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Trade Scope
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* GC: Add/Edit form */}
+                {isGC && scopeEditTrade && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-semibold">Trade</label>
+                        <select
+                          className="rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          value={scopeEditTrade}
+                          onChange={e => {
+                            const t = e.target.value;
+                            setScopeEditTrade(t);
+                            const existing = tradeScopes.find(s => s.tradeCategory === t);
+                            if (existing) {
+                              setScopeEditText(existing.description);
+                            } else {
+                              setScopeEditText(DEFAULT_SCOPE_TEMPLATES[t] ?? "");
+                            }
+                          }}
+                        >
+                          {TRADE_CATEGORIES.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                        {tradeScopes.find(s => s.tradeCategory === scopeEditTrade)?.isLocked && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
+                            <Lock className="h-3 w-3" /> Locked — pending bids exist
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        {/* Use Template dropdown */}
+                        {(scopeTemplates.filter(t => t.tradeCategory === scopeEditTrade).length > 0 || DEFAULT_SCOPE_TEMPLATES[scopeEditTrade]) && (
+                          <div className="relative group">
+                            <Button size="sm" variant="outline" className="gap-1.5 text-xs min-h-[32px]">
+                              <FileText className="h-3 w-3" /> Use Template
+                            </Button>
+                            <div className="hidden group-hover:block absolute top-full right-0 mt-1 z-50 bg-popover border border-border rounded-xl shadow-lg min-w-[220px] py-1">
+                              {scopeTemplates.filter(t => t.tradeCategory === scopeEditTrade).map(tpl => (
+                                <button
+                                  key={tpl.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                  onClick={() => setScopeEditText(tpl.description)}
+                                >
+                                  <span className="truncate">{tpl.name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); handleDeleteScopeTemplate(tpl.id); }}
+                                    className="text-muted-foreground hover:text-destructive shrink-0"
+                                  ><Trash2 className="h-3 w-3" /></button>
+                                </button>
+                              ))}
+                              {DEFAULT_SCOPE_TEMPLATES[scopeEditTrade] && (
+                                <button
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted text-muted-foreground"
+                                  onClick={() => setScopeEditText(DEFAULT_SCOPE_TEMPLATES[scopeEditTrade] ?? "")}
+                                >
+                                  Standard {scopeEditTrade} template
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs min-h-[32px]"
+                          onClick={() => { setScopeEditTrade(""); setScopeEditText(""); setScopeSaveTemplateOpen(false); setScopeTemplateName(""); }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                    <textarea
+                      className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none min-h-[160px]"
+                      placeholder="Describe the complete scope of work for this trade — what is and isn't included, quality standards, code references, special requirements…"
+                      value={scopeEditText}
+                      onChange={e => setScopeEditText(e.target.value)}
+                      disabled={tradeScopes.find(s => s.tradeCategory === scopeEditTrade)?.isLocked}
+                    />
+                    {/* Save as Template inline form */}
+                    {scopeSaveTemplateOpen ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Input
+                          className="flex-1 min-w-[180px] h-8 text-sm"
+                          placeholder="Template name (e.g. Standard Electrical SOW)"
+                          value={scopeTemplateName}
+                          onChange={e => setScopeTemplateName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSaveScopeTemplate(); } }}
+                        />
+                        <Button size="sm" className="h-8 text-xs gap-1" isLoading={scopeTemplateSaving} onClick={handleSaveScopeTemplate}>
+                          <Save className="h-3 w-3" /> Save
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setScopeSaveTemplateOpen(false); setScopeTemplateName(""); }}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1.5 font-medium"
+                          onClick={() => setScopeSaveTemplateOpen(true)}
+                        >
+                          <Save className="h-3 w-3" /> Save as my template
+                        </button>
+                        <Button
+                          size="sm"
+                          className="gap-1.5 bg-green-600 hover:bg-green-700 text-white min-h-[36px]"
+                          onClick={handleSaveTradeScope}
+                          isLoading={scopeSaving}
+                          disabled={!scopeEditText.trim() || tradeScopes.find(s => s.tradeCategory === scopeEditTrade)?.isLocked}
+                        >
+                          <Save className="h-3.5 w-3.5" /> Save Scope
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* GC: List of saved scopes */}
+                {isGC && tradeScopes.length === 0 && !scopeEditTrade && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">No trade scopes defined yet</p>
+                    <p className="text-xs mt-1">Define scopes per trade so subs know exactly what to bid on. Subs must acknowledge before submitting a bid.</p>
+                  </div>
+                )}
+                {isGC && tradeScopes.length > 0 && (
+                  <div className="space-y-3">
+                    {tradeScopes.map(scope => {
+                      const isEditing = scopeEditTrade === scope.tradeCategory;
+                      if (isEditing) return null;
+                      return (
+                        <div key={scope.id} className="rounded-xl border border-border bg-secondary/40 p-4">
+                          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("text-xs font-semibold border px-2 py-0.5 rounded-full", TRADE_COLORS[scope.tradeCategory] ?? TRADE_COLORS.Other)}>
+                                {scope.tradeCategory}
+                              </span>
+                              {scope.isLocked && (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
+                                  <Lock className="h-3 w-3" /> Locked
+                                </span>
+                              )}
+                            </div>
+                            {!scopeEditTrade && (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-xs gap-1"
+                                  disabled={scope.isLocked}
+                                  onClick={() => { setScopeEditTrade(scope.tradeCategory); setScopeEditText(scope.description); }}
+                                >
+                                  <Pencil className="h-3 w-3" /> Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+                                  disabled={scope.isLocked}
+                                  onClick={() => setScopeDeleteConfirm(scope.tradeCategory)}
+                                >
+                                  <Trash2 className="h-3 w-3" /> Delete
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          {scopeDeleteConfirm === scope.tradeCategory ? (
+                            <div className="flex items-center gap-3 mt-2">
+                              <p className="text-sm text-muted-foreground flex-1">Delete this scope? This cannot be undone.</p>
+                              <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => handleDeleteTradeScope(scope.tradeCategory)}>Delete</Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setScopeDeleteConfirm(null)}>Cancel</Button>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{scope.description}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* SUB: Show the scope for their trade */}
+                {!isGC && myTradeCategory && myTradeScope && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <ClipboardList className="h-4 w-4 text-green-700 dark:text-green-400 shrink-0" />
+                        <p className="text-sm font-bold text-green-800 dark:text-green-300">GC's Scope of Work for {myTradeCategory}</p>
+                        {myTradeScope.isLocked && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
+                            <Lock className="h-3 w-3" /> Locked for bidding
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-green-900 dark:text-green-200 leading-relaxed whitespace-pre-line">{myTradeScope.description}</p>
+                    </div>
+                    {myBid ? (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/50 border border-border">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                        <p className="text-xs font-medium text-muted-foreground">You acknowledged this scope before submitting your bid.</p>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Read and acknowledge this scope before submitting your bid below.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!isGC && myTradeCategory && !myTradeScope && (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    The GC hasn't defined a scope for <strong>{myTradeCategory}</strong> yet. Check back before bidding.
+                  </p>
+                )}
+                {!isGC && !myTradeCategory && (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    You haven't been assigned a trade category for this project. Contact the GC for details.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* BIDS SECTION */}
           {(isGC || project.status === "BIDDING" || myBid) && (
             <Card>
@@ -2530,6 +2934,21 @@ export default function ProjectDetail() {
                           ))}
                         </ul>
                       </div>
+                    )}
+                    {/* SCOPE ACKNOWLEDGMENT — required if the GC has defined a scope for this sub's trade */}
+                    {myTradeScope && (
+                      <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border bg-muted/40 p-4 hover:bg-muted/60 transition-colors">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                          checked={bidScopeAcknowledged}
+                          onChange={e => setBidScopeAcknowledged(e.target.checked)}
+                        />
+                        <span className="text-sm leading-relaxed">
+                          <span className="font-semibold">I acknowledge the GC's Scope of Work for {myTradeCategory}.</span>
+                          {" "}I have read, understood, and will bid based on the full scope defined above.
+                        </span>
+                      </label>
                     )}
                     <div>
                       <label className="text-sm font-semibold mb-1.5 block">Bid Amount ($)</label>
@@ -3476,6 +3895,24 @@ export default function ProjectDetail() {
 
             {inviteTab === "contact" ? (
               <div className="space-y-3">
+                {project.status === "BIDDING" && (
+                  <div>
+                    <label className="text-sm font-semibold mb-1 block">Trade Category <span className="font-normal text-muted-foreground">(optional)</span></label>
+                    <select
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={inviteTrade}
+                      onChange={e => setInviteTrade(e.target.value)}
+                    >
+                      <option value="">— No specific trade —</option>
+                      {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    {inviteTrade && tradeScopes.find(s => s.tradeCategory === inviteTrade) && (
+                      <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Scope of work defined — will be included in invite email
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Input
                   placeholder="Search contacts…"
                   value={contactSearch}
@@ -3558,6 +3995,22 @@ export default function ProjectDetail() {
                 <div>
                   <label className="text-sm font-semibold mb-1 block">Company Name</label>
                   <Input type="text" required placeholder="ABC Electric LLC" value={inviteCompanyName} onChange={e => setInviteCompanyName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Trade Category <span className="font-normal text-muted-foreground">(optional)</span></label>
+                  <select
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={inviteTrade}
+                    onChange={e => setInviteTrade(e.target.value)}
+                  >
+                    <option value="">— No specific trade —</option>
+                    {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {inviteTrade && tradeScopes.find(s => s.tradeCategory === inviteTrade) && (
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Scope of work defined — will be included in invite email
+                    </p>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   If this subcontractor isn't in the system yet, an account will be created with a temporary password you can share with them.
