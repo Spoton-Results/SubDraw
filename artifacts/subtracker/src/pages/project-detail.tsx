@@ -2891,10 +2891,11 @@ export default function ProjectDetail() {
                         const tradeFeedback = feedback?.[item.trade];
                         const bidsForTrade = project.bids?.filter(b => (b.tradeCategory ?? "").toLowerCase() === item.trade.toLowerCase()) ?? [];
                         return (
-                          <div key={item.trade} className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
+                          <div key={item.trade} className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2 min-w-0">
+                            {/* Trade name + range — stacked on mobile, side-by-side when wide enough */}
+                            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                               <div className="font-semibold text-sm">{item.trade}</div>
-                              <div className="font-bold text-sm text-primary font-mono">
+                              <div className="font-bold text-sm text-primary font-mono whitespace-nowrap">
                                 {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
                               </div>
                             </div>
@@ -2903,32 +2904,35 @@ export default function ProjectDetail() {
                               <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">{item.rangeFactors}</p>
                             )}
                             {bidsForTrade.length > 0 && (
-                              <div className="space-y-1.5 pt-1 border-t border-border/50">
+                              <div className="space-y-2 pt-1 border-t border-border/50">
                                 {bidsForTrade.map(bid => {
                                   const status = bid.amount > item.highEstimate * 1.15 ? "above" : bid.amount < item.lowEstimate * 0.85 ? "below" : "within";
                                   return (
-                                    <div key={bid.id} className="flex items-center justify-between gap-2">
-                                      <span className="text-xs text-muted-foreground truncate">{bid.sub?.companyName}</span>
-                                      <div className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full",
-                                        status === "within" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" :
-                                        "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-500"
-                                      )}>
-                                        {status === "within" ? <CheckCircle2 className="h-3 w-3" /> : status === "above" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                                        {formatCurrency(bid.amount)} · {status === "within" ? "Within range" : status === "above" ? "Above range" : "Below range"}
+                                    <div key={bid.id} className="space-y-0.5">
+                                      <span className="text-xs text-muted-foreground block truncate">{bid.sub?.companyName}</span>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs font-mono font-semibold">{formatCurrency(bid.amount)}</span>
+                                        <div className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full",
+                                          status === "within" ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400" :
+                                          "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-500"
+                                        )}>
+                                          {status === "within" ? <CheckCircle2 className="h-3 w-3" /> : status === "above" ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                          {status === "within" ? "Within range" : status === "above" ? "Above range" : "Below range"}
+                                        </div>
                                       </div>
                                     </div>
                                   );
                                 })}
                               </div>
                             )}
-                            <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center pt-1">
                               {tradeFeedback ? (
                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                   {tradeFeedback.helpful ? <ThumbsUp className="h-3 w-3 text-green-500" /> : <ThumbsDown className="h-3 w-3 text-amber-500" />}
                                   {tradeFeedback.helpful ? "Marked helpful" : "Marked not helpful"}
                                 </span>
                               ) : (
-                                <div className="flex items-center gap-1 relative">
+                                <div className="flex items-center gap-1">
                                   <span className="text-xs text-muted-foreground">Helpful?</span>
                                   <button
                                     className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
@@ -2936,7 +2940,7 @@ export default function ProjectDetail() {
                                     onClick={() => handleAiFeedback(item.trade, true)}
                                     disabled={aiFeedbackSaving[item.trade]}
                                   >
-                                    {aiFeedbackSaving[item.trade] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground hover:text-green-600" />}
+                                    {aiFeedbackSaving[item.trade] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" />}
                                   </button>
                                   <div className="relative">
                                     <button
@@ -2945,10 +2949,10 @@ export default function ProjectDetail() {
                                       onClick={() => setAiFeedbackDropdown(prev => ({ ...prev, [item.trade]: !prev[item.trade] }))}
                                       disabled={aiFeedbackSaving[item.trade]}
                                     >
-                                      <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600" />
+                                      <ThumbsDown className="h-3.5 w-3.5 text-muted-foreground" />
                                     </button>
                                     {aiFeedbackDropdown[item.trade] && (
-                                      <div className="absolute left-0 bottom-8 z-20 w-52 bg-popover border border-border rounded-xl shadow-lg p-2 space-y-1">
+                                      <div className="absolute left-0 top-8 z-20 w-48 max-w-[calc(100vw-2rem)] bg-popover border border-border rounded-xl shadow-lg p-2 space-y-1">
                                         <p className="text-xs font-semibold text-muted-foreground px-2 pb-1">Why wasn't this helpful?</p>
                                         {["Range too wide", "Range too narrow", "Wrong trade", "Inaccurate for my market", "Other"].map(reason => (
                                           <button
@@ -2979,22 +2983,22 @@ export default function ProjectDetail() {
           {isGC && project.status === "CONSTRUCTION" && (project as any).aiAnalysis && (
             <Card className="border-blue-200 dark:border-blue-800">
               <button
-                className="w-full"
+                className="w-full text-left"
                 onClick={() => setAiArchiveExpanded(e => !e)}
               >
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                      <BrainCircuit className="h-5 w-5" />
-                      AI Bid Benchmarks (Archived)
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-base leading-snug">
+                      <BrainCircuit className="h-5 w-5 shrink-0" />
+                      <span>AI Bid Benchmarks<span className="hidden sm:inline"> (Archived)</span></span>
                     </CardTitle>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {(project as any).aiAnalysisAt && (
                         <span className="text-xs text-muted-foreground hidden sm:block">
-                          Ran {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy")}
+                          {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy")}
                         </span>
                       )}
-                      <Badge variant="secondary">Read-only</Badge>
+                      <Badge variant="secondary" className="text-xs">Archived</Badge>
                       {aiArchiveExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </div>
                   </div>
@@ -3006,10 +3010,10 @@ export default function ProjectDetail() {
                     <p className="text-xs text-muted-foreground">Historical AI estimates from the bidding phase. These ranges are archived and cannot be regenerated while the project is in construction.</p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {((project as any).aiAnalysis as Array<{ trade: string; lowEstimate: number; highEstimate: number; costDrivers: string; rangeFactors: string }>).map((item) => (
-                        <div key={item.trade} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
+                        <div key={item.trade} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-2 min-w-0">
+                          <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                             <div className="font-semibold text-sm">{item.trade}</div>
-                            <div className="font-bold text-sm text-blue-700 dark:text-blue-400 font-mono">
+                            <div className="font-bold text-sm text-blue-700 dark:text-blue-400 font-mono whitespace-nowrap">
                               {formatCurrency(item.lowEstimate)} – {formatCurrency(item.highEstimate)}
                             </div>
                           </div>
