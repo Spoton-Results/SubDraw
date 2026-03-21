@@ -415,6 +415,10 @@ export default function ProjectDetail() {
         method: "POST",
         credentials: "include",
       });
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Unexpected server response. Please try again.");
+      }
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "AI analysis failed");
       toast.success("AI bid analysis complete!");
