@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { Readable } from "stream";
 import { db } from "@workspace/db";
-import { gcProjectCredentialsTable, projectsTable, projectMembersTable } from "@workspace/db/schema";
+import { gcProjectCredentialsTable, projectsTable, projectMembersTable, usersTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -44,13 +44,21 @@ router.get("/", requireAuth, async (req, res) => {
   const access = await getProjectAndCheckAccess(projectId, user);
   if (!access) { res.status(403).json({ error: "Forbidden" }); return; }
 
+  // Always fetch GC company name so the sub dashboard can show the GC's name
+  const [projectRow] = await db
+    .select({ gcCompanyName: usersTable.companyName })
+    .from(projectsTable)
+    .innerJoin(usersTable, eq(usersTable.id, projectsTable.gcId))
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+
   const [creds] = await db
     .select()
     .from(gcProjectCredentialsTable)
     .where(eq(gcProjectCredentialsTable.projectId, projectId))
     .limit(1);
 
-  res.json(creds ?? null);
+  res.json({ ...(creds ?? {}), gcCompanyName: projectRow?.gcCompanyName ?? null });
 });
 
 // PUT /api/projects/:projectId/gc-credentials — GC only, upsert

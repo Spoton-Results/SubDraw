@@ -1,0 +1,17 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only fix the GC credentials display on the sub dashboard as described below. Keep all existing features exactly as they are.
+There is a bug where sub dashboards show Add Insurance and Add License prompts as if the sub needs to add the GC's credentials. This is wrong. The GC enters their own insurance certificate and contractor license once at the project level. That information should automatically appear on every sub's dashboard for that project. The sub should never see an Add Insurance or Add License button or prompt for GC credentials. Here are the exact requirements to fix this:
+
+On the sub dashboard for each project — find where GC credentials are displayed. Remove completely any Add Insurance button, Add License button, Update button, or any prompt saying No insurance certificate on file or No contractor license on file. Subs should never be prompted to add or update GC credentials. That is not their responsibility.
+Instead pull the GC's insurance certificate and contractor license directly from the project record and display them as read only information on the sub dashboard. Show them under a section called Your General Contractor with the GC company name as the heading.
+Display the GC credentials on the sub dashboard exactly like this:
+
+General Contractor: GC company name
+Insurance Certificate: Insurance company name — Policy number — Expires date — with a green valid badge if current or red expired badge if past expiry date — and a Download Certificate button if a PDF was uploaded
+Contractor License: License number — License type — State — Expires date — with a green valid badge if current or red expired badge if past expiry date
+
+If the GC has not yet entered their insurance certificate on the project — show a simple gray line that says GC insurance certificate not yet on file. No button. No prompt. Just informational text. The sub cannot do anything about this — only the GC can add it.
+If the GC has not yet entered their contractor license on the project — show a simple gray line that says GC contractor license not yet on file. No button. No prompt. Just informational text.
+This GC credentials section should appear on the sub dashboard in the same place it currently shows — do not move it. Just fix the content so it shows the GC's actual credentials read only instead of prompts for the sub to add something.
+When the GC updates their insurance or license on the project — the updated information should reflect immediately on all sub dashboards for that project with no delay and no action needed from the sub.
+On the GC side — on the project settings page — keep the existing fields where the GC enters their own insurance certificate and contractor license. Add a helper note below those fields that says: This information appears automatically on all subcontractor dashboards for this project. Keep it current so your subs always have your valid credentials on file.
+Do a full search of the codebase and remove every instance where a sub-facing screen shows an Add Insurance, Update Insurance, Add License, or Add Credentials button or prompt related to GC credentials. These prompts should not exist anywhere in the sub experience.

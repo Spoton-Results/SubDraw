@@ -2176,8 +2176,12 @@ export default function ProjectDetail() {
                     )}
                   </div>
 
-                  <div className="flex justify-end pt-1">
-                    <Button onClick={handleSaveGcCredentials} disabled={gcCredSaving} className="gap-2">
+                  <div className="flex items-center justify-between gap-4 pt-1 flex-wrap">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 max-w-sm">
+                      <Shield className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      This information appears automatically on all subcontractor dashboards for this project. Keep it current so your subs always have your valid credentials on file.
+                    </p>
+                    <Button onClick={handleSaveGcCredentials} disabled={gcCredSaving} className="gap-2 shrink-0">
                       {gcCredSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> Save Credentials</>}
                     </Button>
                   </div>
