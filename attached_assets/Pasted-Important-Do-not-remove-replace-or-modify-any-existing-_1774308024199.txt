@@ -1,0 +1,63 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only fix the GC credentials system as described below. Keep all existing scoreboard calculation, invoice flagging, payment confirmation, and all other features exactly as they are.
+There are three connected problems to fix in one update. Fix all three together.
+PROBLEM 1 — GC CREDENTIALS NOT SAVING TO DATABASE
+STEP 1 — Open prisma/schema.prisma and check the Project model right now. Paste the entire Project model into your response. Confirm whether these exact fields exist: gcInsuranceCompany, gcPolicyNumber, gcGeneralLiability, gcWorkersComp, gcCertificateExpiration, gcCertificatePdfUrl, gcLicenseNumber, gcLicenseType, gcLicenseState, gcLicenseExpiration, gcLicenseDocUrl, gcCredentialsComplete. If any are missing add every single one of them now and run prisma db push immediately. Confirm the migration ran successfully before continuing.
+STEP 2 — Delete the existing GC credentials API route completely. Create a brand new route at /api/projects/[id]/gc-credentials with the following exact logic:
+Accept POST requests with multipart form data using formidable to parse the request body. Do not use JSON parsing — this route must handle both text fields and file uploads together in one request.
+Extract these text fields from the parsed form data: gcInsuranceCompany, gcPolicyNumber, gcGeneralLiability, gcWorkersComp, gcCertificateExpiration, gcLicenseNumber, gcLicenseType, gcLicenseState, gcLicenseExpiration.
+If a certificate PDF file is included in the request save it to /public/uploads/ with a unique timestamped filename and store the full path in gcCertificatePdfUrl.
+If a license doc file is included save it to /public/uploads/ with a unique timestamped filename and store the full path in gcLicenseDocUrl.
+Run a Prisma update on the Project where the id matches the project ID from the URL. Update all gc credential fields with the parsed values.
+After the update check if gcInsuranceCompany and gcPolicyNumber and gcCertificateExpiration and gcLicenseNumber and gcLicenseState are all present and not empty — if yes set gcCredentialsComplete to true — if no set it to false.
+Add console.log statements at three points — when the request arrives logging the full parsed fields, after the Prisma update logging the result, and in the catch block logging the full error. These logs will confirm the save is working.
+Return the full updated project record as JSON with status 200. If anything fails return the exact error message with status 500.
+Also create a GET handler on the same route that returns all gc credential fields for the project so the form can pre-fill on load.
+STEP 3 — Delete the existing GC credentials form component completely. Create a brand new form component with the following exact logic:
+On mount call GET /api/projects/[id]/gc-credentials and pre-fill every field with the returned values. If the GC saved data before it must appear in the form when they come back.
+Use encType multipart/form-data on the form element.
+Include all input fields — insurance company, policy number, GL coverage, workers comp, certificate expiration date, license number, license type, issuing state, license expiration date.
+Include two file input fields — one labeled Upload Certificate accepting PDF and image files, one labeled Upload License Doc accepting PDF and image files.
+If a certificate PDF was previously uploaded show the filename with a green checkmark and a Download button. Show a Replace Certificate option as secondary.
+If a license doc was previously uploaded show the filename with a green checkmark and a Download button. Show a Replace License Doc option as secondary.
+On submit build a FormData object, append all field values, append any selected files, and POST to /api/projects/[id]/gc-credentials.
+After successful save show a green banner saying GC Credentials saved successfully.
+After successful save update the badge immediately — show green Credentials Complete if gcCredentialsComplete is true — show gray Credentials Incomplete if false.
+After failed save show a red banner with the exact error message from the API response.
+STEP 4 — After the save confirm it worked by running this Prisma query directly and pasting the result into your response: prisma.project.findFirst({ where: { id: TEST_PROJECT_ID }, select: { gcInsuranceCompany: true, gcPolicyNumber: true, gcCertificateExpiration: true, gcLicenseNumber: true, gcLicenseState: true, gcCredentialsComplete: true } }) — the fields must contain real data not null. If they are null the save is still broken and you must find and fix the root cause before continuing.
+PROBLEM 2 — GC CREDENTIALS NOT APPEARING ON SUB DASHBOARDS
+After confirming the save works fix the sub dashboard to pull and display the GC credentials correctly.
+On the sub dashboard when the page loads fetch the project data and read all gc credential fields directly from the project record.
+Display the Your General Contractor section with the following content:
+Section heading: Your General Contractor
+GC company name in gray text directly below the heading
+Two cards side by side on desktop and stacked on mobile:
+Card 1 — Insurance Certificate
+Shield icon and Insurance Certificate label on the left
+Green Valid badge if expiration date is in the future — red Expired badge if past expiration
+Line 1: Insurance company name — Policy number — Expires MM/DD/YYYY
+Line 2: GL dollar amount formatted with commas — Workers Comp dollar amount formatted with commas
+Download Certificate button if a PDF was uploaded — no button if no PDF
+Card 2 — Contractor License
+Badge icon and Contractor License label on the left
+Green Valid badge if expiration date is in the future — red Expired badge if past expiration
+Line 1: License number — License type — State — Expires MM/DD/YYYY
+Download License Doc button if a PDF was uploaded — no button if no PDF
+Card 3 full width — Subcontract Agreement
+Document icon and Subcontract Agreement label on the left
+Gray NO DOCUMENT badge and text saying No subcontract agreement has been uploaded by the GC yet — if no document uploaded
+Green ON FILE badge and Download Agreement button — if document has been uploaded
+If gcCredentialsComplete is false on the project show gray placeholder text in each card saying GC insurance certificate not yet on file and GC contractor license not yet on file — no buttons — no prompts — no Add or Update options anywhere.
+No Add buttons anywhere on this section. No Update buttons. No Edit buttons. Everything is read only. The sub can only tap Download — never upload or edit GC credentials.
+When the GC updates their credentials on the project the sub dashboard must reflect the updated information immediately on next page load with no extra steps required.
+PROBLEM 3 — GC CREDENTIALS APPEARING IN WRONG POSITION AND APPEARING TWICE
+Do a complete search of the entire sub dashboard component file and find every single location where Your General Contractor or GC credentials or gcInsuranceCompany or gcLicenseNumber is referenced or rendered.
+Remove every single instance. Then add the section back exactly once in the correct position.
+The correct position is directly below the Financial Scoreboard and directly above the Change Orders section.
+The final sub dashboard order from top to bottom must be exactly: Contract summary card, Financial Scoreboard, Your General Contractor credentials, Action Required, Change Orders, Invoices, Lien Waivers, Compliance, Documents.
+FINAL CONFIRMATION BEFORE REPORTING COMPLETE
+You must complete all of the following checks yourself and report the result of each one before telling me this is done:
+Check 1 — Open the GC credentials form. Confirm all previously saved fields are pre-filled on load. If no data was saved before fill in all fields now and tap save.
+Check 2 — After tapping save paste the Prisma query result showing the database record has real data in the gc credential fields — not null.
+Check 3 — Log in as a sub on that project. Scroll to the Your General Contractor section. Confirm it shows the GC company name, insurance details with Valid badge, and license details with Valid badge. Confirm no Add or Update buttons are visible anywhere.
+Check 4 — Confirm the Your General Contractor section appears exactly once on the sub dashboard — not twice — and appears directly below the Financial Scoreboard.
+Do not report complete until all four checks pass and you have pasted the evidence for each one.
