@@ -1,0 +1,59 @@
+
+
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only fix the GC Credentials form as described below. Keep all existing features exactly as they are.
+The GC Credentials form has multiple broken pieces that were not fixed by the previous attempt. Go through each item below carefully and fix every single one.
+STEP 1 — DIAGNOSE FIRST BEFORE FIXING
+Before writing any fix code do the following diagnosis and tell me what you find:
+
+Find the exact API route that handles saving GC credentials. Show me the full route code including the request handler, the database write, and any file upload handling.
+Find the exact component or page that renders the GC Credentials form. Show me the full form code including the submit handler, the file input handlers, and how the form calls the API.
+Check whether the GC credentials fields exist on the Project model in the Prisma schema. List every field on the Project model related to GC credentials — insurance company, policy number, GL coverage, workers comp, certificate expiration, certificate PDF URL, license number, license type, issuing state, license expiration, license doc URL. If any of these fields are missing from the Prisma schema that is the root cause.
+Check whether file upload handling exists in the API route for GC credentials. If the Upload Certificate and Upload License Doc buttons are calling a file upload endpoint — find that endpoint and show me the code. If no file upload endpoint exists for GC credentials that is the root cause.
+Check the form submit handler — is it calling the correct API route with the correct method — POST or PUT or PATCH. Is it sending a multipart form data request if files are included or is it sending JSON only which would break file uploads.
+
+STEP 2 — FIX THE PRISMA SCHEMA IF NEEDED
+If any GC credential fields are missing from the Project model in schema.prisma add them now:
+gcInsuranceCompany String nullable
+gcPolicyNumber String nullable
+gcGeneralLiability String nullable
+gcWorkersComp String nullable
+gcCertificateExpiration DateTime nullable
+gcCertificatePdfUrl String nullable
+gcLicenseNumber String nullable
+gcLicenseType String nullable
+gcLicenseState String nullable
+gcLicenseExpiration DateTime nullable
+gcLicenseDocUrl String nullable
+gcCredentialsComplete Boolean default false
+After adding any missing fields run prisma migrate or prisma db push to apply the schema changes.
+STEP 3 — FIX THE API ROUTE
+Rewrite the GC credentials save API route completely from scratch. The route must:
+Accept a multipart form data request — not JSON only — because it needs to handle both text fields and file uploads at the same time
+Parse all text fields from the form data — insurance company, policy number, GL coverage, workers comp, certificate expiration, license number, license type, issuing state, license expiration
+If a certificate PDF file is included in the request — save the file to storage and store the URL in gcCertificatePdfUrl on the project
+If a license doc PDF file is included in the request — save the file to storage and store the URL in gcLicenseDocUrl on the project
+After saving all fields — check if the minimum required fields are complete — gcInsuranceCompany, gcPolicyNumber, gcCertificateExpiration, gcLicenseNumber, gcLicenseState — if all five are present set gcCredentialsComplete to true otherwise set it to false
+Return the complete updated project record including all credential fields in the response
+STEP 4 — FIX THE FORM COMPONENT
+Rewrite the GC Credentials form component completely from scratch. The form must:
+On page load fetch the current project data and pre-fill every field with the saved values — the form must never appear empty if data has already been saved
+Use a multipart form data submission — not a JSON fetch — so that file uploads and text fields are sent together in one request
+The Upload Certificate button must use a standard HTML file input that accepts PDF and image files. When a file is selected show the file name immediately next to the button so the GC can see their selection before saving.
+The Upload License Doc button must use a standard HTML file input that accepts PDF and image files. When a file is selected show the file name immediately next to the button.
+If a certificate PDF has already been uploaded previously — show a green checkmark with the text Certificate on file and a Download button. Show a Replace Certificate button as a secondary option.
+If a license doc has already been uploaded previously — show a green checkmark with the text License doc on file and a Download button. Show a Replace License Doc button as a secondary option.
+The Save GC Credentials button at the bottom submits the entire form including any selected files as multipart form data to the API route
+After a successful save show a green banner at the top of the form that says GC Credentials saved successfully
+After a successful save update the Credentials Incomplete or Credentials Complete badge immediately without requiring a page refresh — if gcCredentialsComplete is true show a green Credentials Complete badge — if false show a gray Credentials Incomplete badge
+STEP 5 — FIX THE SUB DASHBOARD DISPLAY
+After fixing the save and upload — make sure sub dashboards pull the updated GC credentials from the project record and display them correctly. No Add or Update buttons on the sub side. Read only display only. If gcCredentialsComplete is false on the project show GC credentials not yet complete in gray text. If gcCredentialsComplete is true show all the GC credential fields with valid or expired badges based on the expiration dates.
+STEP 6 — TEST BEFORE REPORTING COMPLETE
+Before telling me this is fixed — test it yourself by doing the following:
+Fill in all fields on the GC Credentials form
+Select a PDF file for both Upload Certificate and Upload License Doc
+Tap Save GC Credentials
+Navigate away from the page completely
+Come back to the GC Credentials form and confirm all fields are pre-filled with the saved data and both file uploads show Certificate on file and License doc on file with Download buttons
+Confirm the badge shows Credentials Complete in green
+Open the sub dashboard and confirm the GC credentials show correctly with no Add or Update buttons
+Only report this as complete after all six of those checks pass.

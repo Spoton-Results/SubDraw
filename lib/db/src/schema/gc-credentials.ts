@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 import { projectsTable } from "./projects";
 
 export const gcProjectCredentialsTable = pgTable("gc_project_credentials", {
@@ -23,6 +23,9 @@ export const gcProjectCredentialsTable = pgTable("gc_project_credentials", {
   licDocPath: text("lic_doc_path"),
   licNotifiedAt30: timestamp("lic_notified_at_30"),
   licNotifiedAt7: timestamp("lic_notified_at_7"),
+
+  // Computed completeness flag — true when all 5 required fields are present
+  credentialsComplete: boolean("credentials_complete").notNull().default(false),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

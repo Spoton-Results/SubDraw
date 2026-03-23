@@ -97,6 +97,9 @@ router.put("/", requireAuth, requireGC, async (req, res) => {
   const insCertPath = body.insCertPath !== undefined ? norm(body.insCertPath) : (existing?.insCertPath ?? null);
   const licDocPath = body.licDocPath !== undefined ? norm(body.licDocPath) : (existing?.licDocPath ?? null);
 
+  // Compute credentialsComplete: all 5 required fields must be present
+  const credentialsComplete = !!(insCompany && insPolicyNumber && insExpDate && licNumber && licState);
+
   let result;
   if (existing) {
     const insExpChanged = insExpDate !== existing.insExpDate;
@@ -108,7 +111,7 @@ router.put("/", requireAuth, requireGC, async (req, res) => {
         insCompany, insPolicyNumber, insGLCoverage, insWCCoverage, insExpDate, insCertPath,
         ...(insExpChanged ? { insNotifiedAt30: null, insNotifiedAt7: null } : {}),
         licNumber, licType, licState, licExpDate, licDocPath,
-        ...(licExpChanged ? { licNotifiedAt30: null, licNotifiedAt7: null } : {}),
+        credentialsComplete,
         updatedAt: new Date(),
       })
       .where(eq(gcProjectCredentialsTable.id, existing.id))
@@ -116,7 +119,7 @@ router.put("/", requireAuth, requireGC, async (req, res) => {
   } else {
     [result] = await db
       .insert(gcProjectCredentialsTable)
-      .values({ projectId, insCompany, insPolicyNumber, insGLCoverage, insWCCoverage, insExpDate, insCertPath, licNumber, licType, licState, licExpDate, licDocPath })
+      .values({ projectId, insCompany, insPolicyNumber, insGLCoverage, insWCCoverage, insExpDate, insCertPath, licNumber, licType, licState, licExpDate, licDocPath, credentialsComplete })
       .returning();
   }
 

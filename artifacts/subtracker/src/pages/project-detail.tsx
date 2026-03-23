@@ -204,8 +204,9 @@ export default function ProjectDetail() {
   const [gcCredLicExpDate, setGcCredLicExpDate] = React.useState("");
   const [gcCredLicDocPath, setGcCredLicDocPath] = React.useState<string | null>(null);
   const [gcCredLicDocFileName, setGcCredLicDocFileName] = React.useState<string | null>(null);
-  const [gcCredInsSection, setGcCredInsSection] = React.useState(false);
-  const [gcCredLicSection, setGcCredLicSection] = React.useState(false);
+  const [gcCredInsSection, setGcCredInsSection] = React.useState(true);
+  const [gcCredLicSection, setGcCredLicSection] = React.useState(true);
+  const [gcCredSaveSuccess, setGcCredSaveSuccess] = React.useState(false);
 
   // Compliance checklist state
   const [newComplianceTitle, setNewComplianceTitle] = React.useState("");
@@ -335,6 +336,8 @@ export default function ProjectDetail() {
     id: string; projectId: string;
     insCompany: string | null; insPolicyNumber: string | null; insGLCoverage: string | null; insWCCoverage: string | null; insExpDate: string | null; insCertPath: string | null;
     licNumber: string | null; licType: string | null; licState: string | null; licExpDate: string | null; licDocPath: string | null;
+    credentialsComplete: boolean;
+    gcCompanyName?: string | null;
   } | null;
 
   const { data: gcCredentials, refetch: refetchGcCredentials } = useQuery<GcCredentials>({
@@ -390,30 +393,30 @@ export default function ProjectDetail() {
 
   async function handleSaveGcCredentials() {
     setGcCredSaving(true);
+    setGcCredSaveSuccess(false);
     try {
       const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          insCompany: gcCredInsCompany || null,
-          insPolicyNumber: gcCredInsPolicyNumber || null,
-          insGLCoverage: gcCredInsGLCoverage || null,
-          insWCCoverage: gcCredInsWCCoverage || null,
+          insCompany: gcCredInsCompany.trim() || null,
+          insPolicyNumber: gcCredInsPolicyNumber.trim() || null,
+          insGLCoverage: gcCredInsGLCoverage.trim() || null,
+          insWCCoverage: gcCredInsWCCoverage.trim() || null,
           insExpDate: gcCredInsExpDate || null,
           insCertPath: gcCredInsCertPath || null,
-          licNumber: gcCredLicNumber || null,
-          licType: gcCredLicType || null,
-          licState: gcCredLicState || null,
+          licNumber: gcCredLicNumber.trim() || null,
+          licType: gcCredLicType.trim() || null,
+          licState: gcCredLicState.trim() || null,
           licExpDate: gcCredLicExpDate || null,
           licDocPath: gcCredLicDocPath || null,
         }),
       });
       if (!res.ok) { toast.error("Failed to save credentials"); return; }
-      refetchGcCredentials();
-      setGcCredInsSection(false);
-      setGcCredLicSection(false);
-      toast.success("GC credentials saved successfully");
+      await refetchGcCredentials();
+      setGcCredSaveSuccess(true);
+      setTimeout(() => setGcCredSaveSuccess(false), 5000);
     } finally { setGcCredSaving(false); }
   }
 
@@ -2046,13 +2049,7 @@ export default function ProjectDetail() {
             const licExpired = gcCredentials?.licExpDate ? gcCredDaysUntilExpiry(gcCredentials.licExpDate)! < 0 : false;
             const insExpiring = gcCredentials?.insExpDate ? (gcCredDaysUntilExpiry(gcCredentials.insExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.insExpDate)! >= 0) : false;
             const licExpiring = gcCredentials?.licExpDate ? (gcCredDaysUntilExpiry(gcCredentials.licExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.licExpDate)! >= 0) : false;
-            const credComplete = !!(
-              gcCredentials?.insCompany &&
-              gcCredentials?.insPolicyNumber &&
-              gcCredentials?.insExpDate &&
-              gcCredentials?.licNumber &&
-              gcCredentials?.licState
-            );
+            const credComplete = gcCredentials?.credentialsComplete === true;
             const hasWarning = insExpired || licExpired || insExpiring || licExpiring || !credComplete;
             return (
               <Card>
@@ -2087,6 +2084,14 @@ export default function ProjectDetail() {
                   <p className="text-xs text-muted-foreground mt-1">Enter your insurance certificate and contractor license once per project — this information is automatically shown to all subcontractors.</p>
                 </CardHeader>
                 <CardContent className="space-y-6">
+
+                  {/* SUCCESS BANNER */}
+                  {gcCredSaveSuccess && (
+                    <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <p className="text-sm font-medium text-green-700 dark:text-green-400">GC Credentials saved successfully</p>
+                    </div>
+                  )}
 
                   {/* INSURANCE CERTIFICATE */}
                   <div className="border border-border rounded-xl overflow-hidden">

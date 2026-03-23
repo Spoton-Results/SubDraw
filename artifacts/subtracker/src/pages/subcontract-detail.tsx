@@ -243,6 +243,7 @@ export default function SubcontractDetail() {
 
   type GcCredentialsSub = {
     gcCompanyName: string | null;
+    credentialsComplete: boolean;
     insCompany: string | null; insPolicyNumber: string | null; insGLCoverage: string | null; insWCCoverage: string | null; insExpDate: string | null; insCertPath: string | null;
     licNumber: string | null; licType: string | null; licState: string | null; licExpDate: string | null; licDocPath: string | null;
   } | null;
@@ -2370,6 +2371,7 @@ export default function SubcontractDetail() {
 
       {/* GC CREDENTIALS SECTION — read-only for subs */}
       {sub?.projectId && (() => {
+        const credComplete = gcCredentialsSub?.credentialsComplete === true;
         const hasIns = !!(gcCredentialsSub?.insCompany || gcCredentialsSub?.insExpDate);
         const hasLic = !!(gcCredentialsSub?.licNumber || gcCredentialsSub?.licExpDate);
         const insExpired = gcCredentialsSub?.insExpDate ? subCredDaysUntilExpiry(gcCredentialsSub.insExpDate)! < 0 : false;
@@ -2417,6 +2419,13 @@ export default function SubcontractDetail() {
                   </span>
                 )}
               </div>
+
+              {!credComplete && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Shield className="h-4 w-4 shrink-0" />
+                  GC credentials not yet complete — your GC has not finished entering their insurance and license information.
+                </p>
+              )}
 
               <div className="space-y-4 divide-y divide-border">
                 {/* Insurance Certificate row */}
