@@ -51,48 +51,50 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-red-600 mb-4">
-            <Shield className="h-7 w-7 text-white" />
+          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-primary mb-4">
+            <HardHat className="h-7 w-7 text-primary-foreground" />
           </div>
-          <div className="flex items-center justify-center gap-2 text-white font-bold text-xl mb-1">
-            <HardHat className="h-5 w-5 text-primary" />
+          <div className="flex items-center justify-center gap-2 text-foreground font-bold text-xl mb-1">
             SubTracker
           </div>
-          <p className="text-slate-400 text-sm">Super Admin Portal</p>
+          <p className="text-muted-foreground text-sm flex items-center justify-center gap-1.5">
+            <Shield className="h-3.5 w-3.5" />
+            Super Admin Portal
+          </p>
         </div>
 
-        <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-8 shadow-2xl">
-          <h1 className="text-white font-bold text-xl mb-6 text-center">Admin Sign In</h1>
+        <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+          <h1 className="text-foreground font-bold text-xl mb-6 text-center">Admin Sign In</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                className="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-slate-500"
+                className="w-full bg-background border border-border text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent placeholder:text-muted-foreground"
                 placeholder="admin@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                className="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-slate-500"
+                className="w-full bg-background border border-border text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent placeholder:text-muted-foreground"
                 placeholder="••••••••"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-xl py-2.5 text-sm transition-colors flex items-center justify-center gap-2 mt-2"
+              className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-semibold rounded-xl py-2.5 text-sm transition-colors flex items-center justify-center gap-2 mt-2"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
               {loading ? "Signing in..." : "Sign In"}
@@ -100,7 +102,7 @@ export default function AdminLogin() {
           </form>
         </div>
 
-        <p className="text-center text-slate-500 text-xs mt-6">
+        <p className="text-center text-muted-foreground text-xs mt-6">
           Restricted access — authorized personnel only
         </p>
       </div>

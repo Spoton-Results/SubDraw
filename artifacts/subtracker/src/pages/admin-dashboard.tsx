@@ -65,7 +65,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active:    { label: "Active",    cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   trial:     { label: "Trial",     cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
   past_due:  { label: "Past Due",  cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  cancelled: { label: "Cancelled", cls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
+  cancelled: { label: "Cancelled", cls: "bg-slate-100 text-muted-foreground dark:bg-muted dark:text-muted-foreground" },
   paused:    { label: "Paused",    cls: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
 };
 
@@ -77,7 +77,7 @@ function MetricCard({ icon, label, value, sub, color = "primary" }: {
     green:   "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
     blue:    "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
     orange:  "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
-    slate:   "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+    slate:   "bg-slate-100 text-muted-foreground dark:bg-muted dark:text-muted-foreground",
     purple:  "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
   };
   return (
@@ -384,22 +384,22 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
-      <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-6 gap-4 shrink-0">
+      <header className="h-14 bg-card border-b border-border flex items-center px-6 gap-4 shrink-0">
         <div className="flex items-center gap-2 font-bold text-base">
           <HardHat className="h-5 w-5 text-primary" />
           SubTracker
           <span className="text-red-500 text-xs font-semibold border border-red-500/50 rounded px-1.5 py-0.5 ml-1">ADMIN</span>
         </div>
         <div className="flex-1" />
-        <div className="flex items-center gap-3 text-sm text-slate-400">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <Shield className="h-4 w-4" />
           <span>{adminEmail}</span>
         </div>
         <button
           onClick={handleAdminLogout}
-          className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-sm"
         >
           <LogOut className="h-4 w-4" />
           Sign Out
@@ -407,15 +407,15 @@ export default function AdminDashboard() {
       </header>
 
       {/* Tabs */}
-      <div className="bg-slate-900 border-b border-slate-800 px-6 flex gap-1 overflow-x-auto shrink-0">
+      <div className="bg-card border-b border-border px-6 flex gap-1 overflow-x-auto shrink-0">
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === t.id
-                ? "border-red-500 text-white"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {t.icon}
@@ -433,79 +433,79 @@ export default function AdminDashboard() {
               <h1 className="text-xl font-bold">Platform Overview</h1>
               <button
                 onClick={() => { setMetrics(null); loadMetrics(); }}
-                className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
             </div>
             {metricsLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : metrics ? (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="bg-card border border-border rounded-2xl p-5">
                     <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 mb-3">
                       <Users className="h-5 w-5" />
                     </div>
                     <div className="text-2xl font-bold">{metrics.totalGCs}</div>
-                    <div className="text-sm text-slate-400 mt-0.5">Total GC Accounts</div>
+                    <div className="text-sm text-muted-foreground mt-0.5">Total GC Accounts</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="bg-card border border-border rounded-2xl p-5">
                     <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-green-500/10 text-green-400 mb-3">
                       <CheckCircle className="h-5 w-5" />
                     </div>
                     <div className="text-2xl font-bold">{metrics.activePaying}</div>
-                    <div className="text-sm text-slate-400 mt-0.5">Active Paying</div>
+                    <div className="text-sm text-muted-foreground mt-0.5">Active Paying</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="bg-card border border-border rounded-2xl p-5">
                     <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-yellow-500/10 text-yellow-400 mb-3">
                       <Clock className="h-5 w-5" />
                     </div>
                     <div className="text-2xl font-bold">{metrics.onTrial}</div>
-                    <div className="text-sm text-slate-400 mt-0.5">On Trial</div>
+                    <div className="text-sm text-muted-foreground mt-0.5">On Trial</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="bg-card border border-border rounded-2xl p-5">
                     <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-red-500/10 text-red-400 mb-3">
                       <XCircle className="h-5 w-5" />
                     </div>
                     <div className="text-2xl font-bold">{metrics.churned}</div>
-                    <div className="text-sm text-slate-400 mt-0.5">Churned / Expired</div>
+                    <div className="text-sm text-muted-foreground mt-0.5">Churned / Expired</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                    <div className="text-slate-400 text-sm mb-1">Monthly Recurring Revenue</div>
+                  <div className="bg-card border border-border rounded-2xl p-5">
+                    <div className="text-muted-foreground text-sm mb-1">Monthly Recurring Revenue</div>
                     <div className="text-3xl font-bold text-green-400">${metrics.mrr.toLocaleString()}</div>
-                    <div className="text-slate-500 text-xs mt-1">ARR: ${metrics.arr.toLocaleString()}</div>
+                    <div className="text-muted-foreground text-xs mt-1">ARR: ${metrics.arr.toLocaleString()}</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                    <div className="text-slate-400 text-sm mb-1">Total Revenue</div>
+                  <div className="bg-card border border-border rounded-2xl p-5">
+                    <div className="text-muted-foreground text-sm mb-1">Total Revenue</div>
                     <div className="text-3xl font-bold">${metrics.totalRevenue.toLocaleString()}</div>
-                    <div className="text-slate-500 text-xs mt-1">All time from Stripe</div>
+                    <div className="text-muted-foreground text-xs mt-1">All time from Stripe</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                    <div className="text-slate-400 text-sm mb-1">Platform Usage</div>
+                  <div className="bg-card border border-border rounded-2xl p-5">
+                    <div className="text-muted-foreground text-sm mb-1">Platform Usage</div>
                     <div className="flex items-baseline gap-3 mt-1">
                       <div>
                         <div className="text-2xl font-bold">{metrics.totalProjects}</div>
-                        <div className="text-slate-500 text-xs">Projects</div>
+                        <div className="text-muted-foreground text-xs">Projects</div>
                       </div>
                       <div>
                         <div className="text-2xl font-bold">{metrics.totalActiveSubcontracts}</div>
-                        <div className="text-slate-500 text-xs">Active Subcontracts</div>
+                        <div className="text-muted-foreground text-xs">Active Subcontracts</div>
                       </div>
                       <div>
                         <div className="text-2xl font-bold">{metrics.totalSubs}</div>
-                        <div className="text-slate-500 text-xs">SUB Accounts</div>
+                        <div className="text-muted-foreground text-xs">SUB Accounts</div>
                       </div>
                     </div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="text-slate-500 text-center py-16">Failed to load metrics</div>
+              <div className="text-muted-foreground text-center py-16">Failed to load metrics</div>
             )}
           </div>
         )}
@@ -517,16 +517,16 @@ export default function AdminDashboard() {
               <h1 className="text-xl font-bold flex-1">GC Accounts</h1>
               <div className="flex gap-2 flex-wrap">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
                     value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Search company or email..."
-                    className="bg-slate-900 border border-slate-700 text-white rounded-xl pl-9 pr-4 py-2 text-sm w-56 focus:outline-none focus:ring-1 focus:ring-red-500"
+                    className="bg-card border border-border text-foreground rounded-xl pl-9 pr-4 py-2 text-sm w-56 focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <select
                   value={planFilter} onChange={e => setPlanFilter(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
+                  className="bg-card border border-border text-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="all">All Plans</option>
                   <option value="starter">Starter</option>
@@ -539,7 +539,7 @@ export default function AdminDashboard() {
                 </select>
                 <select
                   value={sortBy} onChange={e => setSortBy(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
+                  className="bg-card border border-border text-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="newest">Newest First</option>
                   <option value="oldest">Oldest First</option>
@@ -549,21 +549,21 @@ export default function AdminDashboard() {
                 </select>
                 <button
                   onClick={() => { setAccounts([]); loadAccounts(); }}
-                  className="p-2 bg-slate-900 border border-slate-700 rounded-xl hover:bg-slate-800 transition-colors"
+                  className="p-2 bg-card border border-border rounded-xl hover:bg-muted transition-colors"
                 >
-                  <RefreshCw className="h-4 w-4 text-slate-400" />
+                  <RefreshCw className="h-4 w-4 text-muted-foreground" />
                 </button>
               </div>
             </div>
 
             {accountsLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 text-xs">
+                      <tr className="border-b border-border text-muted-foreground text-xs">
                         <th className="text-left px-4 py-3 font-medium">Company</th>
                         <th className="text-left px-4 py-3 font-medium">Plan</th>
                         <th className="text-left px-4 py-3 font-medium">Status</th>
@@ -575,14 +575,14 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {filteredAccounts.length === 0 ? (
-                        <tr><td colSpan={7} className="text-center py-12 text-slate-500">No accounts found</td></tr>
+                        <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">No accounts found</td></tr>
                       ) : filteredAccounts.map(account => {
                         const badge = STATUS_BADGE[account.status] ?? STATUS_BADGE.cancelled;
                         return (
-                          <tr key={account.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                          <tr key={account.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                             <td className="px-4 py-3">
                               <div className="font-medium">{account.companyName}</div>
-                              <div className="text-slate-500 text-xs">{account.email}</div>
+                              <div className="text-muted-foreground text-xs">{account.email}</div>
                               {account.adminNotes && (
                                 <div className="text-yellow-400/70 text-xs truncate max-w-[200px]" title={account.adminNotes}>
                                   📝 {account.adminNotes}
@@ -590,7 +590,7 @@ export default function AdminDashboard() {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="text-white">{account.planLabel ?? (account.trialDaysLeft != null ? "Trial" : "—")}</div>
+                              <div className="text-foreground">{account.planLabel ?? (account.trialDaysLeft != null ? "Trial" : "—")}</div>
                               {account.trialDaysLeft != null && (
                                 <div className="text-xs text-yellow-400">{account.trialDaysLeft}d left</div>
                               )}
@@ -610,9 +610,9 @@ export default function AdminDashboard() {
                               <span className={account.planLimit && account.activeSubcontracts >= account.planLimit ? "text-red-400 font-semibold" : ""}>
                                 {account.activeSubcontracts}
                               </span>
-                              {account.planLimit && <span className="text-slate-500">/{account.planLimit}</span>}
+                              {account.planLimit && <span className="text-muted-foreground">/{account.planLimit}</span>}
                             </td>
-                            <td className="px-4 py-3 text-slate-400 text-xs">
+                            <td className="px-4 py-3 text-muted-foreground text-xs">
                               {account.lastLoginAt
                                 ? formatDistanceToNow(new Date(account.lastLoginAt), { addSuffix: true })
                                 : "Never"}
@@ -650,14 +650,14 @@ export default function AdminDashboard() {
                                 <button
                                   onClick={() => { setMsgModal(account); setMsgSubject(""); setMsgBody(""); }}
                                   title="Send Message"
-                                  className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 transition-colors"
+                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                                 >
                                   <Mail className="h-4 w-4" />
                                 </button>
                                 <button
                                   onClick={() => { setNotesModal(account); setNotesText(account.adminNotes ?? ""); }}
                                   title="Admin Notes"
-                                  className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 transition-colors"
+                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                                 >
                                   <FileText className="h-4 w-4" />
                                 </button>
@@ -693,35 +693,35 @@ export default function AdminDashboard() {
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-xl font-bold">Revenue Analytics</h1>
-              <button onClick={() => { setRevenueData(null); loadRevenue(); }} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
+              <button onClick={() => { setRevenueData(null); loadRevenue(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
             </div>
             {revenueLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : revenueData ? (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                    <div className="text-slate-400 text-xs mb-2">Trial Conversion Rate</div>
+                  <div className="bg-card border border-border rounded-2xl p-5">
+                    <div className="text-muted-foreground text-xs mb-2">Trial Conversion Rate</div>
                     <div className="text-2xl font-bold">{revenueData.trialConversionRate}%</div>
-                    <div className="text-xs text-slate-500 mt-1">{revenueData.trialConversionsThisMonth} conversions this month</div>
+                    <div className="text-xs text-muted-foreground mt-1">{revenueData.trialConversionsThisMonth} conversions this month</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                    <div className="text-slate-400 text-xs mb-2">Avg Revenue / GC</div>
+                  <div className="bg-card border border-border rounded-2xl p-5">
+                    <div className="text-muted-foreground text-xs mb-2">Avg Revenue / GC</div>
                     <div className="text-2xl font-bold">${revenueData.avgRevenuePerGC}/mo</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:col-span-2">
-                    <div className="text-slate-400 text-xs mb-2">New Customers This Month</div>
+                  <div className="bg-card border border-border rounded-2xl p-5 md:col-span-2">
+                    <div className="text-muted-foreground text-xs mb-2">New Customers This Month</div>
                     <div className="text-2xl font-bold">{revenueData.newCustomersThisMonth?.length ?? 0}</div>
                     {revenueData.newCustomersThisMonth?.slice(0, 3).map((c: any) => (
-                      <div key={c.email} className="text-xs text-slate-500 mt-1">{c.companyName}</div>
+                      <div key={c.email} className="text-xs text-muted-foreground mt-1">{c.companyName}</div>
                     ))}
                   </div>
                 </div>
 
                 {revenueData.monthlyChart?.length > 0 && (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+                  <div className="bg-card border border-border rounded-2xl p-5 mb-6">
                     <div className="font-semibold mb-4 text-sm">Revenue by Month</div>
                     <ResponsiveContainer width="100%" height={220}>
                       <LineChart data={revenueData.monthlyChart}>
@@ -738,14 +738,14 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <div className="bg-card border border-border rounded-2xl p-5">
                   <div className="font-semibold mb-4 text-sm">Revenue by Plan</div>
                   <div className="space-y-3">
                     {revenueData.revenueByPlan?.map((p: any) => (
                       <div key={p.label} className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <span className="text-sm">{p.label}</span>
-                          <span className="text-xs text-slate-500">{p.count} accounts</span>
+                          <span className="text-xs text-muted-foreground">{p.count} accounts</span>
                         </div>
                         <span className="text-sm font-semibold">{p.mrr > 0 ? `$${p.mrr}/mo` : "—"}</span>
                       </div>
@@ -754,7 +754,7 @@ export default function AdminDashboard() {
                 </div>
               </>
             ) : (
-              <div className="text-slate-500 text-center py-16">Failed to load revenue data</div>
+              <div className="text-muted-foreground text-center py-16">Failed to load revenue data</div>
             )}
           </div>
         )}
@@ -764,17 +764,17 @@ export default function AdminDashboard() {
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-xl font-bold">Trial Accounts</h1>
-              <button onClick={() => { setTrials([]); loadTrials(); }} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
+              <button onClick={() => { setTrials([]); loadTrials(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
             </div>
             {trialsLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-xs">
+                    <tr className="border-b border-border text-muted-foreground text-xs">
                       <th className="text-left px-4 py-3 font-medium">Company</th>
                       <th className="text-right px-4 py-3 font-medium">Days Left</th>
                       <th className="text-right px-4 py-3 font-medium">Projects</th>
@@ -785,12 +785,12 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {trials.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-12 text-slate-500">No active trials</td></tr>
+                      <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No active trials</td></tr>
                     ) : trials.map(t => (
-                      <tr key={t.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                      <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30">
                         <td className="px-4 py-3">
                           <div className="font-medium">{t.companyName}</div>
-                          <div className="text-slate-500 text-xs">{t.email}</div>
+                          <div className="text-muted-foreground text-xs">{t.email}</div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-semibold ${t.trialDaysLeft <= 3 ? "text-red-400" : t.trialDaysLeft <= 7 ? "text-yellow-400" : "text-green-400"}`}>
@@ -799,10 +799,10 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-4 py-3 text-right">{t.projectCount}</td>
                         <td className="px-4 py-3 text-right">{t.subcontractCount}</td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
                           {t.lastLoginAt ? formatDistanceToNow(new Date(t.lastLoginAt), { addSuffix: true }) : "Never"}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
                           {format(new Date(t.createdAt), "MMM d, yyyy")}
                         </td>
                       </tr>
@@ -819,17 +819,17 @@ export default function AdminDashboard() {
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-xl font-bold">Platform Activity</h1>
-              <button onClick={() => { setActivity([]); loadActivity(); }} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
+              <button onClick={() => { setActivity([]); loadActivity(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
             </div>
             {activityLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-xs">
+                    <tr className="border-b border-border text-muted-foreground text-xs">
                       <th className="text-left px-4 py-3 font-medium">Action</th>
                       <th className="text-left px-4 py-3 font-medium">Entity</th>
                       <th className="text-left px-4 py-3 font-medium">When</th>
@@ -837,17 +837,17 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {activity.length === 0 ? (
-                      <tr><td colSpan={3} className="text-center py-12 text-slate-500">No activity</td></tr>
+                      <tr><td colSpan={3} className="text-center py-12 text-muted-foreground">No activity</td></tr>
                     ) : activity.map((a, i) => (
-                      <tr key={a.id ?? i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                      <tr key={a.id ?? i} className="border-b border-border/50 hover:bg-muted/30">
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300">{a.action}</span>
+                          <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-foreground/70">{a.action}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
-                          {a.entityType && <span className="text-slate-500">{a.entityType}</span>}
-                          {a.entityId && <span className="text-slate-600"> {a.entityId.slice(0, 8)}…</span>}
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {a.entityType && <span className="text-muted-foreground">{a.entityType}</span>}
+                          {a.entityId && <span className="text-muted-foreground"> {a.entityId.slice(0, 8)}…</span>}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
                           {a.createdAt ? formatDistanceToNow(new Date(a.createdAt), { addSuffix: true }) : "—"}
                         </td>
                       </tr>
@@ -864,17 +864,17 @@ export default function AdminDashboard() {
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-xl font-bold">Impersonation Audit Log</h1>
-              <button onClick={() => { setAuditLogs([]); loadAuditLogs(); }} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
+              <button onClick={() => { setAuditLogs([]); loadAuditLogs(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
             </div>
             {auditLoading ? (
-              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+              <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-xs">
+                    <tr className="border-b border-border text-muted-foreground text-xs">
                       <th className="text-left px-4 py-3 font-medium">Admin</th>
                       <th className="text-left px-4 py-3 font-medium">GC Account</th>
                       <th className="text-left px-4 py-3 font-medium">Started</th>
@@ -884,23 +884,23 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {auditLogs.length === 0 ? (
-                      <tr><td colSpan={5} className="text-center py-12 text-slate-500">No impersonation sessions yet</td></tr>
+                      <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">No impersonation sessions yet</td></tr>
                     ) : auditLogs.map(log => (
-                      <tr key={log.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                        <td className="px-4 py-3 text-slate-300 text-xs">{log.adminEmail}</td>
+                      <tr key={log.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-4 py-3 text-foreground/70 text-xs">{log.adminEmail}</td>
                         <td className="px-4 py-3">
                           <div className="font-medium text-sm">{log.gcCompanyName}</div>
-                          <div className="text-slate-500 text-xs">{log.gcEmail}</div>
+                          <div className="text-muted-foreground text-xs">{log.gcEmail}</div>
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
                           {format(new Date(log.startedAt), "MMM d, yyyy HH:mm")}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs">
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
                           {log.endedAt ? format(new Date(log.endedAt), "MMM d, yyyy HH:mm") : (
                             <span className="text-yellow-400">Active</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-500 text-xs font-mono">{log.ipAddress ?? "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{log.ipAddress ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
