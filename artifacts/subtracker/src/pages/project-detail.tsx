@@ -355,8 +355,16 @@ export default function ProjectDetail() {
     refetchOnMount: "always",
   });
 
+  // Track whether we've initialized the form from server data for this mount.
+  // Without this, every refetch (staleTime: 0) creates a new object reference,
+  // triggers the effect, and resets all form state to "" while the user is typing.
+  const gcCredFormInitialized = React.useRef(false);
+
   React.useEffect(() => {
     if (!gcCredentials) return;
+    // Only populate the form on first load — don't overwrite user edits on refetch.
+    if (gcCredFormInitialized.current) return;
+    gcCredFormInitialized.current = true;
     setGcCredInsCompany(gcCredentials.insCompany ?? "");
     setGcCredInsPolicyNumber(gcCredentials.insPolicyNumber ?? "");
     setGcCredInsGLCoverage(gcCredentials.insGLCoverage ?? "");
