@@ -255,19 +255,23 @@ export async function sendBidAwardedEmail(opts: {
 export async function sendChangeOrderCreatedEmail(opts: {
   toEmail: string;
   projectName: string;
+  gcCompanyName?: string;
   description: string;
   amount: number;
-  appUrl: string;
+  subcontractUrl?: string;
+  appUrl?: string;
 }) {
+  const ctaUrl = opts.subcontractUrl ?? opts.appUrl ?? "#";
+  const fromLabel = opts.gcCompanyName ? ` from ${opts.gcCompanyName}` : "";
   const html = layout(`
-    ${heading("New change order requires your approval")}
+    ${heading(`New Change Order${fromLabel}`)}
     ${subtext(`A new change order has been submitted for <strong>${opts.projectName}</strong> and is waiting for your review.`)}
     ${infoBox([
       { label: "Project", value: opts.projectName },
       { label: "Description", value: opts.description },
       { label: "Amount", value: formatCurrency(opts.amount) },
     ])}
-    ${ctaButton("Review Change Order", opts.appUrl)}
+    ${ctaButton("Review Change Order", ctaUrl)}
   `);
   await send(opts.toEmail, `New change order on ${opts.projectName} — review required`, html);
 }
@@ -280,22 +284,52 @@ export async function sendChangeOrderDecisionEmail(opts: {
   description: string;
   amount: number;
   decision: "APPROVED" | "REJECTED";
-  appUrl: string;
+  subcontractUrl?: string;
+  appUrl?: string;
 }) {
+  const ctaUrl = opts.subcontractUrl ?? opts.appUrl ?? "#";
   const verb = opts.decision === "APPROVED" ? "approved" : "rejected";
+  const headline = opts.decision === "APPROVED"
+    ? `${opts.subCompanyName} approved a Change Order — your final approval is needed`
+    : `${opts.subCompanyName} rejected a Change Order`;
   const html = layout(`
-    ${heading(`Change order ${verb} by subcontractor`)}
-    ${subtext(`<strong>${opts.subCompanyName}</strong> has ${verb} the change order on <strong>${opts.projectName}</strong>.`)}
+    ${heading(headline)}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has ${verb} the change order on <strong>${opts.projectName}</strong>${opts.decision === "APPROVED" ? ". Your final approval is required to proceed." : "."}`)}
     ${infoBox([
       { label: "Project", value: opts.projectName },
       { label: "Subcontractor", value: opts.subCompanyName },
       { label: "Description", value: opts.description },
       { label: "Amount", value: formatCurrency(opts.amount) },
-      { label: "Decision", value: opts.decision === "APPROVED" ? "✅ Approved" : "❌ Rejected" },
+      { label: "Status", value: opts.decision === "APPROVED" ? "✅ Approved by Sub — Pending Your Approval" : "❌ Rejected" },
     ])}
-    ${ctaButton("View Change Order", opts.appUrl)}
+    ${ctaButton(opts.decision === "APPROVED" ? "Review & Approve" : "View Details", ctaUrl)}
   `);
   await send(opts.toEmail, `Change order ${verb} on ${opts.projectName}`, html);
+}
+
+// ─── 4b. GC final-approved a change order — notify sub ───────────────────────
+export async function sendChangeOrderGcFinalApprovalEmail(opts: {
+  toEmail: string;
+  projectName: string;
+  gcCompanyName: string;
+  description: string;
+  amount: number;
+  subcontractUrl?: string;
+  appUrl?: string;
+}) {
+  const ctaUrl = opts.subcontractUrl ?? opts.appUrl ?? "#";
+  const html = layout(`
+    ${heading("Change Order Fully Approved")}
+    ${subtext(`<strong>${opts.gcCompanyName}</strong> has given final approval to the change order on <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Description", value: opts.description },
+      { label: "Amount", value: formatCurrency(opts.amount) },
+      { label: "Status", value: "✅ Fully Approved" },
+    ])}
+    ${ctaButton("View Subcontract", ctaUrl)}
+  `);
+  await send(opts.toEmail, `Change order approved on ${opts.projectName}`, html);
 }
 
 // ─── 5. Sub submitted an invoice ──────────────────────────────────────────────
@@ -459,10 +493,12 @@ export async function sendChangeOrderSubmittedBySubEmail(opts: {
   subCompanyName: string;
   description: string;
   amount: number;
-  appUrl: string;
+  subcontractUrl?: string;
+  appUrl?: string;
 }) {
+  const ctaUrl = opts.subcontractUrl ?? opts.appUrl ?? "#";
   const html = layout(`
-    ${heading("New change order submitted by subcontractor")}
+    ${heading(`${opts.subCompanyName} submitted a Change Order`)}
     ${subtext(`<strong>${opts.subCompanyName}</strong> has submitted a change order on <strong>${opts.projectName}</strong> that requires your review.`)}
     ${infoBox([
       { label: "Project", value: opts.projectName },
@@ -470,7 +506,7 @@ export async function sendChangeOrderSubmittedBySubEmail(opts: {
       { label: "Description", value: opts.description },
       { label: "Amount", value: formatCurrency(opts.amount) },
     ])}
-    ${ctaButton("Review Change Order", opts.appUrl)}
+    ${ctaButton("Review Change Order", ctaUrl)}
   `);
   await send(opts.toEmail, `New change order from ${opts.subCompanyName} on ${opts.projectName}`, html);
 }

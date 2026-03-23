@@ -37,6 +37,7 @@ export const changeOrdersTable = pgTable("change_orders", {
   amount: doublePrecision("amount").notNull(),
   status: text("status").notNull().default("PENDING_SUB"), // PENDING_SUB | PENDING_GC | APPROVED | REJECTED
   rejectionReason: text("rejection_reason"),
+  pendingGcFinalApproval: boolean("pending_gc_final_approval").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

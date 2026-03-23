@@ -32,6 +32,7 @@ import { useUpload } from "@workspace/object-storage-web";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Textarea } from "@/components/ui/textarea";
 import toast from "react-hot-toast";
+import { gcApproveChangeOrder, gcRejectChangeOrder } from "@/lib/notifications";
 
 const INSURANCE_PRESETS = [
   { id: "umbrella", label: "Umbrella Policy minimum $2,000,000" },
@@ -93,6 +94,10 @@ export default function SubcontractDetail() {
   const [coRejectReason, setCoRejectReason] = React.useState("");
 
   const [approveCOConfirm, setApproveCOConfirm] = React.useState<string | null>(null);
+  const [gcApproveCOConfirm, setGcApproveCOConfirm] = React.useState<string | null>(null);
+  const [gcVoidCODialog, setGcVoidCODialog] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
+  const [gcVoidReason, setGcVoidReason] = React.useState("");
+  const [gcCOLoading, setGcCOLoading] = React.useState(false);
 
   const [invDialogOpen, setInvDialogOpen] = React.useState(false);
   const [invNumber, setInvNumber] = React.useState("");
@@ -612,6 +617,30 @@ export default function SubcontractDetail() {
       setRejectCODialogOpen({ open: false, id: "" });
       setCoRejectReason("");
     } catch (err: any) { toast.error(err?.data?.error || "Failed to reject change order"); }
+  };
+
+  const handleGCApproveCO = async (id: string) => {
+    try {
+      setGcCOLoading(true);
+      await gcApproveChangeOrder(subcontractId, id);
+      toast.success("Change order approved");
+      invalidate();
+      setGcApproveCOConfirm(null);
+    } catch (err: any) { toast.error(err?.message || "Failed to approve change order"); }
+    finally { setGcCOLoading(false); }
+  };
+
+  const handleGCVoidCO = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setGcCOLoading(true);
+      await gcRejectChangeOrder(subcontractId, gcVoidCODialog.id, gcVoidReason.trim() || undefined);
+      toast.success("Change order voided");
+      invalidate();
+      setGcVoidCODialog({ open: false, id: "" });
+      setGcVoidReason("");
+    } catch (err: any) { toast.error(err?.message || "Failed to void change order"); }
+    finally { setGcCOLoading(false); }
   };
 
   const handleSubmitInv = async (e: React.FormEvent) => {
@@ -2462,6 +2491,76 @@ export default function SubcontractDetail() {
         </div>
       )}
 
+      {/* Yellow banners for change order actions */}
+      {(() => {
+        const pendingSubCOs = sub.changeOrders.filter(co => co.status === "PENDING_SUB");
+        const pendingGcFinalCOs = sub.changeOrders.filter(co => co.status === "PENDING_GC" && (co as any).pendingGcFinalApproval);
+        const pendingGcDirectCOs = sub.changeOrders.filter(co => co.status === "PENDING_GC" && !(co as any).pendingGcFinalApproval);
+
+        return (
+          <>
+            {!isGC && pendingSubCOs.length > 0 && (
+              <div className="mb-6 flex items-start gap-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl px-5 py-4">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm mb-1">
+                    {pendingSubCOs.length === 1 ? "New Change Order — Review and Respond" : `${pendingSubCOs.length} New Change Orders — Review and Respond`}
+                  </p>
+                  <div className="space-y-1">
+                    {pendingSubCOs.map(co => (
+                      <p key={co.id} className="text-xs text-amber-700 dark:text-amber-400">
+                        {co.description} — <span className="font-mono font-bold">{formatCurrency(co.amount)}</span>
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-1.5">Scroll down to approve or reject in the Change Orders panel.</p>
+                </div>
+              </div>
+            )}
+            {isGC && pendingGcFinalCOs.length > 0 && (
+              <div className="mb-6 flex items-start gap-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl px-5 py-4">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm mb-1">
+                    {pendingGcFinalCOs.length === 1
+                      ? "Sub Approved — Your Final Approval is Needed"
+                      : `${pendingGcFinalCOs.length} Change Orders Approved by Sub — Your Final Approval is Needed`}
+                  </p>
+                  <div className="space-y-1">
+                    {pendingGcFinalCOs.map(co => (
+                      <p key={co.id} className="text-xs text-amber-700 dark:text-amber-400">
+                        {co.description} — <span className="font-mono font-bold">{formatCurrency(co.amount)}</span>
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-1.5">Scroll down to give your final approval in the Change Orders panel.</p>
+                </div>
+              </div>
+            )}
+            {isGC && pendingGcDirectCOs.length > 0 && (
+              <div className="mb-6 flex items-start gap-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl px-5 py-4">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm mb-1">
+                    {pendingGcDirectCOs.length === 1
+                      ? "Sub-Submitted Change Order Requires Your Review"
+                      : `${pendingGcDirectCOs.length} Sub-Submitted Change Orders Require Your Review`}
+                  </p>
+                  <div className="space-y-1">
+                    {pendingGcDirectCOs.map(co => (
+                      <p key={co.id} className="text-xs text-amber-700 dark:text-amber-400">
+                        {co.description} — <span className="font-mono font-bold">{formatCurrency(co.amount)}</span>
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-1.5">Scroll down to approve or reject in the Change Orders panel.</p>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
+
       <div className="grid lg:grid-cols-2 gap-8 mb-10">
         {/* CHANGE ORDERS */}
         <Card className="flex flex-col min-h-[360px] lg:h-[600px]">
@@ -2481,15 +2580,22 @@ export default function SubcontractDetail() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {sub.changeOrders.map(co => (
+                {sub.changeOrders.map(co => {
+                  const isPendingGcFinal = co.status === "PENDING_GC" && (co as any).pendingGcFinalApproval;
+                  const isPendingSubReview = co.status === "PENDING_SUB";
+                  const isPendingGcDirect = co.status === "PENDING_GC" && !(co as any).pendingGcFinalApproval;
+                  return (
                   <div key={co.id} className={cn(
                     "p-4 hover:bg-muted/50 transition-colors",
-                    co.status === "PENDING_GC" && !isGC && "bg-amber-50/50 dark:bg-amber-950/10"
+                    isPendingSubReview && !isGC && "bg-amber-50/50 dark:bg-amber-950/10",
+                    (isPendingGcFinal || isPendingGcDirect) && isGC && "bg-amber-50/50 dark:bg-amber-950/10",
                   )}>
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          {getCOStatusBadge(co.status)}
+                          {isPendingGcFinal
+                            ? <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-700">Pending GC Final Approval</Badge>
+                            : getCOStatusBadge(co.status)}
                           <span className="text-xs text-muted-foreground">{format(new Date(co.createdAt), "MMM d, yyyy")}</span>
                         </div>
                         <p className="font-semibold text-foreground">{co.description}</p>
@@ -2509,7 +2615,8 @@ export default function SubcontractDetail() {
                           </div>
                         )}
                       </div>
-                      {!isGC && co.status === "PENDING_GC" && (
+                      {/* Sub: approve/reject GC-created COs waiting for sub review */}
+                      {!isGC && isPendingSubReview && (
                         approveCOConfirm === co.id ? (
                           <div className="flex sm:flex-col gap-2 shrink-0">
                             <p className="text-xs text-muted-foreground sm:text-right hidden sm:block">Confirm approve?</p>
@@ -2529,9 +2636,33 @@ export default function SubcontractDetail() {
                           </div>
                         )
                       )}
+                      {/* GC: approve or void PENDING_GC COs (sub-created or sub-approved GC-created) */}
+                      {isGC && (isPendingGcFinal || isPendingGcDirect) && (
+                        gcApproveCOConfirm === co.id ? (
+                          <div className="flex sm:flex-col gap-2 shrink-0">
+                            <p className="text-xs text-muted-foreground sm:text-right hidden sm:block">
+                              {isPendingGcFinal ? "Confirm final approval?" : "Confirm approve?"}
+                            </p>
+                            <Button size="sm" className="flex-1 sm:flex-none min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" isLoading={gcCOLoading} onClick={() => handleGCApproveCO(co.id)}>
+                              <Check className="h-3.5 w-3.5" /> Yes, Approve
+                            </Button>
+                            <Button size="sm" variant="ghost" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => setGcApproveCOConfirm(null)}>Cancel</Button>
+                          </div>
+                        ) : (
+                          <div className="flex sm:flex-col gap-2 shrink-0">
+                            <Button size="sm" className="flex-1 sm:flex-none min-h-[44px] bg-green-500 hover:bg-green-600 text-white gap-1" onClick={() => setGcApproveCOConfirm(co.id)}>
+                              <Check className="h-3.5 w-3.5" /> {isPendingGcFinal ? "Final Approve" : "Approve"}
+                            </Button>
+                            <Button size="sm" variant="destructive" className="flex-1 sm:flex-none min-h-[44px] gap-1" onClick={() => setGcVoidCODialog({ open: true, id: co.id })}>
+                              <X className="h-3.5 w-3.5" /> Void
+                            </Button>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -3048,6 +3179,28 @@ export default function SubcontractDetail() {
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setRejectCODialogOpen({ open: false, id: "" })}>Back</Button>
             <Button type="submit" variant="destructive" className="min-h-[44px]" isLoading={rejectCO.isPending}>Confirm Rejection</Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={gcVoidCODialog.open} onOpenChange={(open) => !open && setGcVoidCODialog({ open: false, id: "" })} title="Void Change Order">
+        <form onSubmit={handleGCVoidCO} className="space-y-4">
+          <p className="text-sm text-muted-foreground">Optionally provide a reason for voiding this change order. The subcontractor will be notified.</p>
+          <div>
+            <label className="text-sm font-semibold mb-1 block">
+              Reason <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+            </label>
+            <Textarea
+              placeholder="e.g. Scope was revised — a new change order will be issued."
+              value={gcVoidReason}
+              onChange={e => setGcVoidReason(e.target.value)}
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setGcVoidCODialog({ open: false, id: "" })}>Back</Button>
+            <Button type="submit" variant="destructive" className="min-h-[44px]" isLoading={gcCOLoading}>Confirm Void</Button>
           </div>
         </form>
       </Dialog>

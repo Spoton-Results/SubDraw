@@ -2262,11 +2262,23 @@ export default function ProjectDetail() {
                                   {/* Company name + unread badge */}
                                   <div className="flex items-start justify-between gap-2 mb-1.5">
                                     <span className="font-bold text-base leading-tight group-hover:text-primary transition-colors">{sub.sub?.companyName}</span>
+                                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                                    {isGC && (sub as any).hasPendingCOForGC && (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded-full shrink-0">
+                                        <AlertTriangle className="h-2.5 w-2.5" /> CO Needs Approval
+                                      </span>
+                                    )}
+                                    {!isGC && (sub as any).hasPendingCOForSub && (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 px-1.5 py-0.5 rounded-full shrink-0">
+                                        <AlertTriangle className="h-2.5 w-2.5" /> New Change Order
+                                      </span>
+                                    )}
                                     {((sub as any).unreadCommentCount ?? 0) > 0 && (
                                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded-full shrink-0">
                                         <MessageSquare className="h-2.5 w-2.5" /> {(sub as any).unreadCommentCount}
                                       </span>
                                     )}
+                                    </div>
                                   </div>
 
                                   {/* Trade + Insurance + License badges */}

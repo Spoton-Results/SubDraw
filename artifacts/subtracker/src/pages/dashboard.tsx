@@ -214,6 +214,17 @@ export default function Dashboard() {
     refetchOnMount: "always",
   });
 
+  const { data: subPendingCOProjects = [] } = useQuery<string[]>({
+    queryKey: ["sub-pending-co-projects"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_DASH}/api/projects/sub/pending-co-projects`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !isGC,
+    refetchInterval: 60_000,
+  });
+
   usePageTitle("Projects");
 
   const onboardingKey = user ? `onboarding-dismissed-${user.id}` : null;
@@ -660,10 +671,15 @@ export default function Dashboard() {
                       <div className="bg-primary/10 p-3 rounded-xl text-primary">
                         <Briefcase className="h-6 w-6" />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         {isGC && fs?.hasFlaggedInvoices && (
                           <Badge variant="destructive" className="gap-1 text-xs">
                             <AlertTriangle className="h-3 w-3" /> Flagged
+                          </Badge>
+                        )}
+                        {!isGC && subPendingCOProjects.includes(project.id) && (
+                          <Badge className="gap-1 text-xs bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700 hover:bg-amber-100">
+                            <AlertTriangle className="h-3 w-3" /> New Change Order
                           </Badge>
                         )}
                         <Badge variant={getStatusColor(project.status) as any}>

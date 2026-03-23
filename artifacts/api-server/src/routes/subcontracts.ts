@@ -8,6 +8,7 @@ import {
   sendChangeOrderCreatedEmail,
   sendChangeOrderSubmittedBySubEmail,
   sendChangeOrderDecisionEmail,
+  sendChangeOrderGcFinalApprovalEmail,
   sendInvoiceSubmittedEmail,
   sendInvoiceFlaggedEmail,
   sendInvoiceDecisionEmail,
@@ -18,6 +19,7 @@ import {
   sendContractReadyEmail,
   sendContractSignedEmail,
 } from "../lib/email.js";
+import { createNotification } from "./notifications.js";
 import { triggerOwnerCoNotification } from "./projects.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
@@ -541,12 +543,13 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   if (await isSubcontractProjectArchived(req.params.subcontractId)) {
     res.status(400).json({ error: "This project is archived and cannot accept new change orders." }); return;
   }
+  const isGCCreating = user.role === "GC";
   const [co] = await db.insert(changeOrdersTable).values({
     subcontractId: req.params.subcontractId,
     description,
     scope: scope ? String(scope).trim() : null,
     amount: Number(amount),
-    status: "PENDING_GC",
+    status: isGCCreating ? "PENDING_SUB" : "PENDING_GC",
   }).returning();
 
   const sc = await getSubcontractWithRelations(
@@ -562,14 +565,26 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
   );
 
   const appUrl = getAppUrl(req);
+  const amountFmt = `$${Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   if (user.role === "GC") {
-    // GC created the CO — notify sub
+    // GC created the CO — notify sub in-app
+    createNotification({
+      userId: sc.sub.id,
+      type: "CO_CREATED",
+      title: `New Change Order from ${sc.project.gc.companyName}`,
+      body: `${description} — ${amountFmt} — Tap to Review`,
+      data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+    }).catch((err) => console.error("[notification] CO_CREATED failed:", err));
+
+    // Email sub with direct link
     sendChangeOrderCreatedEmail({
       toEmail: sc.sub.email,
       projectName: sc.project.name,
+      gcCompanyName: sc.project.gc.companyName,
       description,
       amount: Number(amount),
-      appUrl,
+      subcontractUrl: `${appUrl}/subcontracts/${req.params.subcontractId}`,
     }).catch((err) => console.error("[email] sendChangeOrderCreatedEmail failed:", err));
 
     // Notify project owner if threshold is met
@@ -583,14 +598,23 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
       appUrl,
     }).catch(err => console.error("[owner-notify] CO create failed:", err));
   } else {
-    // Sub created the CO — notify GC
+    // Sub created the CO — notify GC in-app
+    createNotification({
+      userId: sc.project.gc.id,
+      type: "CO_SUBMITTED_BY_SUB",
+      title: `${sc.sub.companyName} submitted a Change Order`,
+      body: `${description} — ${amountFmt} — on ${sc.project.name} — Tap to Review`,
+      data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+    }).catch((err) => console.error("[notification] CO_SUBMITTED_BY_SUB failed:", err));
+
+    // Email GC
     sendChangeOrderSubmittedBySubEmail({
       toEmail: sc.project.gc.email,
       projectName: sc.project.name,
       subCompanyName: sc.sub.companyName,
       description,
       amount: Number(amount),
-      appUrl,
+      subcontractUrl: `${appUrl}/subcontracts/${req.params.subcontractId}`,
     }).catch((err) => console.error("[email] sendChangeOrderSubmittedBySubEmail failed:", err));
   }
 
@@ -598,7 +622,11 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
 });
 
 router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth, requireSub, async (req, res) => {
-  const [co] = await db.update(changeOrdersTable).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+  const [co] = await db.update(changeOrdersTable).set({
+    status: "PENDING_GC",
+    pendingGcFinalApproval: true,
+    updatedAt: new Date(),
+  }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
 
   const sc = await getSubcontractWithRelations(
     (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
@@ -606,13 +634,23 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
 
   await logActivity(
     req.params.subcontractId,
-    "CO_APPROVED",
-    `Change order "${co.description}" approved`,
+    "CO_APPROVED_BY_SUB",
+    `Change order "${co.description}" approved by sub — pending GC final approval`,
     sc.sub.companyName,
     "SUB"
   );
 
   const appUrl = getAppUrl(req);
+  const amountFmt = `$${co.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  createNotification({
+    userId: sc.project.gc.id,
+    type: "CO_APPROVED_BY_SUB",
+    title: `${sc.sub.companyName} approved a Change Order`,
+    body: `${co.description} — ${amountFmt} — Your final approval is needed`,
+    data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+  }).catch((err) => console.error("[notification] CO_APPROVED_BY_SUB failed:", err));
+
   sendChangeOrderDecisionEmail({
     toEmail: sc.project.gc.email,
     projectName: sc.project.name,
@@ -620,10 +658,10 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
     description: co.description,
     amount: co.amount,
     decision: "APPROVED",
-    appUrl,
+    subcontractUrl: `${appUrl}/subcontracts/${req.params.subcontractId}`,
   }).catch((err) => console.error("[email] sendChangeOrderDecisionEmail failed:", err));
 
-  // Notify project owner when a CO is approved by sub (if not already notified at creation)
+  // Notify project owner when a CO is approved by sub
   triggerOwnerCoNotification({
     projectId: sc.project.id,
     changeOrderId: co.id,
@@ -657,6 +695,17 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
     "SUB"
   );
 
+  const appUrl = getAppUrl(req);
+  const amountFmt = `$${co.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  createNotification({
+    userId: sc.project.gc.id,
+    type: "CO_REJECTED_BY_SUB",
+    title: `${sc.sub.companyName} rejected a Change Order`,
+    body: `${co.description} — ${amountFmt}${rejectionReason ? ` — "${rejectionReason}"` : ""}`,
+    data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+  }).catch((err) => console.error("[notification] CO_REJECTED_BY_SUB failed:", err));
+
   sendChangeOrderDecisionEmail({
     toEmail: sc.project.gc.email,
     projectName: sc.project.name,
@@ -664,8 +713,97 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
     description: co.description,
     amount: co.amount,
     decision: "REJECTED",
-    appUrl: getAppUrl(req),
+    subcontractUrl: `${appUrl}/subcontracts/${req.params.subcontractId}`,
   }).catch((err) => console.error("[email] sendChangeOrderDecisionEmail failed:", err));
+
+  res.json(co);
+});
+
+router.post("/:subcontractId/change-orders/:changeOrderId/gc-approve", requireAuth, requireGC, async (req, res) => {
+  const [existing] = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.id, req.params.changeOrderId)).limit(1);
+  if (!existing) { res.status(404).json({ error: "Change order not found" }); return; }
+  if (existing.status !== "PENDING_GC") {
+    res.status(400).json({ error: "Change order is not pending GC approval" }); return;
+  }
+
+  const [co] = await db.update(changeOrdersTable).set({
+    status: "APPROVED",
+    pendingGcFinalApproval: false,
+    updatedAt: new Date(),
+  }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+
+  await logActivity(
+    req.params.subcontractId,
+    "CO_GC_APPROVED",
+    `Change order "${co.description}" approved by GC`,
+    sc.project.gc.companyName,
+    "GC"
+  );
+
+  const appUrl = getAppUrl(req);
+  const amountFmt = `$${co.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  createNotification({
+    userId: sc.sub.id,
+    type: "CO_GC_APPROVED",
+    title: `Change Order Approved by ${sc.project.gc.companyName}`,
+    body: `${co.description} — ${amountFmt} — has been fully approved`,
+    data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+  }).catch((err) => console.error("[notification] CO_GC_APPROVED failed:", err));
+
+  sendChangeOrderGcFinalApprovalEmail({
+    toEmail: sc.sub.email,
+    projectName: sc.project.name,
+    gcCompanyName: sc.project.gc.companyName,
+    description: co.description,
+    amount: co.amount,
+    subcontractUrl: `${appUrl}/subcontracts/${req.params.subcontractId}`,
+  }).catch((err) => console.error("[email] sendChangeOrderGcFinalApprovalEmail failed:", err));
+
+  res.json(co);
+});
+
+router.post("/:subcontractId/change-orders/:changeOrderId/gc-reject", requireAuth, requireGC, async (req, res) => {
+  const { rejectionReason } = req.body || {};
+  const [existing] = await db.select().from(changeOrdersTable).where(eq(changeOrdersTable.id, req.params.changeOrderId)).limit(1);
+  if (!existing) { res.status(404).json({ error: "Change order not found" }); return; }
+  if (existing.status !== "PENDING_GC") {
+    res.status(400).json({ error: "Change order is not pending GC approval" }); return;
+  }
+
+  const [co] = await db.update(changeOrdersTable).set({
+    status: "REJECTED",
+    pendingGcFinalApproval: false,
+    rejectionReason: rejectionReason ? String(rejectionReason).trim() : null,
+    updatedAt: new Date(),
+  }).where(eq(changeOrdersTable.id, req.params.changeOrderId)).returning();
+
+  const sc = await getSubcontractWithRelations(
+    (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, req.params.subcontractId)).limit(1))[0]
+  );
+
+  await logActivity(
+    req.params.subcontractId,
+    "CO_GC_REJECTED",
+    `Change order "${co.description}" voided by GC${rejectionReason ? ` — ${String(rejectionReason).trim()}` : ""}`,
+    sc.project.gc.companyName,
+    "GC"
+  );
+
+  const appUrl = getAppUrl(req);
+  const amountFmt = `$${co.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  createNotification({
+    userId: sc.sub.id,
+    type: "CO_GC_REJECTED",
+    title: `Change Order Voided by ${sc.project.gc.companyName}`,
+    body: `${co.description} — ${amountFmt}${rejectionReason ? ` — "${rejectionReason}"` : ""}`,
+    data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
+  }).catch((err) => console.error("[notification] CO_GC_REJECTED failed:", err));
 
   res.json(co);
 });

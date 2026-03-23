@@ -13,3 +13,4 @@ export * from "./completion-documents";
 export * from "./bid-comparisons";
 export * from "./gc-credentials";
 export * from "./trade-scopes";
+export * from "./notifications";

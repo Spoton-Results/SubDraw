@@ -4,7 +4,7 @@ import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontracts
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
-import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
+import { requireAuth, requireGC, requireGCOwner, requireSub } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, isProjectManager, getActorName, getActorRoleLabel, canSeeAllProjects, isBiddingOnlyRole } from "../lib/auth.js";
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
 import { getGCPlanInfo, getActiveSubcontractCount } from "../lib/stripeStorage.js";
@@ -102,6 +102,14 @@ async function getProjectWithDetails(projectId: string, requestingUserId?: strin
   }));
 
   const subcontracts = await db.select().from(subcontractsTable).where(eq(subcontractsTable.projectId, projectId));
+  // Batch-fetch change orders for all subcontracts to compute CO badge flags
+  const allScIds = subcontracts.map(sc => sc.id);
+  const allCOsForProject = allScIds.length > 0
+    ? await db.select({ subcontractId: changeOrdersTable.subcontractId, status: changeOrdersTable.status, pendingGcFinalApproval: changeOrdersTable.pendingGcFinalApproval })
+        .from(changeOrdersTable)
+        .where(inArray(changeOrdersTable.subcontractId, allScIds))
+    : [];
+
   const subcontractsWithDetails = await Promise.all(subcontracts.map(async (sc) => {
     const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, mustChangePassword: usersTable.mustChangePassword, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
     const scoreboard = await computeSubcontractScoreboard(sc.id, sc.baseContractAmount);
@@ -113,7 +121,10 @@ async function getProjectWithDetails(projectId: string, requestingUserId?: strin
         .where(eq(subcontractCommentsTable.subcontractId, sc.id));
       return comments.filter(c => c.userId !== requestingUserId && (!readRow || c.createdAt > readRow.lastReadAt)).length;
     })() : 0;
-    return { ...sc, project: { ...project, gc }, sub, scoreboard, unreadCommentCount };
+    const scCOs = allCOsForProject.filter(c => c.subcontractId === sc.id);
+    const hasPendingCOForGC = scCOs.some(c => c.status === "PENDING_GC");
+    const hasPendingCOForSub = scCOs.some(c => c.status === "PENDING_SUB");
+    return { ...sc, project: { ...project, gc }, sub, scoreboard, unreadCommentCount, hasPendingCOForGC, hasPendingCOForSub };
   }));
 
   return { ...project, gc, members: membersWithUsers, bids: bidsWithSubs, subcontracts: subcontractsWithDetails };
@@ -550,11 +561,63 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
     }
   }
 
+  // PENDING: Change orders requiring GC action
+  for (const co of allCOs) {
+    if (co.status !== "PENDING_GC") continue;
+    const sc = scMap[co.subcontractId];
+    if (!sc) continue;
+    const project = projectMap[sc.projectId];
+    if (!project) continue;
+    const subName = subUserMap[sc.subId] ?? "Unknown";
+    const isPendingFinal = (co as any).pendingGcFinalApproval;
+    const description = isPendingFinal
+      ? `${subName} approved "${co.description}" (${formatCurrencySimple(co.amount)}) — your final approval is needed`
+      : `${subName} submitted change order "${co.description}" (${formatCurrencySimple(co.amount)}) — awaiting your approval`;
+    items.push({
+      id: `co-${co.id}`,
+      type: isPendingFinal ? "CO_PENDING_FINAL_APPROVAL" : "CO_PENDING_GC_APPROVAL",
+      urgency: "PENDING",
+      projectId: project.id,
+      projectName: project.name,
+      subcontractId: sc.id,
+      subCompanyName: subName,
+      description,
+      amount: co.amount,
+      href: `/subcontracts/${sc.id}`,
+    });
+  }
+
   // Sort: URGENT first, PENDING second, UPCOMING third
   const urgencyOrder = { URGENT: 0, PENDING: 1, UPCOMING: 2 };
   items.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
 
   res.json(items);
+});
+
+function formatCurrencySimple(amount: number): string {
+  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+// ── SUB: Projects with pending COs awaiting sub response ──────────────────────
+router.get("/sub/pending-co-projects", requireAuth, requireSub, async (req, res) => {
+  const subUser = (req as any).user;
+  const subcontracts = await db.select({ id: subcontractsTable.id, projectId: subcontractsTable.projectId })
+    .from(subcontractsTable).where(eq(subcontractsTable.subId, subUser.id));
+  if (subcontracts.length === 0) { res.json([]); return; }
+
+  const scIds = subcontracts.map(sc => sc.id);
+  const pendingCOs = await db.select({ subcontractId: changeOrdersTable.subcontractId })
+    .from(changeOrdersTable)
+    .where(and(inArray(changeOrdersTable.subcontractId, scIds), eq(changeOrdersTable.status, "PENDING_SUB")));
+
+  const projectIdsWithPendingCO = new Set(
+    pendingCOs.map(co => {
+      const sc = subcontracts.find(s => s.id === co.subcontractId);
+      return sc?.projectId;
+    }).filter(Boolean)
+  );
+
+  res.json([...projectIdsWithPendingCO]);
 });
 
 router.get("/gc/disputed-invoices", requireAuth, requireGC, async (req, res) => {
