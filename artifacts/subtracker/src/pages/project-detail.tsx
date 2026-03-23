@@ -190,6 +190,8 @@ export default function ProjectDetail() {
   const [deleteScopeConfirm, setDeleteScopeConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
   // GC Credentials state
+  const gcInsCertInputRef = React.useRef<HTMLInputElement>(null);
+  const gcLicDocInputRef = React.useRef<HTMLInputElement>(null);
   const [gcCredSaving, setGcCredSaving] = React.useState(false);
   const [gcCredInsCompany, setGcCredInsCompany] = React.useState("");
   const [gcCredInsPolicyNumber, setGcCredInsPolicyNumber] = React.useState("");
@@ -524,10 +526,14 @@ export default function ProjectDetail() {
     try {
       const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials/download/${docType}`, { credentials: "include" });
       if (!res.ok) { toast.error("Failed to download document"); return; }
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const fallback = docType === "cert" ? "gc-insurance-certificate.pdf" : "gc-contractor-license.pdf";
+      const filename = match?.[1] ?? fallback;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = docType === "cert" ? "gc-insurance-certificate.pdf" : "gc-contractor-license.pdf";
+      a.href = url; a.download = filename;
       a.click(); URL.revokeObjectURL(url);
     } catch { toast.error("Download failed"); }
   }
@@ -2136,6 +2142,7 @@ export default function ProjectDetail() {
                           </div>
                           <div>
                             <label className="text-xs font-medium text-muted-foreground block mb-1">Certificate (PDF or Image)</label>
+                            <input ref={gcInsCertInputRef} type="file" accept="image/*,.pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
                             <div className="flex flex-wrap items-center gap-2">
                               {gcCredInsCertPath ? (
                                 <>
@@ -2143,23 +2150,17 @@ export default function ProjectDetail() {
                                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                                     {gcCredInsCertFileName ?? "Certificate on file"}
                                   </span>
-                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("cert")}>
+                                  <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("cert")}>
                                     <Download className="h-3.5 w-3.5" /> Download
                                   </Button>
-                                  <label className="cursor-pointer">
-                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcInsCertUploading}>
-                                      {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
-                                    </Button>
-                                    <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
-                                  </label>
+                                  <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-xs" disabled={gcInsCertUploading} onClick={() => gcInsCertInputRef.current?.click()}>
+                                    {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
+                                  </Button>
                                 </>
                               ) : (
-                                <label className="cursor-pointer">
-                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcInsCertUploading}>
-                                    {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload Certificate</>}
-                                  </Button>
-                                  <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
-                                </label>
+                                <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" disabled={gcInsCertUploading} onClick={() => gcInsCertInputRef.current?.click()}>
+                                  {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload Certificate</>}
+                                </Button>
                               )}
                             </div>
                           </div>
@@ -2207,6 +2208,7 @@ export default function ProjectDetail() {
                           </div>
                           <div className="sm:col-span-2">
                             <label className="text-xs font-medium text-muted-foreground block mb-1">License Document — optional (PDF or Image)</label>
+                            <input ref={gcLicDocInputRef} type="file" accept="image/*,.pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
                             <div className="flex flex-wrap items-center gap-2">
                               {gcCredLicDocPath ? (
                                 <>
@@ -2214,23 +2216,17 @@ export default function ProjectDetail() {
                                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                                     {gcCredLicDocFileName ?? "License document on file"}
                                   </span>
-                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("license")}>
+                                  <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("license")}>
                                     <Download className="h-3.5 w-3.5" /> Download
                                   </Button>
-                                  <label className="cursor-pointer">
-                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcLicDocUploading}>
-                                      {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
-                                    </Button>
-                                    <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
-                                  </label>
+                                  <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-xs" disabled={gcLicDocUploading} onClick={() => gcLicDocInputRef.current?.click()}>
+                                    {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
+                                  </Button>
                                 </>
                               ) : (
-                                <label className="cursor-pointer">
-                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcLicDocUploading}>
-                                    {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload License Doc</>}
-                                  </Button>
-                                  <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
-                                </label>
+                                <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs" disabled={gcLicDocUploading} onClick={() => gcLicDocInputRef.current?.click()}>
+                                  {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload License Doc</>}
+                                </Button>
                               )}
                             </div>
                           </div>
