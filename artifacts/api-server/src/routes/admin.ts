@@ -10,6 +10,7 @@ import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import { PLANS, getPlanByName, getActiveSubcontractCount, getGCPlanInfo } from "../lib/stripeStorage.js";
 import { sendAdminMessageEmail, sendAccountCancelledEmail } from "../lib/email.js";
+import { forceResetDemoData } from "../lib/demoSeeder.js";
 import { parse } from "cookie";
 
 const router = Router();
@@ -1068,21 +1069,9 @@ router.get("/demo/stats", requireAdmin, async (req, res) => {
 });
 
 router.post("/demo/reset", requireAdmin, async (req, res) => {
-  const { type } = req.body; // "gc" | "sub" | "all"
   try {
-    // Reset by deleting demo users — the seeder will recreate them on next startup
-    if (type === "gc" || type === "all") {
-      const [gcDemo] = await db.select().from(usersTable)
-        .where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "GC")))
-        .limit(1);
-      if (gcDemo) {
-        await db.delete(usersTable).where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "GC")));
-      }
-    }
-    if (type === "sub" || type === "all") {
-      await db.delete(usersTable).where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "SUB")));
-    }
-    res.json({ success: true, message: "Demo data cleared. It will be regenerated on next server startup." });
+    await forceResetDemoData();
+    res.json({ success: true, message: "Demo data has been wiped and reseeded." });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

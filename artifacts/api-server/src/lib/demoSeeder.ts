@@ -6,12 +6,22 @@ import {
   projectMembersTable,
 } from "@workspace/db/schema";
 import {
+  drawScheduleItemsTable,
+} from "@workspace/db/schema";
+import { gcProjectAssignmentsTable } from "@workspace/db/schema";
+import { ownerCoNotificationsTable } from "@workspace/db/schema";
+import { planFilesTable } from "@workspace/db/schema";
+import { tradeScopesTable } from "@workspace/db/schema";
+import {
   subcontractsTable,
   changeOrdersTable,
   invoicesTable,
   activityLogsTable,
   lienWaiversTable,
   subcontractInsurancesTable,
+  subcontractCommentsTable,
+  subcontractCommentReadsTable,
+  contractorLicensesTable,
 } from "@workspace/db/schema";
 import { hashPassword } from "./auth.js";
 import { eq, inArray } from "drizzle-orm";
@@ -73,9 +83,17 @@ async function wipeDemoData(gcId: string) {
     await db.delete(invoicesTable).where(inArray(invoicesTable.subcontractId, scIds));
     await db.delete(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, scIds));
     await db.delete(subcontractInsurancesTable).where(inArray(subcontractInsurancesTable.subcontractId, scIds));
+    await db.delete(subcontractCommentReadsTable).where(inArray(subcontractCommentReadsTable.subcontractId, scIds));
+    await db.delete(subcontractCommentsTable).where(inArray(subcontractCommentsTable.subcontractId, scIds));
+    await db.delete(contractorLicensesTable).where(inArray(contractorLicensesTable.subcontractId, scIds));
     await db.delete(subcontractsTable).where(inArray(subcontractsTable.id, scIds));
   }
 
+  await db.delete(drawScheduleItemsTable).where(inArray(drawScheduleItemsTable.projectId, projectIds));
+  await db.delete(gcProjectAssignmentsTable).where(inArray(gcProjectAssignmentsTable.projectId, projectIds));
+  await db.delete(ownerCoNotificationsTable).where(inArray(ownerCoNotificationsTable.projectId, projectIds));
+  await db.delete(planFilesTable).where(inArray(planFilesTable.projectId, projectIds));
+  await db.delete(tradeScopesTable).where(inArray(tradeScopesTable.projectId, projectIds));
   await db.delete(projectMembersTable).where(inArray(projectMembersTable.projectId, projectIds));
   await db.delete(projectsTable).where(inArray(projectsTable.id, projectIds));
 }
@@ -419,29 +437,34 @@ async function shouldReseed(gcId: string): Promise<boolean> {
   return Date.now() - latest.createdAt.getTime() > DEMO_RESEED_THRESHOLD_MS;
 }
 
+async function ensureAndGetAllDemoUsers() {
+  const gc = await ensureDemoUser({
+    email: DEMO_GC_EMAIL,
+    role: "GC",
+    companyName: "Harbor View Construction Co.",
+  });
+  const sub1 = await ensureDemoUser({
+    email: DEMO_SUB_EMAIL,
+    role: "SUB",
+    companyName: "Pacific Electric Inc.",
+  });
+  const sub2 = await ensureDemoUser({
+    email: DEMO_SUB2_EMAIL,
+    role: "SUB",
+    companyName: "Bay City Plumbing",
+  });
+  const sub3 = await ensureDemoUser({
+    email: DEMO_SUB3_EMAIL,
+    role: "SUB",
+    companyName: "ProDrywall Solutions",
+  });
+  return { gc, sub1, sub2, sub3 };
+}
+
 export async function resetDemoData() {
   try {
     console.log("[demoSeeder] Ensuring demo accounts...");
-    const gc = await ensureDemoUser({
-      email: DEMO_GC_EMAIL,
-      role: "GC",
-      companyName: "Harbor View Construction Co.",
-    });
-    const sub1 = await ensureDemoUser({
-      email: DEMO_SUB_EMAIL,
-      role: "SUB",
-      companyName: "Pacific Electric Inc.",
-    });
-    const sub2 = await ensureDemoUser({
-      email: DEMO_SUB2_EMAIL,
-      role: "SUB",
-      companyName: "Bay City Plumbing",
-    });
-    const sub3 = await ensureDemoUser({
-      email: DEMO_SUB3_EMAIL,
-      role: "SUB",
-      companyName: "ProDrywall Solutions",
-    });
+    const { gc, sub1, sub2, sub3 } = await ensureAndGetAllDemoUsers();
 
     if (!(await shouldReseed(gc.id))) {
       console.log("[demoSeeder] Demo data is fresh — skipping reseed");
@@ -457,6 +480,17 @@ export async function resetDemoData() {
   } catch (err: any) {
     console.error("[demoSeeder] Error:", err.message);
   }
+}
+
+/** Force a full wipe + reseed regardless of how recently data was seeded. */
+export async function forceResetDemoData() {
+  console.log("[demoSeeder] Force reseed — ensuring demo accounts...");
+  const { gc, sub1, sub2, sub3 } = await ensureAndGetAllDemoUsers();
+  console.log("[demoSeeder] Wiping old demo data...");
+  await wipeDemoData(gc.id);
+  console.log("[demoSeeder] Seeding fresh demo data...");
+  await seedDemoData(gc, sub1, sub2, sub3);
+  console.log("[demoSeeder] Force reseed complete.");
 }
 
 export function startDemoSeeder() {
