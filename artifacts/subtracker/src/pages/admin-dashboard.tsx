@@ -4,19 +4,28 @@ import {
   Users, TrendingUp, CreditCard, Activity, Shield, LogOut, Search, Filter, ChevronDown,
   Loader2, AlertTriangle, HardHat, Play, Pause, Clock, BarChart2, FileText,
   Mail, Trash2, UserX, RefreshCw, Eye, CheckCircle, XCircle, Zap,
+  Sun, ShieldAlert, Target, BarChart, Flag, Monitor, Send,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Cell,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
+import { TabMorningSummary } from "./admin/tab-morning-summary";
+import { TabChurnRisk } from "./admin/tab-churn-risk";
+import { TabUpgradeOpportunities } from "./admin/tab-upgrade-opportunities";
+import { TabProductUsage } from "./admin/tab-product-usage";
+import { TabSupportQueue } from "./admin/tab-support-queue";
+import { TabEmailTools } from "./admin/tab-email-tools";
+import { TabDemoManagement } from "./admin/tab-demo-management";
+import { TabFeatureFlags } from "./admin/tab-feature-flags";
 
 const BASE = import.meta.env.BASE_URL;
 
 const api = (path: string, opts?: RequestInit) =>
   fetch(`${BASE}api/admin${path}`, { credentials: "include", ...opts });
 
-type Tab = "overview" | "accounts" | "revenue" | "trials" | "activity" | "audit";
+type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit";
 
 interface Metrics {
   totalGCs: number; activePaying: number; onTrial: number; churned: number;
@@ -99,7 +108,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
-  const [tab, setTab] = React.useState<Tab>("overview");
+  const [tab, setTab] = React.useState<Tab>("summary");
   const [adminEmail, setAdminEmail] = React.useState<string | null>(null);
   const [authChecking, setAuthChecking] = React.useState(true);
 
@@ -357,13 +366,21 @@ export default function AdminDashboard() {
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "overview",  label: "Overview",  icon: <BarChart2 className="h-4 w-4" /> },
-    { id: "accounts",  label: "Accounts",  icon: <Users className="h-4 w-4" /> },
-    { id: "revenue",   label: "Revenue",   icon: <TrendingUp className="h-4 w-4" /> },
-    { id: "trials",    label: "Trials",    icon: <Clock className="h-4 w-4" /> },
-    { id: "activity",  label: "Activity",  icon: <Activity className="h-4 w-4" /> },
-    { id: "audit",     label: "Audit Log", icon: <Shield className="h-4 w-4" /> },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; group?: string }[] = [
+    { id: "summary",   label: "Morning Summary",    icon: <Sun className="h-4 w-4" />,        group: "intelligence" },
+    { id: "churn",     label: "Churn Risk",          icon: <ShieldAlert className="h-4 w-4" />, group: "intelligence" },
+    { id: "upgrades",  label: "Upgrade Opps",        icon: <Target className="h-4 w-4" />,      group: "intelligence" },
+    { id: "overview",  label: "Overview",            icon: <BarChart2 className="h-4 w-4" />,   group: "data" },
+    { id: "accounts",  label: "Accounts",            icon: <Users className="h-4 w-4" />,       group: "data" },
+    { id: "revenue",   label: "Revenue",             icon: <TrendingUp className="h-4 w-4" />,  group: "data" },
+    { id: "trials",    label: "Trials",              icon: <Clock className="h-4 w-4" />,       group: "data" },
+    { id: "usage",     label: "Product Usage",       icon: <BarChart className="h-4 w-4" />,    group: "data" },
+    { id: "support",   label: "Support Queue",       icon: <AlertTriangle className="h-4 w-4" />, group: "ops" },
+    { id: "email",     label: "Email Tools",         icon: <Send className="h-4 w-4" />,        group: "ops" },
+    { id: "demo",      label: "Demo",                icon: <Monitor className="h-4 w-4" />,     group: "ops" },
+    { id: "flags",     label: "Feature Flags",       icon: <Flag className="h-4 w-4" />,        group: "ops" },
+    { id: "activity",  label: "Activity",            icon: <Activity className="h-4 w-4" />,    group: "ops" },
+    { id: "audit",     label: "Audit Log",           icon: <Shield className="h-4 w-4" />,      group: "ops" },
   ];
 
   return (
@@ -890,6 +907,48 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── New Intelligence & Ops Tabs (component-based) ── */}
+        {tab === "summary" && (
+          <div className="p-6">
+            <TabMorningSummary onNavigate={(t) => setTab(t as Tab)} />
+          </div>
+        )}
+        {tab === "churn" && (
+          <div className="p-6">
+            <TabChurnRisk />
+          </div>
+        )}
+        {tab === "upgrades" && (
+          <div className="p-6">
+            <TabUpgradeOpportunities />
+          </div>
+        )}
+        {tab === "usage" && (
+          <div className="p-6">
+            <TabProductUsage />
+          </div>
+        )}
+        {tab === "support" && (
+          <div className="p-6">
+            <TabSupportQueue />
+          </div>
+        )}
+        {tab === "email" && (
+          <div className="p-6">
+            <TabEmailTools />
+          </div>
+        )}
+        {tab === "demo" && (
+          <div className="p-6">
+            <TabDemoManagement />
+          </div>
+        )}
+        {tab === "flags" && (
+          <div className="p-6">
+            <TabFeatureFlags />
           </div>
         )}
       </div>

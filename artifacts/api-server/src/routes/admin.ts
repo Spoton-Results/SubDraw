@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, projectsTable, subcontractsTable, activityLogsTable, adminImpersonationLogsTable } from "@workspace/db/schema";
+import { usersTable, projectsTable, subcontractsTable, activityLogsTable, adminImpersonationLogsTable, featureFlagsTable } from "@workspace/db/schema";
 import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
 import {
   generateAdminToken, setAdminCookie, clearAdminCookie, getAdminUser,
@@ -657,6 +657,480 @@ router.get("/impersonation-logs", requireAdmin, async (req, res) => {
     .orderBy(desc(adminImpersonationLogsTable.startedAt))
     .limit(200);
   res.json(logs);
+});
+
+// ── Morning Summary ───────────────────────────────────────────────────────────
+
+router.get("/morning-summary", requireAdmin, async (req, res) => {
+  const gcOwners = await getGCOwners();
+  const now = new Date();
+  const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let mrr = 0, totalPaying = 0, activeTrials = 0, trialsExpiring7d = 0;
+  let churnedThisMonth = 0, mrrLostToChurn = 0;
+  let nearLimitCount = 0, churnRiskCount = 0, failedPaymentsCount = 0;
+
+  for (const user of gcOwners) {
+    const trialStart = user.trialStartedAt ?? user.createdAt;
+    const trialEndsAt = new Date(trialStart.getTime() + TRIAL_MS);
+    const isTrialActive = now < trialEndsAt && !user.stripeSubscriptionId;
+    const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+    if (isTrialActive) {
+      activeTrials++;
+      if (trialDaysLeft <= 7) trialsExpiring7d++;
+    }
+
+    // Churn this month: trial expired in current calendar month OR subscription cancelled this month
+    if (!isTrialActive && !user.stripeSubscriptionId && !user.adminPlanOverride && trialEndsAt >= startOfMonth && trialEndsAt <= now) {
+      churnedThisMonth++;
+    }
+
+    let monthlyRev = 0;
+    if (user.adminPlanOverride) {
+      const overrideExpired = user.adminPlanOverrideExpiresAt && user.adminPlanOverrideExpiresAt < now;
+      if (!overrideExpired) {
+        const plan = getPlanByName(user.adminPlanOverride);
+        monthlyRev = plan ? plan.monthlyUsd / 100 : 0;
+        mrr += monthlyRev;
+        totalPaying++;
+      }
+    } else if (user.stripeSubscriptionId) {
+      const subInfo = await getStripeSubscriptionInfo(user.stripeSubscriptionId);
+      if (subInfo && (subInfo.status === "active" || subInfo.status === "trialing" || subInfo.status === "past_due")) {
+        const amount = subInfo.unit_amount ?? 0;
+        const interval = subInfo.billing_interval ?? "month";
+        monthlyRev = interval === "year" ? amount / 100 / 12 : amount / 100;
+        mrr += monthlyRev;
+        totalPaying++;
+        if (subInfo.status === "past_due") failedPaymentsCount++;
+      } else if (subInfo && (subInfo.status === "canceled" || subInfo.status === "cancelled")) {
+        // Check if cancelled this month
+        try {
+          const endResult = await db.execute(sql`SELECT current_period_end FROM stripe.subscriptions WHERE id = ${user.stripeSubscriptionId} LIMIT 1`).catch(() => ({ rows: [] }));
+          const periodEnd = (endResult.rows[0] as any)?.current_period_end;
+          if (periodEnd && new Date(periodEnd * 1000) >= startOfMonth) {
+            churnedThisMonth++;
+            const plan = getPlanByName(subInfo.product_name?.replace(/ Annual$/, "") ?? "");
+            mrrLostToChurn += plan ? plan.monthlyUsd / 100 : (subInfo.unit_amount ?? 0) / 100;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Near limit: 70%+ of subcontract limit
+    if (monthlyRev > 0) {
+      const activeCount = await getActiveSubcontractCount(user.id);
+      const plan = user.adminPlanOverride ? getPlanByName(user.adminPlanOverride) : null;
+      const limit = plan?.limit ?? null;
+      if (limit && activeCount >= limit * 0.7) nearLimitCount++;
+
+      // Churn risk: no login in 14 days
+      if (!user.lastLoginAt || (now.getTime() - user.lastLoginAt.getTime()) > 14 * 24 * 60 * 60 * 1000) {
+        churnRiskCount++;
+      }
+    }
+  }
+
+  res.json({
+    mrr: Math.round(mrr), totalPaying, activeTrials, trialsExpiring7d,
+    churnedThisMonth, mrrLostToChurn: Math.round(mrrLostToChurn),
+    nearLimitCount, churnRiskCount, failedPaymentsCount,
+  });
+});
+
+// ── Churn Risk ────────────────────────────────────────────────────────────────
+
+router.get("/churn-risk", requireAdmin, async (req, res) => {
+  const gcOwners = await getGCOwners();
+  const now = new Date();
+  const results = [];
+
+  for (const user of gcOwners) {
+    if (!user.stripeSubscriptionId && !user.adminPlanOverride) continue; // skip non-paying
+
+    const overrideExpired = user.adminPlanOverride && user.adminPlanOverrideExpiresAt && user.adminPlanOverrideExpiresAt < now;
+    if (overrideExpired) continue;
+
+    const reasons: string[] = [];
+    let risk: "red" | "yellow" | "green" = "green";
+
+    // Check last login
+    const daysSinceLogin = user.lastLoginAt
+      ? Math.floor((now.getTime() - user.lastLoginAt.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    if (daysSinceLogin === null || daysSinceLogin > 14) {
+      risk = "red";
+      reasons.push(daysSinceLogin === null ? "Never logged in" : `No login in ${daysSinceLogin} days`);
+    }
+
+    // Check payment status
+    let planLabel = user.adminPlanOverride ? (getPlanByName(user.adminPlanOverride)?.label ?? "Override") : null;
+    if (user.stripeSubscriptionId) {
+      const subInfo = await getStripeSubscriptionInfo(user.stripeSubscriptionId);
+      if (subInfo) {
+        planLabel = planLabel ?? subInfo.product_name?.replace(/ Annual$/, "");
+        if (subInfo.status === "past_due") {
+          risk = "red";
+          reasons.push("Payment failed / past due");
+        }
+      }
+    }
+
+    // Check subcontract activity in last 60 days
+    const cutoff60d = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const recentSubResult = await db.execute(sql`
+      SELECT COUNT(s.id) as c FROM subcontracts s
+      JOIN projects p ON p.id = s.project_id
+      WHERE p.gc_id = ${user.id} AND s.created_at > ${cutoff60d}
+    `).catch(() => ({ rows: [{ c: "0" }] }));
+    const recentSubs = parseInt((recentSubResult.rows[0] as any)?.c ?? "0", 10);
+    if (recentSubs === 0 && risk === "green") {
+      risk = "yellow";
+      reasons.push("No new subcontracts in 60 days");
+    }
+
+    // Check if login frequency is dropping (compare last 30 vs prior 30 days via activity logs)
+    const loginCountResult = await db.execute(sql`
+      SELECT COUNT(*) as c FROM subcontract_activity_logs
+      WHERE user_id = ${user.id} AND created_at > ${new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)}
+    `).catch(() => ({ rows: [{ c: "0" }] }));
+    const recentActivity = parseInt((loginCountResult.rows[0] as any)?.c ?? "0", 10);
+    if (recentActivity < 5 && risk === "green") {
+      risk = "yellow";
+      reasons.push("Low platform activity in last 30 days");
+    }
+
+    results.push({
+      id: user.id,
+      companyName: user.companyName,
+      email: user.email,
+      planLabel,
+      risk,
+      reasons,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      daysSinceLogin,
+      createdAt: user.createdAt.toISOString(),
+      adminNotes: user.adminNotes ?? null,
+    });
+  }
+
+  results.sort((a, b) => {
+    const order = { red: 0, yellow: 1, green: 2 };
+    return order[a.risk] - order[b.risk];
+  });
+
+  res.json(results);
+});
+
+// ── Upgrade Opportunities ────────────────────────────────────────────────────
+
+router.get("/upgrade-opportunities", requireAdmin, async (req, res) => {
+  const gcOwners = await getGCOwners();
+  const now = new Date();
+  const results = [];
+
+  for (const user of gcOwners) {
+    const planInfo = await getGCPlanInfo(user.id);
+    if (!planInfo.subscribed || !planInfo.limit) continue; // skip trial/unsubscribed/unlimited
+
+    const usagePercent = planInfo.activeCount / planInfo.limit;
+    if (usagePercent < 0.7) continue;
+
+    const nextPlan = planInfo.nextPlan;
+    results.push({
+      id: user.id,
+      companyName: user.companyName,
+      email: user.email,
+      planLabel: planInfo.planLabel,
+      planName: planInfo.planName,
+      activeCount: planInfo.activeCount,
+      limit: planInfo.limit,
+      usagePercent: Math.round(usagePercent * 100),
+      nextPlanLabel: nextPlan?.label ?? null,
+      nextPlanName: nextPlan?.name ?? null,
+      nextPlanMonthlyUsd: nextPlan ? nextPlan.monthlyUsd / 100 : null,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    });
+  }
+
+  results.sort((a, b) => b.usagePercent - a.usagePercent);
+  res.json(results);
+});
+
+// ── Product Usage ─────────────────────────────────────────────────────────────
+
+router.get("/product-usage", requireAdmin, async (req, res) => {
+  const totalGCsResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL`);
+  const totalGCs = parseInt((totalGCsResult.rows[0] as any)?.c ?? "0", 10);
+
+  const planFilesResult = await db.execute(sql`SELECT COUNT(DISTINCT p.gc_id) as c FROM plan_files pf JOIN projects p ON p.id = pf.project_id WHERE p.gc_id IN (SELECT id FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL)`);
+  const gcsWithPlanFiles = parseInt((planFilesResult.rows[0] as any)?.c ?? "0", 10);
+
+  const aiResult = await db.execute(sql`SELECT COUNT(DISTINCT gc_id) as c FROM projects WHERE ai_analysis IS NOT NULL AND gc_id IN (SELECT id FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL)`);
+  const gcsWithAIAnalysis = parseInt((aiResult.rows[0] as any)?.c ?? "0", 10);
+
+  const tradeScopeResult = await db.execute(sql`SELECT COUNT(DISTINCT p.gc_id) as c FROM trade_scopes ts JOIN projects p ON p.id = ts.project_id WHERE p.gc_id IN (SELECT id FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL)`);
+  const gcsWithTradeScopes = parseInt((tradeScopeResult.rows[0] as any)?.c ?? "0", 10);
+
+  const retentionResult = await db.execute(sql`SELECT COUNT(DISTINCT p.gc_id) as c FROM subcontracts s JOIN projects p ON p.id = s.project_id WHERE s.retention_percentage > 0 AND p.gc_id IN (SELECT id FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL)`);
+  const gcsWithRetention = parseInt((retentionResult.rows[0] as any)?.c ?? "0", 10);
+
+  const complianceResult = await db.execute(sql`SELECT COUNT(DISTINCT p.gc_id) as c FROM compliance_checklist_items cci JOIN projects p ON p.id = cci.project_id WHERE p.gc_id IN (SELECT id FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL)`);
+  const gcsWithCompliance = parseInt((complianceResult.rows[0] as any)?.c ?? "0", 10);
+
+  const totalSubsResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'SUB' AND is_demo = false`);
+  const totalSubs = parseInt((totalSubsResult.rows[0] as any)?.c ?? "0", 10);
+
+  const paymentConfirmedResult = await db.execute(sql`SELECT COUNT(DISTINCT u.id) as c FROM invoices i JOIN subcontracts sc ON sc.id = i.subcontract_id JOIN projects p ON p.id = sc.project_id JOIN users u ON u.id = p.gc_id WHERE i.payment_confirmed_at IS NOT NULL AND u.is_demo = false`);
+  const subsWithPaymentConfirmed = parseInt((paymentConfirmedResult.rows[0] as any)?.c ?? "0", 10);
+
+  const lienWaiverResult = await db.execute(sql`SELECT COUNT(*) as c FROM lien_waivers lw JOIN subcontracts sc ON sc.id = lw.subcontract_id JOIN projects p ON p.id = sc.project_id JOIN users u ON u.id = p.gc_id WHERE u.is_demo = false`);
+  const lienWaiversSigned = parseInt((lienWaiverResult.rows[0] as any)?.c ?? "0", 10);
+
+  const changeOrderResult = await db.execute(sql`SELECT COUNT(*) as c FROM change_orders co JOIN subcontracts sc ON sc.id = co.subcontract_id JOIN projects p ON p.id = sc.project_id JOIN users u ON u.id = p.gc_id WHERE u.is_demo = false`);
+  const totalChangeOrders = parseInt((changeOrderResult.rows[0] as any)?.c ?? "0", 10);
+
+  const invoiceResult = await db.execute(sql`SELECT COUNT(*) as c FROM invoices i JOIN subcontracts sc ON sc.id = i.subcontract_id JOIN projects p ON p.id = sc.project_id JOIN users u ON u.id = p.gc_id WHERE u.is_demo = false`);
+  const totalInvoices = parseInt((invoiceResult.rows[0] as any)?.c ?? "0", 10);
+
+  res.json({
+    totalGCs, totalSubs,
+    gcFeatures: {
+      planFilesUploaded: { count: gcsWithPlanFiles, total: totalGCs, label: "Uploaded Plan Files" },
+      aiAnalysisRun: { count: gcsWithAIAnalysis, total: totalGCs, label: "Run AI Analysis" },
+      tradeScopes: { count: gcsWithTradeScopes, total: totalGCs, label: "Created Trade Scopes" },
+      retention: { count: gcsWithRetention, total: totalGCs, label: "Enabled Retention" },
+      compliance: { count: gcsWithCompliance, total: totalGCs, label: "Used Compliance Checklists" },
+    },
+    platformTotals: {
+      changeOrders: totalChangeOrders,
+      invoices: totalInvoices,
+      lienWaiversSigned,
+      subsWithPaymentConfirmed,
+    },
+  });
+});
+
+// ── Support Queue ─────────────────────────────────────────────────────────────
+
+router.get("/support-queue", requireAdmin, async (req, res) => {
+  // Failed payments (past_due subscriptions)
+  const failedPaymentAccounts = [];
+  const gcOwners = await getGCOwners();
+  const now = new Date();
+  const cutoff7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  for (const user of gcOwners) {
+    if (!user.stripeSubscriptionId) continue;
+    const subInfo = await getStripeSubscriptionInfo(user.stripeSubscriptionId);
+    if (subInfo?.status === "past_due") {
+      failedPaymentAccounts.push({
+        id: user.id,
+        companyName: user.companyName,
+        email: user.email,
+        planLabel: subInfo.product_name?.replace(/ Annual$/, "") ?? null,
+        amount: subInfo.unit_amount ? subInfo.unit_amount / 100 : null,
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+        createdAt: user.createdAt.toISOString(),
+        issue: "payment_failed",
+      });
+    }
+  }
+
+  // Never logged in after signup (>3 days old, never logged in)
+  const neverLoggedIn = gcOwners.filter(u => {
+    const ageMs = now.getTime() - u.createdAt.getTime();
+    return !u.lastLoginAt && ageMs > 3 * 24 * 60 * 60 * 1000 && !u.isDemo;
+  }).map(u => ({
+    id: u.id,
+    companyName: u.companyName,
+    email: u.email,
+    createdAt: u.createdAt.toISOString(),
+    lastLoginAt: null,
+    issue: "never_logged_in",
+  }));
+
+  res.json({ failedPayments: failedPaymentAccounts, neverLoggedIn });
+});
+
+// ── Broadcast Email ───────────────────────────────────────────────────────────
+
+router.post("/broadcast-email", requireAdmin, async (req, res) => {
+  const { segment, subject, message } = req.body;
+  if (!segment || !subject || !message) {
+    res.status(400).json({ error: "segment, subject, and message are required" });
+    return;
+  }
+
+  const gcOwners = await getGCOwners();
+  const now = new Date();
+  const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  let targets: typeof gcOwners = [];
+
+  if (segment === "all_trials") {
+    targets = gcOwners.filter(u => {
+      const trialEndsAt = new Date((u.trialStartedAt ?? u.createdAt).getTime() + TRIAL_MS);
+      return !u.stripeSubscriptionId && now < trialEndsAt;
+    });
+  } else if (segment === "all_paying") {
+    targets = gcOwners.filter(u => u.stripeSubscriptionId || u.adminPlanOverride);
+  } else if (segment === "all_churned") {
+    targets = gcOwners.filter(u => {
+      const trialEndsAt = new Date((u.trialStartedAt ?? u.createdAt).getTime() + TRIAL_MS);
+      return !u.stripeSubscriptionId && !u.adminPlanOverride && now > trialEndsAt;
+    });
+  } else if (segment === "all_annual") {
+    const annualAccounts: typeof gcOwners = [];
+    for (const u of gcOwners) {
+      if (!u.stripeSubscriptionId) continue;
+      const subInfo = await getStripeSubscriptionInfo(u.stripeSubscriptionId);
+      if (subInfo?.billing_interval === "year") annualAccounts.push(u);
+    }
+    targets = annualAccounts;
+  } else if (segment === "all_users") {
+    targets = gcOwners;
+  } else {
+    res.status(400).json({ error: "Invalid segment" });
+    return;
+  }
+
+  let sent = 0;
+  for (const user of targets) {
+    await sendAdminMessageEmail({ toEmail: user.email, subject, message }).catch(() => {});
+    sent++;
+  }
+
+  res.json({ success: true, sent, segment, recipientCount: targets.length });
+});
+
+// ── Trial Follow-Up Email ─────────────────────────────────────────────────────
+
+router.post("/gc/:userId/send-followup", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { message } = req.body;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const trialEndsAt = new Date((user.trialStartedAt ?? user.createdAt).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+  const subject = `Following up on your SubTracker trial — ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`;
+  const body = message || `Hi ${user.companyName},\n\nWe noticed you're in your SubTracker trial with ${trialDaysLeft} days remaining. We'd love to help you get the most out of the platform.\n\nIf you have any questions, just reply to this email.\n\nThe SubTracker Team`;
+
+  await sendAdminMessageEmail({ toEmail: user.email, subject, message: body });
+  res.json({ success: true });
+});
+
+// ── Upgrade Offer Email ───────────────────────────────────────────────────────
+
+router.post("/gc/:userId/offer-upgrade", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { nextPlanName } = req.body;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const plan = nextPlanName ? getPlanByName(nextPlanName) : null;
+  const subject = `Upgrade your SubTracker plan${plan ? ` — ${plan.label} unlocks more capacity` : ""}`;
+  const body = `Hi ${user.companyName},\n\nYou're approaching your subcontract limit on SubTracker. To keep growing without interruption, consider upgrading to ${plan?.label ?? "a higher plan"}.\n\nYou can upgrade instantly from your billing page: visit Settings → Billing in your dashboard.\n\nThe SubTracker Team`;
+
+  await sendAdminMessageEmail({ toEmail: user.email, subject, message: body });
+  res.json({ success: true });
+});
+
+// ── Demo Stats ────────────────────────────────────────────────────────────────
+
+router.get("/demo/stats", requireAdmin, async (req, res) => {
+  const [gcDemoUser] = await db.select().from(usersTable)
+    .where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "GC")))
+    .limit(1);
+  const [subDemoUser] = await db.select().from(usersTable)
+    .where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "SUB")))
+    .limit(1);
+
+  // Total real signups (non-demo)
+  const now = new Date();
+  const cutoff7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const signups7dResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL AND created_at > ${cutoff7d}`);
+  const signups7d = parseInt((signups7dResult.rows[0] as any)?.c ?? "0", 10);
+  const signups30dResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL AND created_at > ${cutoff30d}`);
+  const signups30d = parseInt((signups30dResult.rows[0] as any)?.c ?? "0", 10);
+
+  res.json({
+    gcDemoExists: !!gcDemoUser,
+    subDemoExists: !!subDemoUser,
+    signups7d,
+    signups30d,
+  });
+});
+
+router.post("/demo/reset", requireAdmin, async (req, res) => {
+  const { type } = req.body; // "gc" | "sub" | "all"
+  try {
+    // Reset by deleting demo users — the seeder will recreate them on next startup
+    if (type === "gc" || type === "all") {
+      const [gcDemo] = await db.select().from(usersTable)
+        .where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "GC")))
+        .limit(1);
+      if (gcDemo) {
+        await db.delete(usersTable).where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "GC")));
+      }
+    }
+    if (type === "sub" || type === "all") {
+      await db.delete(usersTable).where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "SUB")));
+    }
+    res.json({ success: true, message: "Demo data cleared. It will be regenerated on next server startup." });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+
+router.get("/feature-flags", requireAdmin, async (req, res) => {
+  const flags = await db.select().from(featureFlagsTable).orderBy(featureFlagsTable.name);
+
+  // If no flags exist, seed defaults
+  if (flags.length === 0) {
+    const defaults = [
+      { name: "ai_bid_analysis",        description: "AI bid benchmarks using Claude on plan files", globalEnabled: true },
+      { name: "compliance_checklists",  description: "GC compliance checklist feature", globalEnabled: true },
+      { name: "lien_waivers",           description: "Subcontractor lien waiver signing", globalEnabled: true },
+      { name: "owner_notifications",    description: "Project owner change order notification emails", globalEnabled: true },
+      { name: "trade_scopes",           description: "Trade scope management and templates", globalEnabled: true },
+      { name: "bid_comparison",         description: "GC bid comparison table view", globalEnabled: true },
+      { name: "gc_credentials",         description: "GC insurance/license credential tracking", globalEnabled: true },
+      { name: "demo_mode",              description: "Demo account login button on login page", globalEnabled: true },
+      { name: "magic_link_login",       description: "Magic link email login option", globalEnabled: true },
+      { name: "team_management",        description: "GC team member management", globalEnabled: true },
+    ];
+    await db.insert(featureFlagsTable).values(defaults.map(d => ({ ...d, perAccountOverrides: {} })));
+    const seeded = await db.select().from(featureFlagsTable).orderBy(featureFlagsTable.name);
+    res.json(seeded);
+    return;
+  }
+
+  res.json(flags);
+});
+
+router.patch("/feature-flags/:flagId", requireAdmin, async (req, res) => {
+  const { flagId } = req.params;
+  const { globalEnabled, perAccountOverrides } = req.body;
+
+  const updates: Record<string, any> = { updatedAt: new Date() };
+  if (typeof globalEnabled === "boolean") updates.globalEnabled = globalEnabled;
+  if (perAccountOverrides !== undefined) updates.perAccountOverrides = perAccountOverrides;
+
+  const [updated] = await db.update(featureFlagsTable)
+    .set(updates)
+    .where(eq(featureFlagsTable.id, flagId))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "Flag not found" }); return; }
+  res.json(updated);
 });
 
 export default router;
