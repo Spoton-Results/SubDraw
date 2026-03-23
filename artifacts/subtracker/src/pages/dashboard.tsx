@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -532,8 +532,8 @@ export default function Dashboard() {
           {isGC && activeProjects.length > 0 && (
             <Button variant="outline" onClick={() => setIsAddSubOpen(true)} className="gap-2 min-h-[44px]">
               <UserPlus className="h-5 w-5" />
-              <span className="hidden sm:inline">Add Subcontractor</span>
-              <span className="sm:hidden">Add Sub</span>
+              <span className="hidden sm:inline">Invite Sub to Bid</span>
+              <span className="sm:hidden">Invite Sub</span>
             </Button>
           )}
           {isOwner && (
@@ -948,16 +948,16 @@ export default function Dashboard() {
         open={isAddSubOpen}
         onOpenChange={(open) => { if (!open) handleAddSubClose(); }}
         title={
-          addSubSuccess ? "Subcontractor Added!" :
-          addSubNewResult ? "Subcontractor Invited" :
-          addSubStep === "contract" ? `Contract Details — ${addSubSelected?.companyName}` :
-          addSubStep === "sub" ? `Add Sub to ${selectedProject?.name}` :
-          "Add Subcontractor"
+          addSubSuccess ? (selectedProjectIsConstruction ? "Subcontractor Added!" : "Invitation Sent!") :
+          addSubNewResult ? "Invitation Sent!" :
+          addSubStep === "contract" ? `Direct Award — No Bid Required` :
+          addSubStep === "sub" ? (selectedProjectIsConstruction ? `Add Sub to ${selectedProject?.name}` : `Invite Sub to Bid — ${selectedProject?.name}`) :
+          "Invite Sub to Bid"
         }
         description={
-          addSubStep === "project" ? "Choose which project to add the subcontractor to." :
-          addSubStep === "contract" ? `${selectedProject?.name} · In Construction` :
-          selectedProjectIsConstruction ? "Project is in Construction — you'll set a contract amount next." :
+          addSubStep === "project" ? "Choose which project to invite the subcontractor to." :
+          addSubStep === "contract" ? `${selectedProject?.name} · Direct Award — enter the agreed contract amount.` :
+          selectedProjectIsConstruction ? "Direct Award — No Bid Required. Pick a sub to add mid-construction. You'll enter the agreed amount next." :
           undefined
         }
       >
@@ -965,31 +965,49 @@ export default function Dashboard() {
         {addSubSuccess ? (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
-              <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-green-800 dark:text-green-300">{addSubSuccess.companyName} added to {addSubSuccess.projectName}</p>
-                <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">
-                  {selectedProjectIsConstruction
-                    ? "Subcontract created — they can now submit invoices."
-                    : "They'll be notified and can submit a bid."}
-                </p>
+              {selectedProjectIsConstruction ? (
+                <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              ) : (
+                <Mail className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-1.5">
+                {selectedProjectIsConstruction ? (
+                  <>
+                    <p className="font-semibold text-green-800 dark:text-green-300">{addSubSuccess.companyName} added to {addSubSuccess.projectName}</p>
+                    <p className="text-sm text-green-700 dark:text-green-400">Subcontract created — they can now submit invoices.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-green-800 dark:text-green-300">
+                      An invitation has been sent to <span className="font-bold">{addSubSuccess.companyName}</span>.
+                    </p>
+                    <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid.</p>
+                    <p className="text-sm text-green-700 dark:text-green-400">You will be notified when their bid is received.</p>
+                    <p className="text-xs text-green-600 dark:text-green-500 mt-1 pt-2 border-t border-green-200 dark:border-green-800">There is no amount to enter at this stage — the sub submits their own bid.</p>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex gap-3 flex-col-reverse sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={() => { setAddSubSuccess(null); setAddSubStep("project"); setAddSubProjectId(""); setAddSubTab("contact"); setAddSubContactSearch(""); setAddSubEmail(""); setAddSubCompanyName(""); setAddSubSelected(null); setAddSubAmount(""); }} className="min-h-[44px]">Add Another</Button>
+              <Button variant="outline" onClick={() => { setAddSubSuccess(null); setAddSubStep("project"); setAddSubProjectId(""); setAddSubTab("contact"); setAddSubContactSearch(""); setAddSubEmail(""); setAddSubCompanyName(""); setAddSubSelected(null); setAddSubAmount(""); }} className="min-h-[44px]">
+                {selectedProjectIsConstruction ? "Add Another" : "Invite Another"}
+              </Button>
               <Button onClick={handleAddSubClose} className="min-h-[44px]">Done</Button>
             </div>
           </div>
 
-        /* ─── NEW USER CREDENTIALS ─── */
+        /* ─── NEW USER CREDENTIALS (new account created) ─── */
         ) : addSubNewResult ? (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 space-y-3">
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
-                <KeyRound className="h-4 w-4" />
-                Account created — added to {selectedProject?.name}
+                <Mail className="h-4 w-4" />
+                Invitation sent — new account created for {selectedProject?.name}
               </div>
-              <div className="space-y-2 text-sm">
+              <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid. You will be notified when their bid is received.</p>
+              <p className="text-xs text-green-600 dark:text-green-500">There is no amount to enter at this stage — the sub submits their own bid.</p>
+              <div className="border-t border-green-200 dark:border-green-800 pt-3 space-y-2 text-sm">
+                <p className="text-xs font-semibold text-green-800 dark:text-green-300">Share these credentials if they can't find the email:</p>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Login email:</span>
                   <span className="font-mono font-medium">{addSubNewResult.email}</span>
@@ -1152,7 +1170,7 @@ export default function Dashboard() {
                             disabled={disabled || addSubLoading}
                             onClick={() => !disabled && handleAddSubContactSelect(contact.subId, contact.sub.companyName)}
                           >
-                            {disabled ? (selectedProjectIsConstruction ? "Active" : "Added") : selectedProjectIsConstruction ? "Select →" : "Add"}
+                            {disabled ? (selectedProjectIsConstruction ? "Active" : "Invited") : selectedProjectIsConstruction ? "Select →" : "Invite to Bid"}
                           </Button>
                         </div>
                       );
@@ -1177,7 +1195,7 @@ export default function Dashboard() {
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
                   <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("project")}>← Back</Button>
                   <Button type="submit" isLoading={addSubLoading} className="min-h-[44px]">
-                    {selectedProjectIsConstruction ? "Next — Enter Contract Amount →" : "Add Subcontractor"}
+                    {selectedProjectIsConstruction ? "Next — Enter Contract Amount →" : "Send Invitation"}
                   </Button>
                 </div>
               </form>

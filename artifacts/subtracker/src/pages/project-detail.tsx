@@ -143,6 +143,7 @@ export default function ProjectDetail() {
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteCompanyName, setInviteCompanyName] = React.useState("");
   const [inviteResult, setInviteResult] = React.useState<{ temporaryPassword: string; email: string } | null>(null);
+  const [biddingInviteSuccess, setBiddingInviteSuccess] = React.useState<{ companyName: string; email: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [directAmount, setDirectAmount] = React.useState("");
   const [directTrade, setDirectTrade] = React.useState("");
@@ -820,6 +821,7 @@ export default function ProjectDetail() {
     setInviteEmail("");
     setInviteCompanyName("");
     setInviteResult(null);
+    setBiddingInviteSuccess(null);
     setCopied(false);
     setContactSearch("");
     setInviteTab("contact");
@@ -881,7 +883,7 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleContactInvite = async (subId: string, companyName: string) => {
+  const handleContactInvite = async (subId: string, companyName: string, email: string) => {
     try {
       const res = await fetch(`${BASE}/api/contacts/${subId}/invite/${projectId}`, {
         method: "POST",
@@ -894,8 +896,7 @@ export default function ProjectDetail() {
         throw new Error(err.error ?? "Failed to add to project");
       }
       queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-      toast.success(`${companyName} added to project!`);
-      handleInviteClose();
+      setBiddingInviteSuccess({ companyName, email });
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to add to project");
     }
@@ -1540,7 +1541,7 @@ export default function ProjectDetail() {
             {isGC && !isArchived && project.status !== "COMPLETE" && (
               <Button onClick={() => setIsInviteOpen(true)} className="gap-2 min-h-[44px] px-5">
                 <Plus className="h-5 w-5" />
-                Add Subcontractor
+                {project.status === "BIDDING" ? "Invite Sub to Bid" : "Add Subcontractor"}
               </Button>
             )}
             {isGC && project.status === "COMPLETE" && !isArchived && (
@@ -3086,7 +3087,12 @@ export default function ProjectDetail() {
               <CardContent>
                 {isGC ? (
                   (project.bids?.length ?? 0) === 0 ? (
-                    <p className="text-muted-foreground py-4 text-center">No bids submitted yet.</p>
+                    <div className="py-4 text-center space-y-1">
+                      <p className="text-muted-foreground">No bids received yet.</p>
+                      {project.status === "BIDDING" && (
+                        <p className="text-xs text-muted-foreground">Invited subs will submit their own bid amounts — you review and accept the one you want.</p>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       {project.bids?.map(bid => {
@@ -3139,7 +3145,7 @@ export default function ProjectDetail() {
                               onClick={() => setAwardBidConfirm({ open: true, id: bid.id, company: bid.sub?.companyName ?? "this subcontractor", amount: bid.amount })}
                               className="bg-green-600 hover:bg-green-700 text-white shadow-green-600/20 shrink-0"
                             >
-                              <Award className="h-4 w-4 mr-2" /> Award
+                              <Award className="h-4 w-4 mr-2" /> Accept Bid
                             </Button>
                           )}
                         </div>
@@ -3239,7 +3245,8 @@ export default function ProjectDetail() {
                       </label>
                     )}
                     <div>
-                      <label className="text-sm font-semibold mb-1.5 block">Bid Amount ($)</label>
+                      <label className="text-lg font-bold mb-1.5 block">Enter Your Bid Amount</label>
+                      <p className="text-xs text-muted-foreground mb-2">This is the total amount you are proposing for your scope of work on this project.</p>
                       <Input
                         type="number"
                         step="0.01"
@@ -3248,7 +3255,7 @@ export default function ProjectDetail() {
                         placeholder="e.g. 50000.00"
                         value={bidAmount}
                         onChange={e => setBidAmount(e.target.value)}
-                        className="font-mono text-base"
+                        className="font-mono text-lg h-14"
                       />
                     </div>
                     <div>
@@ -3376,36 +3383,51 @@ export default function ProjectDetail() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Building className="h-5 w-5 text-primary" /> Project Members
+                  <Building className="h-5 w-5 text-primary" /> {project.status === "BIDDING" ? "Invited Subs" : "Project Members"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {project.status === "BIDDING" && (
+                  <p className="text-xs text-muted-foreground mb-3 leading-relaxed border-b border-border pb-3">
+                    Invite your subcontractors below. They will receive an email with a link to view your plans and submit their own bid amount. You review all bids and accept the one you want — that creates the subcontract automatically.
+                  </p>
+                )}
                 <div className="space-y-3">
-                  {project.members?.map(member => {
-                    const canRemove = isGC && project.status === "BIDDING" && member.roleOnProject === "SUB";
-                    return (
-                      <div key={member.id} className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm shrink-0">
-                          {member.user?.companyName?.charAt(0) ?? "?"}
+                  {(project.members?.filter(m => m.roleOnProject === "SUB") ?? []).length === 0 && project.status === "BIDDING" ? (
+                    <div className="rounded-xl bg-secondary/50 border border-dashed border-border p-4 text-center space-y-2">
+                      <p className="text-sm text-muted-foreground font-medium">No subcontractors invited yet.</p>
+                      <p className="text-xs text-muted-foreground">Tap <span className="font-semibold text-foreground">Invite Sub to Bid</span> to send your first invitation. Subs will receive a link to view your plans and submit their bid.</p>
+                      <Button size="sm" variant="outline" className="mt-2 gap-1.5" onClick={() => setIsInviteOpen(true)}>
+                        <Plus className="h-3.5 w-3.5" /> Invite Sub to Bid
+                      </Button>
+                    </div>
+                  ) : (
+                    project.members?.map(member => {
+                      const canRemove = isGC && project.status === "BIDDING" && member.roleOnProject === "SUB";
+                      return (
+                        <div key={member.id} className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm shrink-0">
+                            {member.user?.companyName?.charAt(0) ?? "?"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm truncate">{member.user?.companyName}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{project.status === "BIDDING" ? "Invited — awaiting bid" : member.roleOnProject}</p>
+                          </div>
+                          {canRemove && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="min-h-[36px] min-w-[36px] p-0 text-muted-foreground hover:text-destructive shrink-0"
+                              title={`Remove ${member.user?.companyName}`}
+                              onClick={() => setRemoveMemberConfirm({ open: true, userId: member.userId, companyName: member.user?.companyName ?? "this subcontractor" })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm truncate">{member.user?.companyName}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{member.roleOnProject}</p>
-                        </div>
-                        {canRemove && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="min-h-[36px] min-w-[36px] p-0 text-muted-foreground hover:text-destructive shrink-0"
-                            title={`Remove ${member.user?.companyName}`}
-                            onClick={() => setRemoveMemberConfirm({ open: true, userId: member.userId, companyName: member.user?.companyName ?? "this subcontractor" })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -4037,15 +4059,16 @@ export default function ProjectDetail() {
         onOpenChange={(open) => { if (!open) handleInviteClose(); }}
         title={
           directSuccess ? "Subcontractor Added" :
-          inviteResult ? "Subcontractor Invited" :
-          inviteStep === "contract" ? `Direct Award — ${inviteSelectedSub?.companyName}` :
-          "Add Subcontractor"
+          biddingInviteSuccess ? "Invitation Sent!" :
+          inviteResult ? "Invitation Sent!" :
+          inviteStep === "contract" ? `Direct Award — No Bid Required` :
+          project.status === "BIDDING" ? "Invite Sub to Bid" : "Add Subcontractor"
         }
         description={
-          inviteResult ? "Share these credentials with the subcontractor so they can log in." :
-          inviteStep === "contract" ? `Mid-construction addition to ${project.name}. Enter the negotiated amount you've agreed on with this sub.` :
+          biddingInviteSuccess || inviteResult ? undefined :
+          inviteStep === "contract" ? `Direct mid-construction addition to ${project.name}. Enter the negotiated amount agreed on with this subcontractor.` :
           project.status === "CONSTRUCTION"
-            ? "Pick a sub to add them mid-construction. You'll enter the negotiated Direct Award amount next."
+            ? "Direct Award — No Bid Required. Pick a sub to add mid-construction. You'll enter the agreed amount next."
             : undefined
         }
       >
@@ -4064,15 +4087,37 @@ export default function ProjectDetail() {
             </div>
           </div>
 
+        /* ─── SUCCESS: existing contact invited in bidding phase ─── */
+        ) : biddingInviteSuccess ? (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
+              <Mail className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="font-semibold text-green-800 dark:text-green-300">
+                  An invitation has been sent to <span className="font-bold">{biddingInviteSuccess.companyName}</span> at {biddingInviteSuccess.email}.
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid.</p>
+                <p className="text-sm text-green-700 dark:text-green-400">You will be notified when their bid is received.</p>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-2 pt-2 border-t border-green-200 dark:border-green-800">There is no amount to enter at this stage — the sub submits their own bid.</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleInviteClose} className="min-h-[44px] w-full sm:w-auto">Done</Button>
+            </div>
+          </div>
+
         /* ─── SUCCESS: new user invited (bidding) ─── */
         ) : inviteResult ? (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 space-y-3">
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
-                <KeyRound className="h-4 w-4" />
-                Account created — {inviteResult.email} added to {project.name}
+                <Mail className="h-4 w-4" />
+                Invitation sent to {inviteResult.email}
               </div>
-              <div className="space-y-2 text-sm">
+              <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid. You will be notified when their bid is received.</p>
+              <p className="text-xs text-green-600 dark:text-green-500">There is no amount to enter at this stage — the sub submits their own bid.</p>
+              <div className="border-t border-green-200 dark:border-green-800 pt-3 space-y-2 text-sm">
+                <p className="text-xs font-semibold text-green-800 dark:text-green-300">New account created — share these credentials if they can't find the email:</p>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Login email:</span>
                   <span className="font-mono font-medium">{inviteResult.email}</span>
@@ -4090,7 +4135,6 @@ export default function ProjectDetail() {
                 </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">An invitation email has been sent if SMTP is configured.</p>
             <div className="flex justify-end pt-1">
               <Button onClick={handleInviteClose} className="min-h-[44px] w-full sm:w-auto">Done</Button>
             </div>
@@ -4245,9 +4289,9 @@ export default function ProjectDetail() {
                               size="sm"
                               variant={alreadyOnProject ? "outline" : "default"}
                               disabled={alreadyOnProject || inviteContactToProject.isPending}
-                              onClick={() => handleContactInvite(contact.subId, contact.sub.companyName)}
+                              onClick={() => handleContactInvite(contact.subId, contact.sub.companyName, contact.sub.email)}
                             >
-                              {alreadyOnProject ? "Added" : "Add"}
+                              {alreadyOnProject ? "Invited" : "Invite to Bid"}
                             </Button>
                           )}
                         </div>
@@ -4305,7 +4349,9 @@ export default function ProjectDetail() {
                 </p>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
                   <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
-                  <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">Add Subcontractor</Button>
+                  <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">
+                    {project.status === "BIDDING" ? "Send Invitation" : "Add Subcontractor"}
+                  </Button>
                 </div>
               </form>
             )}
@@ -4455,19 +4501,19 @@ export default function ProjectDetail() {
       <Dialog
         open={awardBidConfirm.open}
         onOpenChange={(open) => { if (!open) { setAwardBidConfirm({ open: false, id: "", company: "", amount: 0 }); setAwardTradeCategory(""); setAwardRetentionPct("10"); } }}
-        title="Award Bid"
+        title="Accept Bid"
         description="Assign a trade category and retention rate for this subcontract, then confirm."
       >
         <div className="space-y-4 mt-2">
           <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
             <p className="text-sm text-foreground">
-              Award this bid to{" "}
+              Accepting this bid will create a subcontract with{" "}
               <span className="font-semibold">{awardBidConfirm.company}</span>
               {" "}for{" "}
-              <span className="font-mono font-bold">{formatCurrency(awardBidConfirm.amount)}</span>?
+              <span className="font-mono font-bold">{formatCurrency(awardBidConfirm.amount)}</span>.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              This will create a subcontract and move the project to <strong>Active</strong> status. This action cannot be undone.
+              This amount was submitted by the subcontractor. Accepting will create a subcontract and move the project to <strong>Active</strong> status. This action cannot be undone.
             </p>
           </div>
           <div>
@@ -4542,7 +4588,7 @@ export default function ProjectDetail() {
               isLoading={awardBid.isPending}
               onClick={handleAward}
             >
-              <Award className="h-4 w-4 mr-2" /> Confirm Award
+              <Award className="h-4 w-4 mr-2" /> Accept Bid
             </Button>
           </div>
         </div>
