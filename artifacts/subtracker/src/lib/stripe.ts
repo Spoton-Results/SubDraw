@@ -14,10 +14,19 @@ export interface SubscriptionStatus extends TrialInfo {
   planLabel: string | null;
   limit: number | null;
   activeCount: number;
-  nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+  nextPlan: { name: string; limit: number | null; monthlyUsd: number; annualUsd: number; label: string } | null;
   isPastDue: boolean;
   isInGrace: boolean;
+  billingInterval: string | null;
   subscription: any | null;
+  annualRenewsAt: string | null;
+}
+
+export interface ProjectBreakdown {
+  projectId: string;
+  projectName: string;
+  status: string;
+  subcontractCount: number;
 }
 
 export interface BillingInfo extends TrialInfo {
@@ -28,9 +37,13 @@ export interface BillingInfo extends TrialInfo {
   planLabel: string | null;
   limit: number | null;
   activeCount: number;
-  nextPlan: { name: string; limit: number; monthlyUsd: number; label: string } | null;
+  nextPlan: { name: string; limit: number | null; monthlyUsd: number; annualUsd: number; label: string } | null;
   isPastDue: boolean;
   isInGrace: boolean;
+  billingInterval: string | null;
+  projectsBreakdown: ProjectBreakdown[];
+  nextChargeAmount: number | null;
+  annualRenewsAt: string | null;
 }
 
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
@@ -60,6 +73,21 @@ export async function startCheckout(planName: string): Promise<string> {
   return data.url;
 }
 
+export async function startAnnualCheckout(planName: string): Promise<string> {
+  const res = await fetch(`${API}/stripe/annual-checkout`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ planName }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || "Failed to start annual checkout");
+  }
+  const data = await res.json();
+  return data.url;
+}
+
 export async function upgradePlan(planName: string): Promise<void> {
   const res = await fetch(`${API}/stripe/upgrade`, {
     method: "POST",
@@ -70,6 +98,19 @@ export async function upgradePlan(planName: string): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as any).error || "Failed to upgrade plan");
+  }
+}
+
+export async function switchBillingInterval(interval: "month" | "year"): Promise<void> {
+  const res = await fetch(`${API}/stripe/switch-billing-interval`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ interval }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || "Failed to switch billing interval");
   }
 }
 
@@ -110,6 +151,6 @@ export function formatSubscriptionStatus(status: string): { label: string; color
   }
 }
 
-export function formatPlanPrice(monthlyUsd: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(monthlyUsd / 100);
+export function formatPlanPrice(cents: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
 }

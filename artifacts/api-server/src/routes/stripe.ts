@@ -1,14 +1,16 @@
 import { Router } from "express";
-import { requireAuth, requireGCOwner, requireGCOwner } from "../middlewares/requireAuth.js";
+import { requireAuth, requireGCOwner } from "../middlewares/requireAuth.js";
 import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import {
   getSubscriptionForUser,
   getSubscriptionPlanName,
   getOrCreatePlanPrice,
+  getOrCreateAnnualPlanPrice,
   updateUserStripeInfo,
   getInvoicesForCustomer,
   getCustomerById,
   getGCPlanInfo,
+  getActiveProjectsWithSubcontractCounts,
   PLANS,
   getPlanByName,
   type PlanName,
@@ -29,7 +31,7 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
 
   if (user.isDemo) {
-    res.json({ subscription: null, invoices: [], stripeCustomerId: null, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, trialActive: false, trialExpired: false, trialDaysLeft: 0, trialEndsAt: null });
+    res.json({ subscription: null, invoices: [], stripeCustomerId: null, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, trialActive: false, trialExpired: false, trialDaysLeft: 0, trialEndsAt: null, billingInterval: null, projectsBreakdown: [], nextChargeAmount: null, annualRenewsAt: null });
     return;
   }
 
@@ -37,7 +39,7 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
 
   const planInfo = await getGCPlanInfo(user.id);
 
-  // Clear stale test-mode Stripe IDs that don't exist in the current environment
+  // Clear stale test-mode Stripe IDs
   if (dbUser?.stripeCustomerId) {
     try {
       const stripe = await getUncachableStripeClient();
@@ -56,6 +58,25 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
     invoices = await getInvoicesForCustomer(dbUser.stripeCustomerId);
   }
 
+  // Project breakdown for billing page
+  const projectsBreakdown = await getActiveProjectsWithSubcontractCounts(user.id);
+
+  // Next charge amount from upcoming invoice
+  let nextChargeAmount: number | null = null;
+  let annualRenewsAt: string | null = null;
+  if (dbUser?.stripeCustomerId && subscription) {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const upcoming = await stripe.invoices.retrieveUpcoming({ customer: dbUser.stripeCustomerId });
+      nextChargeAmount = upcoming.amount_due ?? null;
+    } catch {
+      // upcoming invoice not available
+    }
+    if (planInfo.billingInterval === "year" && subscription.current_period_end) {
+      annualRenewsAt = new Date(subscription.current_period_end * 1000).toISOString();
+    }
+  }
+
   res.json({
     subscription,
     invoices,
@@ -67,21 +88,25 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
     nextPlan: planInfo.nextPlan,
     isPastDue: planInfo.isPastDue,
     isInGrace: planInfo.isInGrace,
+    billingInterval: planInfo.billingInterval,
     trialActive: planInfo.trialActive,
     trialExpired: planInfo.trialExpired,
     trialDaysLeft: planInfo.trialDaysLeft,
     trialEndsAt: planInfo.trialEndsAt?.toISOString() ?? null,
+    projectsBreakdown,
+    nextChargeAmount,
+    annualRenewsAt,
   });
 });
 
-// ── POST /checkout ────────────────────────────────────────────────────────────
+// ── POST /checkout (monthly) ──────────────────────────────────────────────────
 
 router.post("/checkout", requireAuth, requireGCOwner, async (req, res) => {
   const user = (req as any).user;
   const { planName } = req.body;
 
   if (!planName || !getPlanByName(planName)) {
-    res.status(400).json({ error: "Invalid plan name. Choose Starter, Growth, or Scale." });
+    res.status(400).json({ error: "Invalid plan name." });
     return;
   }
 
@@ -92,11 +117,56 @@ router.post("/checkout", requireAuth, requireGCOwner, async (req, res) => {
 
   let customerId = dbUser?.stripeCustomerId;
   if (customerId) {
-    // Verify the customer exists in the current Stripe environment (live vs test IDs differ)
     try {
       await stripe.customers.retrieve(customerId);
     } catch {
-      // Customer doesn't exist in this Stripe environment — create a fresh one
+      customerId = null;
+      await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    }
+  }
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: dbUser.email,
+      name: dbUser.companyName,
+      metadata: { userId: user.id },
+    });
+    await updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
+    customerId = customer.id;
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    payment_method_types: ["card"],
+    line_items: [{ price: priceId, quantity: 1 }],
+    mode: "subscription",
+    success_url: `${appUrl}/billing?success=1`,
+    cancel_url: `${appUrl}/billing?cancelled=1`,
+  });
+
+  res.json({ url: session.url });
+});
+
+// ── POST /annual-checkout ────────────────────────────────────────────────────
+
+router.post("/annual-checkout", requireAuth, requireGCOwner, async (req, res) => {
+  const user = (req as any).user;
+  const { planName } = req.body;
+
+  if (!planName || !getPlanByName(planName)) {
+    res.status(400).json({ error: "Invalid plan name." });
+    return;
+  }
+
+  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+  const priceId = await getOrCreateAnnualPlanPrice(planName as PlanName);
+  const stripe = await getUncachableStripeClient();
+  const appUrl = getAppUrl(req);
+
+  let customerId = dbUser?.stripeCustomerId;
+  if (customerId) {
+    try {
+      await stripe.customers.retrieve(customerId);
+    } catch {
       customerId = null;
       await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
     }
@@ -142,17 +212,75 @@ router.post("/upgrade", requireAuth, requireGCOwner, async (req, res) => {
 
   const stripe = await getUncachableStripeClient();
   const subscription = await stripe.subscriptions.retrieve(dbUser.stripeSubscriptionId);
-  const newPriceId = await getOrCreatePlanPrice(planName as PlanName);
   const existingItemId = subscription.items.data[0]?.id;
+  const existingInterval = subscription.items.data[0]?.price?.recurring?.interval ?? "month";
 
   if (!existingItemId) {
     res.status(400).json({ error: "Could not find subscription item to upgrade." });
     return;
   }
 
+  // Keep the same billing interval when upgrading
+  const newPriceId = existingInterval === "year"
+    ? await getOrCreateAnnualPlanPrice(planName as PlanName)
+    : await getOrCreatePlanPrice(planName as PlanName);
+
   await stripe.subscriptions.update(dbUser.stripeSubscriptionId, {
     items: [{ id: existingItemId, price: newPriceId }],
     proration_behavior: "always_invoice",
+  });
+
+  res.json({ success: true });
+});
+
+// ── POST /switch-billing-interval ────────────────────────────────────────────
+
+router.post("/switch-billing-interval", requireAuth, requireGCOwner, async (req, res) => {
+  const user = (req as any).user;
+  const { interval } = req.body; // "month" | "year"
+
+  if (interval !== "month" && interval !== "year") {
+    res.status(400).json({ error: "interval must be 'month' or 'year'" });
+    return;
+  }
+
+  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+  if (!dbUser?.stripeSubscriptionId) {
+    res.status(400).json({ error: "No active subscription found." });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(dbUser.stripeSubscriptionId);
+  const existingItemId = subscription.items.data[0]?.id;
+  const existingInterval = subscription.items.data[0]?.price?.recurring?.interval;
+
+  if (!existingItemId) {
+    res.status(400).json({ error: "Could not find subscription item." });
+    return;
+  }
+
+  if (existingInterval === interval) {
+    res.json({ success: true, message: "Already on that billing interval." });
+    return;
+  }
+
+  // Determine the current plan name (strip " Annual" suffix)
+  const rawPlanName = await getSubscriptionPlanName(dbUser.stripeSubscriptionId);
+  const planName = rawPlanName?.replace(/ Annual$/, "") ?? null;
+  if (!planName || !getPlanByName(planName)) {
+    res.status(400).json({ error: "Could not determine current plan." });
+    return;
+  }
+
+  const newPriceId = interval === "year"
+    ? await getOrCreateAnnualPlanPrice(planName as PlanName)
+    : await getOrCreatePlanPrice(planName as PlanName);
+
+  await stripe.subscriptions.update(dbUser.stripeSubscriptionId, {
+    items: [{ id: existingItemId, price: newPriceId }],
+    proration_behavior: "always_invoice",
+    billing_cycle_anchor: "now" as any,
   });
 
   res.json({ success: true });
@@ -201,16 +329,21 @@ router.post("/reactivate-subscription", requireAuth, requireGCOwner, async (req,
 router.get("/subscription-status", requireAuth, async (req, res) => {
   const user = (req as any).user;
   if (user.role !== "GC") {
-    res.json({ subscribed: true, planName: null, planLabel: null, limit: null, activeCount: 0, nextPlan: null, isPastDue: false, subscription: null });
+    res.json({ subscribed: true, planName: null, planLabel: null, limit: null, activeCount: 0, nextPlan: null, isPastDue: false, billingInterval: null, subscription: null });
     return;
   }
   if (user.isDemo) {
-    res.json({ subscribed: true, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, trialActive: false, trialExpired: false, trialDaysLeft: 14, trialEndsAt: null, subscription: null });
+    res.json({ subscribed: true, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, billingInterval: null, trialActive: false, trialExpired: false, trialDaysLeft: 14, trialEndsAt: null, subscription: null, annualRenewsAt: null });
     return;
   }
 
   const planInfo = await getGCPlanInfo(user.id);
   const subscription = await getSubscriptionForUser(user.id);
+
+  let annualRenewsAt: string | null = null;
+  if (planInfo.billingInterval === "year" && subscription?.current_period_end) {
+    annualRenewsAt = new Date(subscription.current_period_end * 1000).toISOString();
+  }
 
   res.json({
     subscribed: planInfo.subscribed,
@@ -221,11 +354,13 @@ router.get("/subscription-status", requireAuth, async (req, res) => {
     nextPlan: planInfo.nextPlan,
     isPastDue: planInfo.isPastDue,
     isInGrace: planInfo.isInGrace,
+    billingInterval: planInfo.billingInterval,
     trialActive: planInfo.trialActive,
     trialExpired: planInfo.trialExpired,
     trialDaysLeft: planInfo.trialDaysLeft,
     trialEndsAt: planInfo.trialEndsAt?.toISOString() ?? null,
     subscription,
+    annualRenewsAt,
   });
 });
 

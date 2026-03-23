@@ -386,8 +386,15 @@ export default function Dashboard() {
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to create subcontract");
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 402 || errData.error === "PLAN_LIMIT_REACHED") {
+          handleAddSubClose();
+          setPaywallMessage(errData.message);
+          setPaywallSuggestedPlan(errData.nextPlan?.name);
+          setIsPaywallOpen(true);
+          return;
+        }
+        throw new Error(errData.message || errData.error || "Failed to create subcontract");
       }
       queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
       setAddSubSuccess({ companyName: addSubSelected.companyName, projectName: selectedProject?.name ?? "" });
@@ -547,6 +554,52 @@ export default function Dashboard() {
         />
       )}
 
+      {/* Annual plan banner */}
+      {isGC && subStatus?.billingInterval === "year" && subStatus?.annualRenewsAt && (
+        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 dark:bg-green-950/20 p-3 flex items-center gap-2 text-sm">
+          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+          <span className="text-green-800 dark:text-green-300 font-medium">
+            Annual plan active — renews on {new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric" }).format(new Date(subStatus.annualRenewsAt))}.
+          </span>
+          <a href="/billing" className="ml-auto text-xs font-semibold text-green-700 hover:underline shrink-0">Manage →</a>
+        </div>
+      )}
+
+      {/* Active subcontracts usage indicator */}
+      {isGC && subStatus?.subscribed && subStatus?.planName && subStatus.planName !== "Demo" && subStatus?.limit !== null && (
+        <div className={cn(
+          "mb-4 rounded-xl border p-3 flex items-center gap-3 text-sm",
+          (subStatus.activeCount ?? 0) >= subStatus.limit
+            ? "border-red-300 bg-red-50 dark:bg-red-950/20"
+            : (subStatus.activeCount ?? 0) >= subStatus.limit - 5
+            ? "border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20"
+            : "border-border bg-secondary/30"
+        )}>
+          <div className="flex-1 min-w-0">
+            <div className={cn(
+              "font-semibold text-xs",
+              (subStatus.activeCount ?? 0) >= subStatus.limit ? "text-red-700 dark:text-red-400"
+              : (subStatus.activeCount ?? 0) >= subStatus.limit - 5 ? "text-yellow-700 dark:text-yellow-400"
+              : "text-foreground"
+            )}>
+              Active Subcontracts: {subStatus.activeCount ?? 0} of {subStatus.limit}
+            </div>
+            <div className="w-full bg-muted rounded-full h-1.5 mt-1.5">
+              <div
+                className={cn("h-1.5 rounded-full transition-all", (subStatus.activeCount ?? 0) >= subStatus.limit ? "bg-red-500" : (subStatus.activeCount ?? 0) >= subStatus.limit - 5 ? "bg-yellow-500" : "bg-primary")}
+                style={{ width: `${Math.min(100, ((subStatus.activeCount ?? 0) / subStatus.limit) * 100)}%` }}
+              />
+            </div>
+          </div>
+          {(subStatus.activeCount ?? 0) >= subStatus.limit && (
+            <a href="/billing" className="text-xs font-semibold text-red-700 hover:underline shrink-0">Upgrade →</a>
+          )}
+          {(subStatus.activeCount ?? 0) < subStatus.limit && (subStatus.activeCount ?? 0) >= subStatus.limit - 5 && (
+            <a href="/billing" className="text-xs font-semibold text-yellow-700 hover:underline shrink-0">Upgrade →</a>
+          )}
+        </div>
+      )}
+
       {/* Payment failure banner */}
       {isGC && subStatus?.isPastDue && (
         <div className="mb-4 rounded-xl border-2 border-red-400 bg-red-50 dark:bg-red-950/20 p-4 flex items-start gap-3">
@@ -554,7 +607,7 @@ export default function Dashboard() {
           <div className="flex-1">
             <div className="font-semibold text-red-800 dark:text-red-300 text-sm">Payment failed — please update your billing info to continue</div>
             <div className="text-xs text-red-700 dark:text-red-400 mt-0.5">
-              You have a 3-day grace period before new project creation is locked.
+              You have a 3-day grace period before new subcontract creation is locked.
             </div>
           </div>
           <a href="/billing" className="text-xs font-semibold text-red-700 hover:underline shrink-0">Update billing →</a>

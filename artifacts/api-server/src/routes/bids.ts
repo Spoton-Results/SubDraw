@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { getActorRoleLabel } from "../lib/auth.js";
 import { sendBidAwardedEmail, sendNewBidEmail } from "../lib/email.js";
+import { getGCPlanInfo, getActiveSubcontractCount } from "../lib/stripeStorage.js";
 
 const router = Router({ mergeParams: true });
 
@@ -121,6 +122,23 @@ router.post("/:bidId/award", requireAuth, requireGC, async (req, res) => {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, bid.projectId)).limit(1);
   const [gc] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1);
   const [sub] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, companyName: usersTable.companyName, createdAt: usersTable.createdAt }).from(usersTable).where(eq(usersTable.id, bid.subId)).limit(1);
+
+  // Check active subcontract plan limit before creating the subcontract
+  const planInfo = await getGCPlanInfo(project.gcId);
+  if (planInfo.subscribed && planInfo.limit !== null) {
+    const currentCount = await getActiveSubcontractCount(project.gcId);
+    if (currentCount >= planInfo.limit) {
+      res.status(402).json({
+        error: "PLAN_LIMIT_REACHED",
+        message: `You have reached your plan limit of ${planInfo.limit} active subcontracts. To add more subcontracts you can upgrade your plan or archive completed projects to free up slots.`,
+        activeCount: currentCount,
+        limit: planInfo.limit,
+        planName: planInfo.planName,
+        nextPlan: planInfo.nextPlan,
+      });
+      return;
+    }
+  }
 
   const { tradeCategory, retentionPercentage } = req.body ?? {};
   const retPct = Math.min(15, Math.max(0, Number(retentionPercentage ?? 10)));

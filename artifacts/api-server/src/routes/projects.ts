@@ -7,7 +7,7 @@ import archiver from "archiver";
 import { requireAuth, requireGC, requireGCOwner } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId, isProjectManager, getActorName, getActorRoleLabel, canSeeAllProjects, isBiddingOnlyRole } from "../lib/auth.js";
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
-import { getGCPlanInfo, getActiveProjectCount } from "../lib/stripeStorage.js";
+import { getGCPlanInfo, getActiveSubcontractCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 import { generateDrawSchedulePDF } from "../lib/pdfDrawSchedule.js";
 
@@ -290,24 +290,13 @@ router.post("/", requireAuth, requireGCOwner, async (req, res) => {
     return;
   }
   const planInfo = await getGCPlanInfo(effectiveGcId);
-  // First project is always free
+  // First project always free; after that require an active subscription
   if (planInfo.activeCount >= 1) {
     if (!planInfo.subscribed) {
       res.status(402).json({
         error: "SUBSCRIPTION_REQUIRED",
         message: "Choose a plan to manage more than one project.",
         activeCount: planInfo.activeCount,
-      });
-      return;
-    }
-    if (planInfo.limit !== null && planInfo.activeCount >= planInfo.limit) {
-      res.status(402).json({
-        error: "PLAN_LIMIT_REACHED",
-        message: `You have reached your plan limit of ${planInfo.limit} active projects. Upgrade your plan to add more projects or mark an existing project as Complete to free up a slot.`,
-        activeCount: planInfo.activeCount,
-        limit: planInfo.limit,
-        planName: planInfo.planName,
-        nextPlan: planInfo.nextPlan,
       });
       return;
     }
@@ -894,6 +883,23 @@ router.post("/:projectId/subcontracts/direct", requireAuth, requireGC, async (re
   if (!project || project.gcId !== effectiveGcId) {
     res.status(project ? 403 : 404).json({ error: project ? "Forbidden" : "Project not found" });
     return;
+  }
+
+  // Check active subcontract plan limit
+  const planInfo = await getGCPlanInfo(effectiveGcId);
+  if (planInfo.subscribed && planInfo.limit !== null) {
+    const currentCount = await getActiveSubcontractCount(effectiveGcId);
+    if (currentCount >= planInfo.limit) {
+      res.status(402).json({
+        error: "PLAN_LIMIT_REACHED",
+        message: `You have reached your plan limit of ${planInfo.limit} active subcontracts. To add more subcontracts you can upgrade your plan or archive completed projects to free up slots.`,
+        activeCount: currentCount,
+        limit: planInfo.limit,
+        planName: planInfo.planName,
+        nextPlan: planInfo.nextPlan,
+      });
+      return;
+    }
   }
 
   // Find or create the sub
