@@ -19,6 +19,11 @@ export const usersTable = pgTable("users", {
   trialStartedAt: timestamp("trial_started_at").defaultNow().notNull(),
   isDemo: boolean("is_demo").notNull().default(false),
   passwordChangedAt: timestamp("password_changed_at"),
+  pausedAt: timestamp("paused_at"),
+  lastLoginAt: timestamp("last_login_at"),
+  adminPlanOverride: text("admin_plan_override"),
+  adminPlanOverrideExpiresAt: timestamp("admin_plan_override_expires_at"),
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

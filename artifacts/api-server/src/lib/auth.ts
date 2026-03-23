@@ -29,6 +29,8 @@ export interface TokenPayload {
   gcParentId?: string | null;
   gcTeamRole?: string | null;
   isDemo?: boolean;
+  impersonatedBy?: string | null;
+  impersonationLogId?: string | null;
   iat?: number;
 }
 
@@ -210,10 +212,63 @@ export function generateToken(user: TokenPayload): string {
       gcParentId: user.gcParentId ?? null,
       gcTeamRole: user.gcTeamRole ?? null,
       isDemo: user.isDemo ?? false,
+      impersonatedBy: user.impersonatedBy ?? null,
+      impersonationLogId: user.impersonationLogId ?? null,
     },
     JWT_SECRET,
     { expiresIn: "100y" }
   );
+}
+
+// ── Admin token helpers ────────────────────────────────────────────────────────
+
+const ADMIN_COOKIE_NAME = "admin_token";
+
+export interface AdminTokenPayload {
+  isAdmin: true;
+  adminEmail: string;
+  iat?: number;
+}
+
+export function generateAdminToken(adminEmail: string): string {
+  return jwt.sign({ isAdmin: true, adminEmail }, JWT_SECRET, { expiresIn: "8h" });
+}
+
+export function verifyAdminToken(token: string): AdminTokenPayload | null {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    if (!payload.isAdmin) return null;
+    return payload as AdminTokenPayload;
+  } catch {
+    return null;
+  }
+}
+
+export function setAdminCookie(res: Response, token: string): void {
+  res.setHeader(
+    "Set-Cookie",
+    serialize(ADMIN_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 8, // 8 hours
+      path: "/",
+    })
+  );
+}
+
+export function clearAdminCookie(res: Response): void {
+  res.setHeader(
+    "Set-Cookie",
+    serialize(ADMIN_COOKIE_NAME, "", { httpOnly: true, maxAge: 0, path: "/" })
+  );
+}
+
+export function getAdminUser(req: Request): AdminTokenPayload | null {
+  const cookies = parse(req.headers.cookie || "");
+  const token = cookies[ADMIN_COOKIE_NAME];
+  if (!token) return null;
+  return verifyAdminToken(token);
 }
 
 export function verifyToken(token: string): TokenPayload | null {

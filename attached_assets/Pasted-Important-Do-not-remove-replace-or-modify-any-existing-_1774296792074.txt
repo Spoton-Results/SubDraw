@@ -1,0 +1,68 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only add the Super Admin dashboard as described below. Keep all existing features exactly as they are.
+Build a Super Admin dashboard accessible only to the platform owner. This is completely separate from any GC or sub account. It is the master control panel for managing the entire SubTracker business.
+
+Create a separate Super Admin login at subtracker.spotonresults.com/admin that is protected by a hardcoded admin email and password stored in environment variables. This page is not linked from anywhere in the main app. Only the platform owner knows this URL exists.
+The Super Admin dashboard home page shows the following live metrics in a clean card grid at the top:
+
+Total GC accounts — all time
+Active paying GCs — currently on a paid plan
+GCs on free trial — with days remaining shown
+Churned GCs — cancelled or expired
+Total subcontractor accounts — all time
+Total active subcontracts across all GC accounts
+Total projects across all GC accounts
+Monthly Recurring Revenue — sum of all active monthly plan amounts
+Annual Recurring Revenue — MRR multiplied by 12
+Total revenue collected all time via Stripe
+
+Below the metrics show a live GC accounts table with the following columns for every GC account:
+
+Company name
+Owner email
+Plan — Starter, Growth, Scale, Enterprise, Trial, Cancelled
+Billing frequency — Monthly or Annual
+Active subcontracts — current count vs plan limit
+Active projects count
+Trial days remaining if on trial
+Account created date
+Last login date
+Monthly revenue amount
+Status — Active, Trial, Past Due, Cancelled, Paused
+Actions column
+
+The Actions column for each GC account must include these buttons:
+
+View Account — opens a read only view of everything in that GC's account including all projects, subcontracts, team members, and billing history
+Edit Plan — manually change the GC to any plan without going through Stripe — for example to give a free month, apply a discount, or upgrade a trial
+Pause Account — suspends the account temporarily — GC sees a message saying their account is paused, contact support — their data is fully preserved — they cannot log in or use the app until unpaused
+Unpause Account — restores full access immediately
+Extend Trial — add any number of days to their free trial
+Cancel Account — cancels their Stripe subscription and marks the account as cancelled — their data is preserved in read only mode for 90 days then permanently deleted — GC receives an email confirming cancellation
+Delete Account — permanently and immediately deletes all data for that account — requires typing the company name to confirm — this action cannot be undone — use only in extreme cases
+Send Message — sends a direct email to the GC owner from the SubTracker admin email
+Impersonate — logs the admin into that GC's account to see exactly what they see for support purposes — shows a red banner inside the account saying Admin View — not the GC — with a button to exit back to admin
+
+Add a search and filter bar above the GC accounts table:
+
+Search by company name or email
+Filter by plan — All, Starter, Growth, Scale, Enterprise, Trial, Cancelled, Paused
+Filter by billing frequency — All, Monthly, Annual
+Sort by — newest, oldest, highest revenue, most active subcontracts, last login
+
+Add a Revenue tab in the Super Admin dashboard showing:
+
+Monthly recurring revenue chart — last 12 months as a bar chart
+New customers this month — count and list
+Churned customers this month — count and list
+Trial conversions this month — how many trials converted to paid
+Trial conversion rate — percentage
+Average revenue per GC
+Revenue by plan breakdown — how many GCs on each plan and total revenue per plan
+
+Add a Trials tab showing every GC currently on a free trial with:
+
+Company name, email, trial start date, trial end date, days remaining, number of projects created, number of subcontracts created, last login date, and an Extend Trial button and a Convert to Paid button for each trial account.
+
+Add an Activity Feed tab showing the last 500 actions across the entire platform in reverse chronological order — GC created project, sub submitted bid, invoice flagged, payment confirmed, new account created, account cancelled. This gives the admin a live pulse of what is happening across the entire platform.
+The Super Admin dashboard must never be visible or accessible to any GC or sub account under any circumstances. If a non-admin user somehow navigates to the admin URL redirect them to the main login page immediately.
+The admin impersonate feature must log every impersonation session in a separate admin audit log showing which admin account impersonated which GC account, at what time, and for how long. This protects against any future claims of unauthorized access.

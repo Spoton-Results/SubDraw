@@ -295,6 +295,30 @@ export async function getGCPlanInfo(userId: string): Promise<GCPlanInfo> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   const activeCount = await getActiveSubcontractCount(userId);
 
+  // ── Admin plan override ────────────────────────────────────────────────────
+  if (user?.adminPlanOverride) {
+    const overrideExpired = user.adminPlanOverrideExpiresAt && user.adminPlanOverrideExpiresAt < new Date();
+    if (!overrideExpired) {
+      const plan = getPlanByName(user.adminPlanOverride);
+      const nextPlan = plan ? getNextPlan(user.adminPlanOverride) : null;
+      return {
+        subscribed: true,
+        planName: user.adminPlanOverride,
+        planLabel: plan?.label ?? null,
+        limit: plan?.limit ?? null,
+        activeCount,
+        nextPlan: nextPlan ?? null,
+        isPastDue: false,
+        isInGrace: false,
+        billingInterval: "month",
+        trialActive: false,
+        trialExpired: false,
+        trialDaysLeft: 0,
+        trialEndsAt: null,
+      };
+    }
+  }
+
   // ── Trial calculation ──────────────────────────────────────────────────────
   const trialStart = user?.trialStartedAt ?? user?.createdAt ?? new Date();
   const trialEndsAt = new Date(trialStart.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);

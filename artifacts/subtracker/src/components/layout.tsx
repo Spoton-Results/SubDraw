@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import {
@@ -289,6 +289,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {(user as any).impersonatedBy && (
+          <div className="bg-red-600 text-white px-4 py-2.5 flex items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+              <Shield className="h-4 w-4 shrink-0" />
+              <span className="truncate">Admin impersonation active — viewing as <strong>{user.companyName}</strong></span>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const BASE = import.meta.env.BASE_URL;
+                  await fetch(`${BASE}api/admin/impersonation/exit`, { method: "POST", credentials: "include" });
+                  queryClient.clear();
+                  window.location.href = `${BASE}admin/dashboard`;
+                } catch {
+                  toast.error("Failed to exit impersonation");
+                }
+              }}
+              className="flex items-center gap-1 text-sm font-bold bg-white text-red-700 hover:bg-red-50 px-3 py-1 rounded-lg shrink-0 transition-colors"
+            >
+              Exit Impersonation <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {(user as any).isDemo && (
           <div className="bg-blue-600 text-white px-4 py-2.5 flex items-center justify-between gap-4 shrink-0">
             <div className="flex items-center gap-2 text-sm font-medium min-w-0">

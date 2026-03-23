@@ -20,6 +20,9 @@ import ProfileSetup from "./pages/profile-setup";
 import Billing from "./pages/billing";
 import Team from "./pages/team";
 import BidComparison from "./pages/bid-comparison";
+import AdminLogin from "./pages/admin-login";
+import AdminDashboard from "./pages/admin-dashboard";
+import { PausedScreen } from "./components/paused-screen";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +54,16 @@ function ProtectedRoute({
 
   if (isLoading) return null;
   if (!user) return <RedirectTo path="/login" />;
+
+  // Paused account — show paused screen (bypass for impersonation)
+  if ((user as any).paused) {
+    const handleLogout = async () => {
+      await fetch(`${import.meta.env.BASE_URL}api/auth/logout`, { method: "POST", credentials: "include" });
+      queryClient.clear();
+      window.location.href = `${import.meta.env.BASE_URL}login`;
+    };
+    return <PausedScreen companyName={user.companyName} onLogout={handleLogout} />;
+  }
 
   if (user.mustChangePassword) {
     return (
@@ -84,6 +97,8 @@ function ProtectedRoute({
 function Router() {
   return (
     <Switch>
+      <Route path="/admin" component={AdminLogin} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />

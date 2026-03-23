@@ -65,11 +65,16 @@ router.post("/login", async (req, res) => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+  if (user.pausedAt) {
+    res.status(403).json({ error: "ACCOUNT_PAUSED", message: "Your account has been paused. Please contact support." });
+    return;
+  }
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+  await db.update(usersTable).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, user.id));
   const token = generateToken(user);
   setAuthCookie(res, token);
   const { passwordHash: _, ...safeUser } = user;
@@ -94,9 +99,10 @@ router.get("/me", requireAuth, async (req, res) => {
     const [profile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, user.id)).limit(1);
     subProfile = profile ?? null;
   }
-  // hasPassword: true if the stored hash is a bcrypt hash
   const hasPassword = user.passwordHash.startsWith("$2b$") || user.passwordHash.startsWith("$2a$");
-  res.json({ ...safeUser, subProfile, hasPassword });
+  const paused = !!user.pausedAt && !userPayload.impersonatedBy;
+  const impersonatedBy = userPayload.impersonatedBy ?? null;
+  res.json({ ...safeUser, subProfile, hasPassword, paused, impersonatedBy });
 });
 
 router.post("/change-password", requireAuth, async (req, res) => {

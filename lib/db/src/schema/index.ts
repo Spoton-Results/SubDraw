@@ -14,3 +14,4 @@ export * from "./bid-comparisons";
 export * from "./gc-credentials";
 export * from "./trade-scopes";
 export * from "./notifications";
+export * from "./admin";

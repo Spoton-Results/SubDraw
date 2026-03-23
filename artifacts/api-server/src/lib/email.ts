@@ -1012,3 +1012,32 @@ export async function sendGCCredentialUrgentExpiryEmail(opts: {
   `);
   await send(opts.toEmail, `URGENT: Your ${typeLabel} expires in ${opts.daysUntilExpiry} day${opts.daysUntilExpiry === 1 ? "" : "s"} — ${opts.projectName}`, html);
 }
+
+
+// ─── Admin message email ───────────────────────────────────────────────────────
+export async function sendAdminMessageEmail(opts: {
+  toEmail: string;
+  subject: string;
+  message: string;
+}) {
+  const html = layout(`
+    ${heading(opts.subject)}
+    ${subtext(opts.message)}
+    <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">This message was sent by the SubTracker admin team.</p>
+  `);
+  await send(opts.toEmail, opts.subject, html);
+}
+
+// ─── Account cancelled (admin-initiated) email ────────────────────────────────
+export async function sendAccountCancelledEmail(opts: {
+  toEmail: string;
+  companyName: string;
+}) {
+  const html = layout(`
+    ${heading("Your SubTracker subscription has been cancelled")}
+    ${subtext(`Hi ${opts.companyName},`)}
+    ${subtext("Your SubTracker subscription has been cancelled. Your account data will be preserved in read-only mode for 90 days, after which it will be permanently deleted.")}
+    ${subtext("If you believe this is in error or have any questions, please contact support.")}
+  `);
+  await send(opts.toEmail, "Your SubTracker subscription has been cancelled", html);
+}
