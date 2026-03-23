@@ -259,6 +259,7 @@ export default function SubcontractDetail() {
     enabled: !!sub?.projectId,
     staleTime: 0,
     refetchOnMount: "always",
+    refetchInterval: 30000,
   });
 
   function subCredDaysUntilExpiry(dateStr: string | null | undefined): number | null {

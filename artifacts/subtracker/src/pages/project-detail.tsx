@@ -197,11 +197,13 @@ export default function ProjectDetail() {
   const [gcCredInsWCCoverage, setGcCredInsWCCoverage] = React.useState("");
   const [gcCredInsExpDate, setGcCredInsExpDate] = React.useState("");
   const [gcCredInsCertPath, setGcCredInsCertPath] = React.useState<string | null>(null);
+  const [gcCredInsCertFileName, setGcCredInsCertFileName] = React.useState<string | null>(null);
   const [gcCredLicNumber, setGcCredLicNumber] = React.useState("");
   const [gcCredLicType, setGcCredLicType] = React.useState("");
   const [gcCredLicState, setGcCredLicState] = React.useState("");
   const [gcCredLicExpDate, setGcCredLicExpDate] = React.useState("");
   const [gcCredLicDocPath, setGcCredLicDocPath] = React.useState<string | null>(null);
+  const [gcCredLicDocFileName, setGcCredLicDocFileName] = React.useState<string | null>(null);
   const [gcCredInsSection, setGcCredInsSection] = React.useState(false);
   const [gcCredLicSection, setGcCredLicSection] = React.useState(false);
 
@@ -344,7 +346,8 @@ export default function ProjectDetail() {
       return res.json();
     },
     enabled: !!projectId && user?.role === "GC",
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   React.useEffect(() => {
@@ -410,7 +413,7 @@ export default function ProjectDetail() {
       refetchGcCredentials();
       setGcCredInsSection(false);
       setGcCredLicSection(false);
-      toast.success("GC credentials saved");
+      toast.success("GC credentials saved successfully");
     } finally { setGcCredSaving(false); }
   }
 
@@ -458,18 +461,60 @@ export default function ProjectDetail() {
     }
   }
 
+  async function saveGcCredsToDB(overrides: Partial<{
+    insCertPath: string | null; licDocPath: string | null;
+  }> = {}) {
+    const res = await fetch(`${BASE_URL}/api/projects/${projectId}/gc-credentials`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        insCompany: gcCredInsCompany || null,
+        insPolicyNumber: gcCredInsPolicyNumber || null,
+        insGLCoverage: gcCredInsGLCoverage || null,
+        insWCCoverage: gcCredInsWCCoverage || null,
+        insExpDate: gcCredInsExpDate || null,
+        insCertPath: "insCertPath" in overrides ? overrides.insCertPath : (gcCredInsCertPath || null),
+        licNumber: gcCredLicNumber || null,
+        licType: gcCredLicType || null,
+        licState: gcCredLicState || null,
+        licExpDate: gcCredLicExpDate || null,
+        licDocPath: "licDocPath" in overrides ? overrides.licDocPath : (gcCredLicDocPath || null),
+      }),
+    });
+    return res.ok;
+  }
+
   async function handleUploadGcInsCert(file: File) {
     const result = await uploadGcInsCert(file);
     if (!result?.objectPath) { toast.error("Upload failed"); return; }
-    setGcCredInsCertPath(result.objectPath);
-    toast.success("Certificate uploaded — click Save to confirm");
+    const path = result.objectPath;
+    setGcCredInsCertPath(path);
+    setGcCredInsCertFileName(file.name);
+    setGcCredInsSection(true);
+    const saved = await saveGcCredsToDB({ insCertPath: path });
+    if (saved) {
+      refetchGcCredentials();
+      toast.success("Certificate uploaded successfully");
+    } else {
+      toast.error("File uploaded but could not be saved — click Save Credentials");
+    }
   }
 
   async function handleUploadGcLicDoc(file: File) {
     const result = await uploadGcLicDoc(file);
     if (!result?.objectPath) { toast.error("Upload failed"); return; }
-    setGcCredLicDocPath(result.objectPath);
-    toast.success("License document uploaded — click Save to confirm");
+    const path = result.objectPath;
+    setGcCredLicDocPath(path);
+    setGcCredLicDocFileName(file.name);
+    setGcCredLicSection(true);
+    const saved = await saveGcCredsToDB({ licDocPath: path });
+    if (saved) {
+      refetchGcCredentials();
+      toast.success("License document uploaded successfully");
+    } else {
+      toast.error("File uploaded but could not be saved — click Save Credentials");
+    }
   }
 
   async function handleDownloadGcDoc(docType: "cert" | "license") {
@@ -2001,9 +2046,14 @@ export default function ProjectDetail() {
             const licExpired = gcCredentials?.licExpDate ? gcCredDaysUntilExpiry(gcCredentials.licExpDate)! < 0 : false;
             const insExpiring = gcCredentials?.insExpDate ? (gcCredDaysUntilExpiry(gcCredentials.insExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.insExpDate)! >= 0) : false;
             const licExpiring = gcCredentials?.licExpDate ? (gcCredDaysUntilExpiry(gcCredentials.licExpDate)! <= 30 && gcCredDaysUntilExpiry(gcCredentials.licExpDate)! >= 0) : false;
-            const insMissing = !gcCredentials?.insCompany && !gcCredentials?.insExpDate;
-            const licMissing = !gcCredentials?.licNumber && !gcCredentials?.licExpDate;
-            const hasWarning = insExpired || licExpired || insExpiring || licExpiring || insMissing || licMissing;
+            const credComplete = !!(
+              gcCredentials?.insCompany &&
+              gcCredentials?.insPolicyNumber &&
+              gcCredentials?.insExpDate &&
+              gcCredentials?.licNumber &&
+              gcCredentials?.licState
+            );
+            const hasWarning = insExpired || licExpired || insExpiring || licExpiring || !credComplete;
             return (
               <Card>
                 <CardHeader>
@@ -2022,14 +2072,14 @@ export default function ProjectDetail() {
                           <Shield className="h-3.5 w-3.5" /> Expiring Soon
                         </span>
                       )}
-                      {!insExpired && !licExpired && !insExpiring && !licExpiring && (insMissing || licMissing) && (
+                      {!insExpired && !licExpired && !insExpiring && !licExpiring && !credComplete && (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground bg-muted border border-border px-2.5 py-1 rounded-full">
                           <Shield className="h-3.5 w-3.5" /> Credentials Incomplete
                         </span>
                       )}
                       {!hasWarning && (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2.5 py-1 rounded-full">
-                          <ShieldCheck className="h-3.5 w-3.5" /> All Valid
+                          <ShieldCheck className="h-3.5 w-3.5" /> Credentials Complete
                         </span>
                       )}
                     </div>
@@ -2080,18 +2130,22 @@ export default function ProjectDetail() {
                             <Input type="date" value={gcCredInsExpDate} onChange={e => setGcCredInsExpDate(e.target.value)} />
                           </div>
                           <div>
-                            <label className="text-xs font-medium text-muted-foreground block mb-1">Certificate PDF</label>
-                            <div className="flex gap-2">
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Certificate (PDF or Image)</label>
+                            <div className="flex flex-wrap items-center gap-2">
                               {gcCredInsCertPath ? (
                                 <>
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 font-medium">
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                    {gcCredInsCertFileName ?? "Certificate on file"}
+                                  </span>
                                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("cert")}>
                                     <Download className="h-3.5 w-3.5" /> Download
                                   </Button>
                                   <label className="cursor-pointer">
-                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none">
-                                      <Upload className="h-3.5 w-3.5" /> Replace
+                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcInsCertUploading}>
+                                      {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
                                     </Button>
-                                    <input type="file" accept=".pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
+                                    <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
                                   </label>
                                 </>
                               ) : (
@@ -2099,7 +2153,7 @@ export default function ProjectDetail() {
                                   <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcInsCertUploading}>
                                     {gcInsCertUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload Certificate</>}
                                   </Button>
-                                  <input type="file" accept=".pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
+                                  <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcInsCertUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcInsCert(f); e.target.value = ""; }} />
                                 </label>
                               )}
                             </div>
@@ -2147,18 +2201,22 @@ export default function ProjectDetail() {
                             <Input type="date" value={gcCredLicExpDate} onChange={e => setGcCredLicExpDate(e.target.value)} />
                           </div>
                           <div className="sm:col-span-2">
-                            <label className="text-xs font-medium text-muted-foreground block mb-1">License Document (optional PDF)</label>
-                            <div className="flex gap-2">
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">License Document — optional (PDF or Image)</label>
+                            <div className="flex flex-wrap items-center gap-2">
                               {gcCredLicDocPath ? (
                                 <>
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 font-medium">
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                    {gcCredLicDocFileName ?? "License document on file"}
+                                  </span>
                                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleDownloadGcDoc("license")}>
                                     <Download className="h-3.5 w-3.5" /> Download
                                   </Button>
                                   <label className="cursor-pointer">
-                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none">
-                                      <Upload className="h-3.5 w-3.5" /> Replace
+                                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcLicDocUploading}>
+                                      {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Replace</>}
                                     </Button>
-                                    <input type="file" accept=".pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
+                                    <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
                                   </label>
                                 </>
                               ) : (
@@ -2166,7 +2224,7 @@ export default function ProjectDetail() {
                                   <Button variant="outline" size="sm" className="gap-1.5 text-xs pointer-events-none" disabled={gcLicDocUploading}>
                                     {gcLicDocUploading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload License Doc</>}
                                   </Button>
-                                  <input type="file" accept=".pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
+                                  <input type="file" accept="image/*,.pdf" className="hidden" disabled={gcLicDocUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadGcLicDoc(f); e.target.value = ""; }} />
                                 </label>
                               )}
                             </div>

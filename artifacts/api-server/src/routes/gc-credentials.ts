@@ -190,7 +190,8 @@ router.get("/download/:docType", requireAuth, async (req, res) => {
   try {
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
     const response = await objectStorageService.downloadObject(objectFile);
-    const fileName = docType === "cert" ? "gc-insurance-certificate.pdf" : "gc-contractor-license.pdf";
+    const ext = objectPath.match(/\.(png|jpg|jpeg|gif|webp|pdf)$/i)?.[1] ?? "pdf";
+    const fileName = docType === "cert" ? `gc-insurance-certificate.${ext}` : `gc-contractor-license.${ext}`;
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     response.headers.forEach((value, key) => res.setHeader(key, value));
     if (response.body) {
