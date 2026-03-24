@@ -1288,7 +1288,12 @@ export default function Dashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">Used for AI bid range analysis. You can change this in project settings later.</p>
           </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4">
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              <span className="font-semibold">Tip:</span> After creating the project, add your insurance certificate and contractor license in Project Settings — they will automatically appear on every subcontract and on your subs' dashboards. You only need to enter your credentials once per project.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)} className="min-h-[44px]">Cancel</Button>
             <Button type="submit" isLoading={createProject.isPending} className="min-h-[44px]">Create Project</Button>
           </div>

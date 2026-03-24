@@ -2095,7 +2095,7 @@ export default function ProjectDetail() {
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Enter your insurance certificate and contractor license once per project — this information is automatically shown to all subcontractors.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Your insurance certificate and contractor license entered here will automatically appear on every subcontract in this project. You only need to enter this once — subs will see your credentials on their dashboard automatically.</p>
                 </CardHeader>
                 <CardContent className="space-y-6">
 

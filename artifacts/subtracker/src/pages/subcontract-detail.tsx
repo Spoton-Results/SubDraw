@@ -1390,8 +1390,8 @@ export default function SubcontractDetail() {
         </div>
       </div>
 
-      {/* GC CREDENTIALS SECTION — read-only for subs, shown directly below scoreboard */}
-      {sub?.projectId && gcCredentialsSub?.credentialsComplete === true && (() => {
+      {/* GC CREDENTIALS SECTION — read-only for subs only, shown directly below scoreboard */}
+      {!isGC && sub?.projectId && gcCredentialsSub?.credentialsComplete === true && (() => {
         const hasIns = !!(gcCredentialsSub?.insCompany || gcCredentialsSub?.insExpDate);
         const hasLic = !!(gcCredentialsSub?.licNumber || gcCredentialsSub?.licExpDate);
         const insExpired = gcCredentialsSub?.insExpDate ? subCredDaysUntilExpiry(gcCredentialsSub.insExpDate)! < 0 : false;
@@ -1656,6 +1656,16 @@ export default function SubcontractDetail() {
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* SUBCONTRACTOR CREDENTIALS SECTION HEADING */}
+      <div className="mb-4 mt-2">
+        <h2 className="text-xl font-bold font-display flex items-center gap-2">
+          <BadgeCheck className="h-5 w-5 text-primary" /> Subcontractor Insurance and Compliance
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Insurance certificate and contractor license on file for this subcontractor.
+        </p>
+      </div>
 
       {/* INSURANCE DETAILS CARD */}
       <Card className={cn(
