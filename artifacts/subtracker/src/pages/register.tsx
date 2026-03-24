@@ -33,14 +33,14 @@ export default function Register() {
   });
 
   React.useEffect(() => {
-    if (user && !isLoading && !(user as any).isDemo) setLocation("/");
+    if (user && !isLoading && !(user as any).isDemo) setLocation("/dashboard");
   }, [user, isLoading, setLocation]);
 
   const onSubmit = async (data: RegisterForm) => {
     try {
       await registerMutation.mutateAsync({ data });
       toast.success("Account created successfully!");
-      setLocation("/");
+      setLocation("/dashboard");
     } catch (e: any) {
       toast.error(e.response?.data?.error || "Registration failed");
     }

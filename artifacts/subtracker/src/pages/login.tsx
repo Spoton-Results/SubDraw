@@ -51,7 +51,7 @@ export default function Login() {
   }, [search]);
 
   React.useEffect(() => {
-    if (user && !isLoading) setLocation("/");
+    if (user && !isLoading) setLocation("/dashboard");
   }, [user, isLoading, setLocation]);
 
   const onSubmit = async (data: LoginForm) => {
@@ -59,7 +59,7 @@ export default function Login() {
       await login.mutateAsync({ data });
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success("Welcome back!");
-      setLocation("/");
+      setLocation("/dashboard");
     } catch (e: any) {
       toast.error(e?.data?.error || e?.message || "Login failed");
     }
@@ -81,7 +81,7 @@ export default function Login() {
       }
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
-      setLocation("/");
+      setLocation("/dashboard");
     } catch {
       toast.error("Demo login failed. Please try again.");
     } finally {

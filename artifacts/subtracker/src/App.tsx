@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "react-hot-toast";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 
+import Home from "./pages/home";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import Dashboard from "./pages/dashboard";
@@ -85,11 +86,11 @@ function ProtectedRoute({
     );
   }
 
-  if (gcOnly && user.role !== "GC") return <RedirectTo path="/" />;
+  if (gcOnly && user.role !== "GC") return <RedirectTo path="/dashboard" />;
 
   const gcTeamRole = (user as any).gcTeamRole as string | null | undefined;
   const isOwner = user.role === "GC" && (gcTeamRole === "owner" || gcTeamRole == null);
-  if (ownerOnly && !isOwner) return <RedirectTo path="/" />;
+  if (ownerOnly && !isOwner) return <RedirectTo path="/dashboard" />;
 
   return <Component />;
 }
@@ -101,7 +102,9 @@ function Router() {
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/signup" component={Register} />
+      <Route path="/" component={Home} />
+      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/projects/:id/bid-comparison" component={() => <ProtectedRoute component={BidComparison} gcOnly />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />

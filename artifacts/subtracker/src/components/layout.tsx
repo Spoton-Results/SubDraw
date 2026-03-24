@@ -184,7 +184,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar — desktop only */}
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
-          <Link href="/" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
+          <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
             <HardHat className="h-6 w-6" />
             SubTracker
           </Link>
@@ -193,7 +193,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 flex-1">
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-3 px-2">Menu</div>
           <nav className="space-y-1">
-            {navItem("/", <LayoutDashboard className="h-5 w-5" />, "Projects")}
+            {navItem("/dashboard", <LayoutDashboard className="h-5 w-5" />, "Projects")}
             {perms.isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
@@ -336,12 +336,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-stretch shadow-lg">
         <Link
-          href="/"
+          href="/dashboard"
           className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-            isActive("/") ? "text-primary" : "text-muted-foreground"
+            isActive("/dashboard") ? "text-primary" : "text-muted-foreground"
           }`}
         >
-          <LayoutDashboard className={`h-5 w-5 ${isActive("/") ? "text-primary" : ""}`} />
+          <LayoutDashboard className={`h-5 w-5 ${isActive("/dashboard") ? "text-primary" : ""}`} />
           Projects
         </Link>
         {perms.isOwner && (

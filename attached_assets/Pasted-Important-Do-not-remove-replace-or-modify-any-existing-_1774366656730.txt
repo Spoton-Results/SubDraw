@@ -1,0 +1,45 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only add a new marketing homepage as described below. Keep all existing app features exactly as they are.
+Build a professional one-page marketing website at the root route / of the Next.js app. Right now the root route redirects to login. Change it so that the root route shows the marketing homepage and the app login is at /login. Make sure all existing internal links to /login still work correctly.
+The marketing page should be modern, clean, and professional. Use SubTracker blue as the primary color — the same blue already used throughout the app. Use a clean sans-serif font. Dark navy header section, white body sections, light gray alternating sections.
+Build the page with exactly these sections in this order:
+SECTION 1 — HERO
+Full width dark navy background. Large bold headline: Stop Approving Subcontractor Invoices That Go Over Budget. Subheadline below it: SubTracker automatically flags every invoice before you approve it — and gives you and your sub the exact same financial scoreboard in real time. Two buttons side by side: a large blue Start Free 14-Day Trial button linking to /signup and a white outlined Watch Demo button linking to /login. Below the buttons add small gray text that says No credit card required — Subcontractors always free. Add a subtle background pattern of light diagonal lines or a very faint grid texture to the navy background.
+SECTION 2 — THE PROBLEM
+White background. Centered heading: Sound Familiar? Three cards in a row on desktop, stacked on mobile. Each card has a red X icon, a bold title, and a description.
+Card 1 title: Invoices Approved Over Budget — description: No automatic check exists. Your PM reviews manually and approves. The overrun goes undetected until the job is closed and the numbers do not add up.
+Card 2 title: Verbal Change Orders Cause Disputes — description: GC tells sub to do extra work. Sub does it. Invoices for it. GC disputes it six months later. No written record. Relationship damaged.
+Card 3 title: Subs Never Log Into the Portal — description: Subs forget their password and stop using the system. Back to texting PDFs and calling. Your financial data is never accurate.
+SECTION 3 — THE SOLUTION — THE MONEY SHOT
+Light gray background. Left side has headline: Every Invoice Automatically Checked Before You Approve It. Below that: The moment a sub submits an invoice SubTracker compares it against their approved contract amount. If it goes over — it stops. You see the exact dollar amount over. You decide what to do — with a written reason stored permanently. Right side shows a mockup card showing a flagged invoice notification that looks like this:
+A white card with a red banner at top saying INVOICE FLAGGED and inside the card show: Invoice amount $52,000 — Approved total $45,500 — Over by $6,500 in red bold text — and two buttons: Override with Reason in gray and Reject in red.
+SECTION 4 — THE SCOREBOARD
+White background. Right side has headline: One Shared Scoreboard — Same Numbers for GC and Sub. Below that: No more disputes about what was approved or what has been paid. Both sides see the exact same financial position in real time on any device. Left side shows a mockup of the financial scoreboard card showing: BASE CONTRACT $85,000 — Approved Change Orders +$10,610 — APPROVED TOTAL $95,610 in bold — Total Invoiced $56,100 — Retention Held $5,610 — REMAINING BALANCE $33,900 in large green text.
+SECTION 5 — KEY FEATURES
+Light gray background. Centered heading: Everything You Need. Nothing You Do Not. Six feature cards in a 3x2 grid on desktop, 2x3 on tablet, stacked on mobile.
+Feature 1: Magic Link Login — shield icon — Subs log in with one click from their email. No password. No forgotten credentials. No abandoned portal. Subs actually use it.
+Feature 2: Two-Step Change Order Approval — checkmark icon — Sub approves first. GC gives final approval. Nothing added to the contract until both sides sign off. No accidental financial commitments.
+Feature 3: Automatic Lien Waivers — document icon — Sub confirms payment. Lien waiver generates automatically. Sub signs digitally. Stored permanently. Never chase a lien waiver again.
+Feature 4: AI Bid Benchmarks — chart icon — Upload your plans. Get AI-estimated bid ranges per trade based on your location and scope. Know immediately if a bid is reasonable before you accept it.
+Feature 5: Compliance Blocking — list icon — Create a required compliance checklist per project. Subs cannot submit invoices until all required documents are approved. Insurance, W9, bonds, safety orientation.
+Feature 6: Complete Audit Trail — clock icon — Every action logged with user name and timestamp permanently. Signed contracts, lien waivers, plan download proof, and payment confirmations all in one place.
+SECTION 6 — HOW IT WORKS
+White background. Centered heading: Simple for GCs. Even Simpler for Subs. Three steps in a horizontal flow with arrows between them on desktop, stacked on mobile.
+Step 1 — blue circle with number 1: GC Creates Project and Invites Subs — GC uploads plans and scope. Subs receive a magic link invitation. One click and they are in. No password required.
+Step 2 — blue circle with number 2: Subs Bid. GC Accepts. Contract Created. — Subs view plans and submit their own bid amount. GC compares bids and accepts the winner. Subcontract created from the sub's own number.
+Step 3 — blue circle with number 3: Construction Managed Automatically. — Change orders, invoices, payments, and lien waivers all flow through SubTracker. Overruns flagged before approval. Paper trail created automatically.
+SECTION 7 — PRICING
+Light gray background. Centered heading: Simple Pricing. No Surprises. Subheading: Based on active subcontracts — not projects or seats. Subcontractors always free.
+Show four pricing cards in a row. Make the Scale card visually larger with a Most Popular badge and blue border. Each card shows plan name, monthly price, annual price with 1 Month Free badge, subcontract limit, and a Get Started button.
+Starter — $199/mo — $2,189/yr — Up to 10 active subcontracts
+Growth — $299/mo — $3,289/yr — Up to 20 active subcontracts
+Scale — $399/mo — $4,389/yr — Up to 40 active subcontracts — MOST POPULAR
+Enterprise — $699/mo — $7,689/yr — Unlimited active subcontracts
+Below the cards add centered text: Pay annually and get one month completely free — same as getting SubTracker free every December.
+SECTION 8 — FINAL CTA
+Dark navy background matching the hero. Centered headline: Built for GCs Doing Real Work. Subheadline: If SubTracker catches one invoice overrun this month it pays for itself. Large blue Start Free 14-Day Trial button. Below it: No credit card required — 14 day free trial — subcontractors always free — cancel anytime.
+NAVIGATION BAR
+Fixed at top. SubTracker logo text on the left in white. On the right: Features link scrolling to features section, Pricing link scrolling to pricing section, a white outlined Log In button linking to /login, and a blue Sign Up Free button linking to /signup. On mobile collapse to a hamburger menu.
+FOOTER
+Dark navy. SubTracker on the left with tagline: The financial control layer between GCs and their subcontractors. Middle column: Product links — Features, Pricing, Demo, Login. Right column: Company links — About, Contact, Privacy Policy, Terms. Bottom row: Copyright 2026 SubTracker by SpotOn Results. All rights reserved.
+TECHNICAL REQUIREMENTS
+The page must be fully responsive and look perfect on iPhone, Android, and desktop. All scroll links must smoothly scroll to the correct section. The Start Free Trial and Get Started buttons all link to /signup. The Log In button links to /login. Use the same SubTracker blue color used throughout the existing app for all buttons and accents. Page must load fast — no heavy libraries just for this page.
