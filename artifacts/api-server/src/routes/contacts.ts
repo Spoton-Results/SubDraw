@@ -209,6 +209,7 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     appUrl,
     tradeCategory: effectiveTrade,
     tradeScope,
+    isConstructionPhase: project.status === "CONSTRUCTION",
   }).catch((err) => console.error("[email] sendAddedToProjectEmail failed:", err));
 
   res.json({ message: "Subcontractor added to project" });

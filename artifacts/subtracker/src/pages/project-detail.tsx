@@ -137,19 +137,12 @@ export default function ProjectDetail() {
 
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [inviteTab, setInviteTab] = React.useState<"contact" | "new">("contact");
-  const [inviteStep, setInviteStep] = React.useState<"select" | "contract">("select");
-  const [inviteSelectedSub, setInviteSelectedSub] = React.useState<{ subId?: string; email?: string; companyName: string } | null>(null);
   const [contactSearch, setContactSearch] = React.useState("");
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteCompanyName, setInviteCompanyName] = React.useState("");
   const [inviteResult, setInviteResult] = React.useState<{ temporaryPassword: string; email: string } | null>(null);
   const [biddingInviteSuccess, setBiddingInviteSuccess] = React.useState<{ companyName: string; email: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
-  const [directAmount, setDirectAmount] = React.useState("");
-  const [directTrade, setDirectTrade] = React.useState("");
-  const [directRetention, setDirectRetention] = React.useState("10");
-  const [directLoading, setDirectLoading] = React.useState(false);
-  const [directSuccess, setDirectSuccess] = React.useState<{ companyName: string } | null>(null);
 
   const [bidAmount, setBidAmount] = React.useState("");
   const [bidNotes, setBidNotes] = React.useState("");
@@ -887,62 +880,7 @@ export default function ProjectDetail() {
     setCopied(false);
     setContactSearch("");
     setInviteTab("contact");
-    setInviteStep("select");
-    setInviteSelectedSub(null);
-    setDirectAmount("");
-    setDirectTrade("");
-    setDirectRetention("10");
-    setDirectLoading(false);
-    setDirectSuccess(null);
     setInviteTrade("");
-  };
-
-  // Construction-phase: select sub from contact book → advance to contract details step
-  const handleContactSelectForDirect = (subId: string, companyName: string) => {
-    setInviteSelectedSub({ subId, companyName });
-    setInviteStep("contract");
-  };
-
-  // Construction-phase: new sub email form submitted → advance to contract details step
-  const handleNewSubNextForDirect = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !inviteCompanyName.trim()) return;
-    setInviteSelectedSub({ email: inviteEmail.trim(), companyName: inviteCompanyName.trim() });
-    setInviteStep("contract");
-  };
-
-  // Construction-phase: create subcontract directly with entered amount
-  const handleDirectSubcontract = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteSelectedSub) return;
-    const amount = parseFloat(directAmount.replace(/[$,]/g, ""));
-    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid Direct Award amount");
-    setDirectLoading(true);
-    try {
-      const res = await fetch(`${BASE}/api/projects/${projectId}/subcontracts/direct`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          subId: inviteSelectedSub.subId,
-          email: inviteSelectedSub.email,
-          companyName: inviteSelectedSub.companyName,
-          baseContractAmount: amount,
-          tradeCategory: directTrade.trim() || undefined,
-          retentionPercentage: Number(directRetention) || 10,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to create subcontract");
-      }
-      queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-      setDirectSuccess({ companyName: inviteSelectedSub.companyName });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create subcontract");
-    } finally {
-      setDirectLoading(false);
-    }
   };
 
   const handleContactInvite = async (subId: string, companyName: string, email: string) => {
@@ -4141,37 +4079,19 @@ export default function ProjectDetail() {
         open={isInviteOpen}
         onOpenChange={(open) => { if (!open) handleInviteClose(); }}
         title={
-          directSuccess ? "Subcontractor Added" :
           biddingInviteSuccess ? "Invitation Sent!" :
           inviteResult ? "Invitation Sent!" :
-          inviteStep === "contract" ? `Direct Award — No Bid Required` :
-          project.status === "BIDDING" ? "Invite Sub to Bid" : "Add Subcontractor"
+          "Invite Sub to Bid"
         }
         description={
           biddingInviteSuccess || inviteResult ? undefined :
-          inviteStep === "contract" ? `Direct mid-construction addition to ${project.name}. Enter the negotiated amount agreed on with this subcontractor.` :
           project.status === "CONSTRUCTION"
-            ? "Direct Award — No Bid Required. Pick a sub to add mid-construction. You'll enter the agreed amount next."
+            ? "Sending a bid invitation for additional scope on this active project."
             : undefined
         }
       >
-        {/* ─── SUCCESS: direct subcontract created ─── */}
-        {directSuccess ? (
-          <div className="mt-4 space-y-4">
-            <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
-              <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-green-800 dark:text-green-300">{directSuccess.companyName} added to {project.name}</p>
-                <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">Direct Award subcontract created — they've been notified and can start submitting invoices.</p>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={handleInviteClose} className="min-h-[44px] w-full sm:w-auto">Done</Button>
-            </div>
-          </div>
-
-        /* ─── SUCCESS: existing contact invited in bidding phase ─── */
-        ) : biddingInviteSuccess ? (
+        {/* ─── SUCCESS: existing contact invited ─── */}
+        {biddingInviteSuccess ? (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
               <Mail className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
@@ -4223,72 +4143,12 @@ export default function ProjectDetail() {
             </div>
           </div>
 
-        /* ─── CONSTRUCTION: contract details step ─── */
-        ) : inviteStep === "contract" ? (
-          <form onSubmit={handleDirectSubcontract} className="mt-4 space-y-4">
-            <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
-                {inviteSelectedSub?.companyName.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="font-semibold text-sm">{inviteSelectedSub?.companyName}</p>
-                <p className="text-xs text-muted-foreground">Will be added to {project.name}</p>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-semibold mb-1 block">Direct Award Amount *</label>
-              <p className="text-xs text-muted-foreground mb-2">The negotiated contract amount agreed upon with this subcontractor for mid-construction work. This bypasses the normal bidding process.</p>
-              <Input
-                type="text"
-                inputMode="decimal"
-                required
-                placeholder="$85,000"
-                value={directAmount}
-                onChange={e => setDirectAmount(e.target.value)}
-                className="text-lg font-mono"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-semibold mb-1 block">Trade Category</label>
-                <select
-                  value={directTrade}
-                  onChange={e => setDirectTrade(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm min-h-[44px]"
-                >
-                  <option value="">Select trade…</option>
-                  {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-semibold mb-1 block">Retention %</label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="15"
-                  step="0.5"
-                  value={directRetention}
-                  onChange={e => setDirectRetention(e.target.value)}
-                  placeholder="10"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
-              <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setInviteStep("select")}>
-                ← Back
-              </Button>
-              <Button type="submit" isLoading={directLoading} className="min-h-[44px] px-6">
-                Create Direct Award Subcontract
-              </Button>
-            </div>
-          </form>
-
         /* ─── SELECT SUB step (both BIDDING and CONSTRUCTION) ─── */
         ) : (
           <div className="mt-4">
             {project.status === "CONSTRUCTION" && (
               <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                Adding a sub mid-construction? You'll enter a negotiated Direct Award amount after selecting them.
+                Adding a sub mid-construction? They'll receive a bid invitation and can submit their proposed amount.
               </div>
             )}
             <div className="flex rounded-xl border border-border overflow-hidden mb-4">
@@ -4310,24 +4170,22 @@ export default function ProjectDetail() {
 
             {inviteTab === "contact" ? (
               <div className="space-y-3">
-                {project.status === "BIDDING" && (
-                  <div>
-                    <label className="text-sm font-semibold mb-1 block">Trade Category <span className="font-normal text-muted-foreground">(optional)</span></label>
-                    <select
-                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      value={inviteTrade}
-                      onChange={e => setInviteTrade(e.target.value)}
-                    >
-                      <option value="">— No specific trade —</option>
-                      {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    {inviteTrade && tradeScopes.find(s => s.tradeCategory === inviteTrade) && (
-                      <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Scope of work defined — will be included in invite email
-                      </p>
-                    )}
-                  </div>
-                )}
+                <div>
+                  <label className="text-sm font-semibold mb-1 block">Trade Category <span className="font-normal text-muted-foreground">(optional)</span></label>
+                  <select
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={inviteTrade}
+                    onChange={e => setInviteTrade(e.target.value)}
+                  >
+                    <option value="">— No specific trade —</option>
+                    {TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {inviteTrade && tradeScopes.find(s => s.tradeCategory === inviteTrade) && (
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Scope of work defined — will be included in invite email
+                    </p>
+                  )}
+                </div>
                 <Input
                   placeholder="Search contacts…"
                   value={contactSearch}
@@ -4348,7 +4206,6 @@ export default function ProjectDetail() {
                     )
                     .map(contact => {
                       const alreadyOnProject = project?.members?.some((m: any) => m.id === contact.subId);
-                      const hasSubcontract = project.status === "CONSTRUCTION" && (project as any).subcontracts?.some((s: any) => s.subId === contact.subId);
                       return (
                         <div key={contact.subId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
                           <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
@@ -4358,25 +4215,14 @@ export default function ProjectDetail() {
                             <p className="font-semibold text-sm truncate">{contact.sub.companyName}</p>
                             <p className="text-xs text-muted-foreground truncate">{contact.subProfile?.trade ?? contact.sub.email}</p>
                           </div>
-                          {project.status === "CONSTRUCTION" ? (
-                            <Button
-                              size="sm"
-                              variant={hasSubcontract ? "outline" : "default"}
-                              disabled={hasSubcontract}
-                              onClick={() => !hasSubcontract && handleContactSelectForDirect(contact.subId, contact.sub.companyName)}
-                            >
-                              {hasSubcontract ? "Active" : "Select →"}
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant={alreadyOnProject ? "outline" : "default"}
-                              disabled={alreadyOnProject || inviteContactToProject.isPending}
-                              onClick={() => handleContactInvite(contact.subId, contact.sub.companyName, contact.sub.email)}
-                            >
-                              {alreadyOnProject ? "Invited" : "Invite to Bid"}
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            variant={alreadyOnProject ? "outline" : "default"}
+                            disabled={alreadyOnProject || inviteContactToProject.isPending}
+                            onClick={() => handleContactInvite(contact.subId, contact.sub.companyName, contact.sub.email)}
+                          >
+                            {alreadyOnProject ? "Invited" : "Invite to Bid"}
+                          </Button>
                         </div>
                       );
                     })
@@ -4386,21 +4232,6 @@ export default function ProjectDetail() {
                   <Button type="button" variant="ghost" onClick={handleInviteClose}>Cancel</Button>
                 </div>
               </div>
-            ) : project.status === "CONSTRUCTION" ? (
-              <form onSubmit={handleNewSubNextForDirect} className="space-y-4">
-                <div>
-                  <label className="text-sm font-semibold mb-1 block">Email Address</label>
-                  <Input type="email" required placeholder="sub@example.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold mb-1 block">Company Name</label>
-                  <Input type="text" required placeholder="ABC Electric LLC" value={inviteCompanyName} onChange={e => setInviteCompanyName(e.target.value)} />
-                </div>
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-                  <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
-                  <Button type="submit" className="min-h-[44px]">Next — Enter Award Amount →</Button>
-                </div>
-              </form>
             ) : (
               <form onSubmit={handleInvite} className="space-y-4">
                 <div>
@@ -4433,7 +4264,7 @@ export default function ProjectDetail() {
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
                   <Button type="button" variant="ghost" onClick={handleInviteClose} className="min-h-[44px]">Cancel</Button>
                   <Button type="submit" isLoading={inviteSub.isPending} className="min-h-[44px]">
-                    {project.status === "BIDDING" ? "Send Invitation" : "Add Subcontractor"}
+                    Send Invitation
                   </Button>
                 </div>
               </form>

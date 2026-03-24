@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, PartyPopper, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -295,11 +295,7 @@ export default function Dashboard() {
   const [addSubContactSearch, setAddSubContactSearch] = React.useState("");
   const [addSubEmail, setAddSubEmail] = React.useState("");
   const [addSubCompanyName, setAddSubCompanyName] = React.useState("");
-  const [addSubStep, setAddSubStep] = React.useState<"project" | "sub" | "contract">("project");
-  const [addSubSelected, setAddSubSelected] = React.useState<{ subId?: string; email?: string; companyName: string } | null>(null);
-  const [addSubAmount, setAddSubAmount] = React.useState("");
-  const [addSubTrade, setAddSubTrade] = React.useState("");
-  const [addSubRetention, setAddSubRetention] = React.useState("10");
+  const [addSubStep, setAddSubStep] = React.useState<"project" | "sub">("project");
   const [addSubLoading, setAddSubLoading] = React.useState(false);
   const [addSubSuccess, setAddSubSuccess] = React.useState<{ companyName: string; projectName: string } | null>(null);
   const [addSubCopied, setAddSubCopied] = React.useState(false);
@@ -319,10 +315,6 @@ export default function Dashboard() {
     setAddSubEmail("");
     setAddSubCompanyName("");
     setAddSubStep("project");
-    setAddSubSelected(null);
-    setAddSubAmount("");
-    setAddSubTrade("");
-    setAddSubRetention("10");
     setAddSubLoading(false);
     setAddSubSuccess(null);
     setAddSubCopied(false);
@@ -330,32 +322,22 @@ export default function Dashboard() {
   };
 
   const handleAddSubContactSelect = async (subId: string, companyName: string) => {
-    if (selectedProjectIsConstruction) {
-      setAddSubSelected({ subId, companyName });
-      setAddSubStep("contract");
-    } else {
-      setAddSubLoading(true);
-      try {
-        await inviteContactToProject.mutateAsync({ subId, projectId: addSubProjectId });
-        queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
-        setAddSubSuccess({ companyName, projectName: selectedProject?.name ?? "" });
-      } catch (err: any) {
-        toast.error(err?.data?.error ?? "Failed to add to project");
-      } finally {
-        setAddSubLoading(false);
-      }
+    setAddSubLoading(true);
+    try {
+      await inviteContactToProject.mutateAsync({ subId, projectId: addSubProjectId });
+      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
+      setAddSubSuccess({ companyName, projectName: selectedProject?.name ?? "" });
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to add to project");
+    } finally {
+      setAddSubLoading(false);
     }
   };
 
   const handleAddSubNewNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addSubEmail.trim() || !addSubCompanyName.trim()) return;
-    if (selectedProjectIsConstruction) {
-      setAddSubSelected({ email: addSubEmail.trim(), companyName: addSubCompanyName.trim() });
-      setAddSubStep("contract");
-    } else {
-      handleAddSubInviteNew();
-    }
+    handleAddSubInviteNew();
   };
 
   const handleAddSubInviteNew = async () => {
@@ -375,46 +357,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleAddSubDirectContract = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addSubSelected) return;
-    const amount = parseFloat(addSubAmount.replace(/[$,]/g, ""));
-    if (isNaN(amount) || amount <= 0) return toast.error("Enter a valid contract amount");
-    setAddSubLoading(true);
-    try {
-      const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-      const res = await fetch(`${BASE}/api/projects/${addSubProjectId}/subcontracts/direct`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          subId: addSubSelected.subId,
-          email: addSubSelected.email,
-          companyName: addSubSelected.companyName,
-          baseContractAmount: amount,
-          tradeCategory: addSubTrade.trim() || undefined,
-          retentionPercentage: Number(addSubRetention) || 10,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        if (res.status === 402 || errData.error === "PLAN_LIMIT_REACHED") {
-          handleAddSubClose();
-          setPaywallMessage(errData.message);
-          setPaywallSuggestedPlan(errData.nextPlan?.name);
-          setIsPaywallOpen(true);
-          return;
-        }
-        throw new Error(errData.message || errData.error || "Failed to create subcontract");
-      }
-      queryClient.invalidateQueries({ queryKey: getGetProjectsQueryKey() });
-      setAddSubSuccess({ companyName: addSubSelected.companyName, projectName: selectedProject?.name ?? "" });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create subcontract");
-    } finally {
-      setAddSubLoading(false);
-    }
-  };
 
   const { data: archivedProjects = [], refetch: refetchArchived } = useQuery({
     queryKey: ["archived-projects", archiveSearch],
@@ -964,16 +906,13 @@ export default function Dashboard() {
         open={isAddSubOpen}
         onOpenChange={(open) => { if (!open) handleAddSubClose(); }}
         title={
-          addSubSuccess ? (selectedProjectIsConstruction ? "Subcontractor Added!" : "Invitation Sent!") :
-          addSubNewResult ? "Invitation Sent!" :
-          addSubStep === "contract" ? `Direct Award — No Bid Required` :
-          addSubStep === "sub" ? (selectedProjectIsConstruction ? `Add Sub to ${selectedProject?.name}` : `Invite Sub to Bid — ${selectedProject?.name}`) :
+          addSubSuccess || addSubNewResult ? "Invitation Sent!" :
+          addSubStep === "sub" ? `Invite Sub to Bid — ${selectedProject?.name}` :
           "Invite Sub to Bid"
         }
         description={
           addSubStep === "project" ? "Choose which project to invite the subcontractor to." :
-          addSubStep === "contract" ? `${selectedProject?.name} · Direct Award — enter the agreed contract amount.` :
-          selectedProjectIsConstruction ? "Direct Award — No Bid Required. Pick a sub to add mid-construction. You'll enter the agreed amount next." :
+          selectedProjectIsConstruction ? "Sending a bid invitation for additional scope on this active project." :
           undefined
         }
       >
@@ -981,32 +920,19 @@ export default function Dashboard() {
         {addSubSuccess ? (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-start gap-3">
-              {selectedProjectIsConstruction ? (
-                <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-              ) : (
-                <Mail className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-              )}
+              <Mail className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
               <div className="space-y-1.5">
-                {selectedProjectIsConstruction ? (
-                  <>
-                    <p className="font-semibold text-green-800 dark:text-green-300">{addSubSuccess.companyName} added to {addSubSuccess.projectName}</p>
-                    <p className="text-sm text-green-700 dark:text-green-400">Subcontract created — they can now submit invoices.</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-semibold text-green-800 dark:text-green-300">
-                      An invitation has been sent to <span className="font-bold">{addSubSuccess.companyName}</span>.
-                    </p>
-                    <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid.</p>
-                    <p className="text-sm text-green-700 dark:text-green-400">You will be notified when their bid is received.</p>
-                    <p className="text-xs text-green-600 dark:text-green-500 mt-1 pt-2 border-t border-green-200 dark:border-green-800">There is no amount to enter at this stage — the sub submits their own bid.</p>
-                  </>
-                )}
+                <p className="font-semibold text-green-800 dark:text-green-300">
+                  An invitation has been sent to <span className="font-bold">{addSubSuccess.companyName}</span>.
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-400">They will receive a magic link to view your plans and submit their bid.</p>
+                <p className="text-sm text-green-700 dark:text-green-400">You will be notified when their bid is received.</p>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-1 pt-2 border-t border-green-200 dark:border-green-800">There is no amount to enter at this stage — the sub submits their own bid.</p>
               </div>
             </div>
             <div className="flex gap-3 flex-col-reverse sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={() => { setAddSubSuccess(null); setAddSubStep("project"); setAddSubProjectId(""); setAddSubTab("contact"); setAddSubContactSearch(""); setAddSubEmail(""); setAddSubCompanyName(""); setAddSubSelected(null); setAddSubAmount(""); }} className="min-h-[44px]">
-                {selectedProjectIsConstruction ? "Add Another" : "Invite Another"}
+              <Button variant="outline" onClick={() => { setAddSubSuccess(null); setAddSubStep("project"); setAddSubProjectId(""); setAddSubTab("contact"); setAddSubContactSearch(""); setAddSubEmail(""); setAddSubCompanyName(""); }} className="min-h-[44px]">
+                Invite Another
               </Button>
               <Button onClick={handleAddSubClose} className="min-h-[44px]">Done</Button>
             </div>
@@ -1079,67 +1005,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-        /* ─── STEP 2: contract details (construction only) ─── */
-        ) : addSubStep === "contract" ? (
-          <form onSubmit={handleAddSubDirectContract} className="mt-4 space-y-4">
-            <div className="rounded-xl bg-muted/40 border border-border p-3 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
-                {addSubSelected?.companyName.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="font-semibold text-sm">{addSubSelected?.companyName}</p>
-                <p className="text-xs text-muted-foreground">Will be added to {selectedProject?.name}</p>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-semibold mb-1 block">Contract Amount *</label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                required
-                placeholder="$85,000"
-                value={addSubAmount}
-                onChange={e => setAddSubAmount(e.target.value)}
-                className="text-lg font-mono"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-semibold mb-1 block">Trade Category</label>
-                <select
-                  value={addSubTrade}
-                  onChange={e => setAddSubTrade(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm min-h-[44px]"
-                >
-                  <option value="">Select…</option>
-                  {ADD_SUB_TRADE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-semibold mb-1 block">Retention %</label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="15"
-                  step="0.5"
-                  value={addSubRetention}
-                  onChange={e => setAddSubRetention(e.target.value)}
-                  placeholder="10"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
-              <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("sub")}>← Back</Button>
-              <Button type="submit" isLoading={addSubLoading} className="min-h-[44px] px-6">Create Subcontract</Button>
-            </div>
-          </form>
-
         /* ─── STEP 2: select sub (contact book or new) ─── */
         ) : (
           <div className="mt-4">
             {selectedProjectIsConstruction && (
               <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                In Construction — you'll enter the contract amount after selecting.
+                Adding a sub mid-construction? They'll receive a bid invitation and can submit their proposed amount.
               </div>
             )}
             <div className="flex rounded-xl border border-border overflow-hidden mb-4">
@@ -1169,8 +1040,6 @@ export default function Dashboard() {
                     )
                     .map((contact: any) => {
                       const alreadyMember = selectedProject?.members?.some((m: any) => m.id === contact.subId);
-                      const hasSubcontract = selectedProjectIsConstruction && selectedProject?.subcontracts?.some((s: any) => s.subId === contact.subId);
-                      const disabled = selectedProjectIsConstruction ? hasSubcontract : alreadyMember;
                       return (
                         <div key={contact.subId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
                           <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
@@ -1182,11 +1051,11 @@ export default function Dashboard() {
                           </div>
                           <Button
                             size="sm"
-                            variant={disabled ? "outline" : "default"}
-                            disabled={disabled || addSubLoading}
-                            onClick={() => !disabled && handleAddSubContactSelect(contact.subId, contact.sub.companyName)}
+                            variant={alreadyMember ? "outline" : "default"}
+                            disabled={alreadyMember || addSubLoading}
+                            onClick={() => !alreadyMember && handleAddSubContactSelect(contact.subId, contact.sub.companyName)}
                           >
-                            {disabled ? (selectedProjectIsConstruction ? "Active" : "Invited") : selectedProjectIsConstruction ? "Select →" : "Invite to Bid"}
+                            {alreadyMember ? "Invited" : "Invite to Bid"}
                           </Button>
                         </div>
                       );
@@ -1211,7 +1080,7 @@ export default function Dashboard() {
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
                   <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("project")}>← Back</Button>
                   <Button type="submit" isLoading={addSubLoading} className="min-h-[44px]">
-                    {selectedProjectIsConstruction ? "Next — Enter Contract Amount →" : "Send Invitation"}
+                    Send Invitation
                   </Button>
                 </div>
               </form>

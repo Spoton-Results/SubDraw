@@ -164,6 +164,7 @@ export async function sendInviteEmail(opts: {
   appUrl: string;
   tradeCategory?: string | null;
   tradeScope?: string | null;
+  isConstructionPhase?: boolean;
 }) {
   const scopeBlock = opts.tradeCategory && opts.tradeScope
     ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
@@ -171,9 +172,15 @@ export async function sendInviteEmail(opts: {
         <p style="margin:0;font-size:13px;color:#166534;white-space:pre-line;">${opts.tradeScope.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
       </div>`
     : "";
+  const headingText = opts.isConstructionPhase
+    ? "You've been invited to bid on additional scope"
+    : "You've been invited to a project";
+  const bodyText = opts.isConstructionPhase
+    ? `You've been invited to submit a bid for additional scope on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. This project is currently under construction — please review the scope and submit your proposed amount. Click below to log in instantly — no password needed.`
+    : `You've been added as a subcontractor on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. Click below to log in instantly — no password needed.`;
   const html = layout(`
-    ${heading("You've been invited to a project")}
-    ${subtext(`You've been added as a subcontractor on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. Click below to log in instantly — no password needed.`)}
+    ${heading(headingText)}
+    ${subtext(bodyText)}
     ${infoBox([
       { label: "Login Email", value: opts.toEmail },
       { label: "Project", value: opts.projectName },
@@ -466,6 +473,7 @@ export async function sendAddedToProjectEmail(opts: {
   appUrl: string;
   tradeCategory?: string | null;
   tradeScope?: string | null;
+  isConstructionPhase?: boolean;
 }) {
   const scopeBlock = opts.tradeCategory && opts.tradeScope
     ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
@@ -473,17 +481,23 @@ export async function sendAddedToProjectEmail(opts: {
         <p style="margin:0;font-size:13px;color:#166534;white-space:pre-line;">${opts.tradeScope.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
       </div>`
     : "";
+  const headingText = opts.isConstructionPhase
+    ? "You've been invited to bid on additional scope"
+    : "You've been added to a new project";
+  const bodyText = opts.isConstructionPhase
+    ? `<strong>${opts.subCompanyName}</strong>, you've been invited to submit a bid for additional scope on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. This project is currently under construction — please review the scope and submit your proposed amount.`
+    : `<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}.`;
   const html = layout(`
-    ${heading("You've been added to a new project")}
-    ${subtext(`<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}.`)}
+    ${heading(headingText)}
+    ${subtext(bodyText)}
     ${infoBox([
       { label: "Project", value: opts.projectName },
       ...(opts.tradeCategory ? [{ label: "Trade", value: opts.tradeCategory }] : []),
     ])}
     ${scopeBlock}
-    ${ctaButton("View Project", opts.appUrl)}
+    ${ctaButton(opts.isConstructionPhase ? "View Project & Submit Bid" : "View Project", opts.appUrl)}
   `);
-  await send(opts.toEmail, `You've been added to ${opts.projectName} on SubTracker`, html);
+  await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
 }
 
 // ─── 10. Sub created a change order (notify GC) ───────────────────────────────
