@@ -1,0 +1,23 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only fix the delete account function in the Super Admin dashboard. Keep all existing features exactly as they are.
+When the super admin tries to delete an account the error returned is: Unexpected token '<', "<!DOCTYPE "... is not valid JSON. This means the delete API route is either missing entirely or is returning an HTML error page instead of a JSON response. Fix this completely.
+STEP 1 — Check whether a delete account API route exists. Look for a route that handles DELETE requests for user accounts in the admin section. If it does not exist create it. If it exists find why it is returning HTML instead of JSON.
+STEP 2 — Create or fix the delete account API route at /api/admin/users/[id] handling the DELETE method with the following exact logic:
+Verify the requesting user has the superadmin role. If not return 403 forbidden as JSON — never return HTML.
+Before deleting check whether the account has an active Stripe subscription. If yes cancel the Stripe subscription immediately before deleting the account.
+Delete in this exact order to avoid foreign key constraint errors:
+First delete all Invoices associated with any Subcontract on any Project owned by this user
+Then delete all ChangeOrders
+Then delete all Subcontracts
+Then delete all Bids
+Then delete all ProjectMembers
+Then delete all PlanFiles
+Then delete all Projects
+Then delete the User record itself
+Return a JSON response of success true and a message saying Account deleted successfully after every deletion completes.
+Wrap the entire delete operation in a try catch block. If anything fails return a JSON response with success false and the exact error message. Never return HTML under any circumstances — always return JSON.
+STEP 3 — Fix the frontend delete handler in the Super Admin dashboard. The current fetch call is not handling the response correctly. Rewrite the delete handler as follows:
+Show a confirmation dialog before deleting that says: Are you sure you want to permanently delete this account and all associated data? This cannot be undone. With a red Delete Account button and a Cancel button.
+Send a DELETE request to /api/admin/users/[id] with the correct headers including Content-Type application/json and the admin auth token.
+Parse the response as JSON and check the success field. If success is true remove the account from the displayed list immediately and show a green banner saying Account deleted successfully. If success is false show a red banner with the exact error message returned from the API.
+Add a try catch around the fetch call that catches any JSON parse errors and shows a red banner saying Delete failed — please try again instead of crashing.
+STEP 4 — Test the delete by attempting to delete a test account from the admin dashboard. Confirm the account disappears from the list and no error appears.

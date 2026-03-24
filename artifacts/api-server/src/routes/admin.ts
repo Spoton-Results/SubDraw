@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { usersTable, projectsTable, subcontractsTable, activityLogsTable, adminImpersonationLogsTable, featureFlagsTable } from "@workspace/db/schema";
+import {
+  usersTable, projectsTable, subcontractsTable, activityLogsTable,
+  adminImpersonationLogsTable, featureFlagsTable,
+  changeOrdersTable, invoicesTable, lienWaiversTable,
+  subcontractCommentsTable, subcontractCommentReadsTable,
+  contractorLicensesTable, subcontractInsurancesTable,
+  bidsTable, drawScheduleItemsTable, gcProjectAssignmentsTable,
+  ownerCoNotificationsTable, planFilesTable, projectMembersTable,
+  tradeScopesTable, scopeTemplatesTable, gcContactsTable, subProfilesTable,
+} from "@workspace/db/schema";
 import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
 import {
   generateAdminToken, setAdminCookie, clearAdminCookie, getAdminUser,
@@ -404,25 +413,97 @@ router.post("/gc/:userId/cancel", requireAdmin, async (req, res) => {
 
 router.delete("/gc/:userId", requireAdmin, async (req, res) => {
   const { userId } = req.params;
-  const { confirmName } = req.body;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  if (confirmName !== user.companyName) {
-    res.status(400).json({ error: "Company name confirmation does not match" });
-    return;
-  }
 
-  // Cancel Stripe subscription if active
-  if (user.stripeSubscriptionId) {
-    try {
-      const stripe = await getUncachableStripeClient();
-      await stripe.subscriptions.cancel(user.stripeSubscriptionId);
-    } catch { /* ignore */ }
-  }
+  try {
+    const { confirmName } = req.body ?? {};
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    if (confirmName !== user.companyName) {
+      res.status(400).json({ error: "Company name confirmation does not match" });
+      return;
+    }
 
-  // Delete user and cascade (team members, etc.)
-  await db.delete(usersTable).where(or(eq(usersTable.id, userId), eq(usersTable.gcParentId, userId)));
-  res.json({ success: true });
+    // Cancel Stripe subscription if active
+    if (user.stripeSubscriptionId) {
+      try {
+        const stripe = await getUncachableStripeClient();
+        await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+      } catch { /* ignore Stripe errors */ }
+    }
+
+    // Gather all user IDs (GC owner + team members)
+    const teamMembers = await db.select({ id: usersTable.id }).from(usersTable)
+      .where(eq(usersTable.gcParentId, userId));
+    const allUserIds = [userId, ...teamMembers.map(m => m.id)];
+
+    // Gather project IDs owned by this GC
+    const projects = await db.select({ id: projectsTable.id }).from(projectsTable)
+      .where(eq(projectsTable.gcId, userId));
+    const projectIds = projects.map(p => p.id);
+
+    // Gather subcontract IDs under those projects
+    let subcontractIds: string[] = [];
+    if (projectIds.length > 0) {
+      const subs = await db.select({ id: subcontractsTable.id }).from(subcontractsTable)
+        .where(inArray(subcontractsTable.projectId, projectIds));
+      subcontractIds = subs.map(s => s.id);
+    }
+
+    // Step 1: Delete subcontract-level children (all NO ACTION FK → subcontracts)
+    if (subcontractIds.length > 0) {
+      await db.delete(invoicesTable).where(inArray(invoicesTable.subcontractId, subcontractIds));
+      await db.delete(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, subcontractIds));
+      await db.delete(lienWaiversTable).where(inArray(lienWaiversTable.subcontractId, subcontractIds));
+      await db.delete(activityLogsTable).where(inArray(activityLogsTable.subcontractId, subcontractIds));
+      await db.delete(subcontractCommentsTable).where(inArray(subcontractCommentsTable.subcontractId, subcontractIds));
+      await db.delete(subcontractCommentReadsTable).where(inArray(subcontractCommentReadsTable.subcontractId, subcontractIds));
+      await db.delete(subcontractInsurancesTable).where(inArray(subcontractInsurancesTable.subcontractId, subcontractIds));
+      await db.delete(contractorLicensesTable).where(inArray(contractorLicensesTable.subcontractId, subcontractIds));
+    }
+
+    // Step 2: Delete subcontracts under GC's projects (compliance_completions CASCADEs)
+    if (projectIds.length > 0) {
+      await db.delete(subcontractsTable).where(inArray(subcontractsTable.projectId, projectIds));
+    }
+
+    // Step 3: Delete project-level children (all NO ACTION FK → projects)
+    if (projectIds.length > 0) {
+      await db.delete(bidsTable).where(inArray(bidsTable.projectId, projectIds));
+      await db.delete(drawScheduleItemsTable).where(inArray(drawScheduleItemsTable.projectId, projectIds));
+      await db.delete(gcProjectAssignmentsTable).where(inArray(gcProjectAssignmentsTable.projectId, projectIds));
+      await db.delete(lienWaiversTable).where(inArray(lienWaiversTable.projectId, projectIds));
+      await db.delete(ownerCoNotificationsTable).where(inArray(ownerCoNotificationsTable.projectId, projectIds));
+      await db.delete(planFilesTable).where(inArray(planFilesTable.projectId, projectIds));
+      await db.delete(projectMembersTable).where(inArray(projectMembersTable.projectId, projectIds));
+      await db.delete(tradeScopesTable).where(inArray(tradeScopesTable.projectId, projectIds));
+    }
+
+    // Step 4: Delete projects (bid_comparisons, compliance_checklist_items,
+    //          gc_project_credentials, project_completion_documents, scope_documents all CASCADE)
+    await db.delete(projectsTable).where(eq(projectsTable.gcId, userId));
+
+    // Step 5: Delete remaining user-level references
+    await db.delete(gcContactsTable).where(
+      or(eq(gcContactsTable.gcId, userId), inArray(gcContactsTable.subId, allUserIds))
+    );
+    await db.delete(scopeTemplatesTable).where(eq(scopeTemplatesTable.gcId, userId));
+    await db.delete(subProfilesTable).where(inArray(subProfilesTable.userId, allUserIds));
+    await db.delete(gcProjectAssignmentsTable).where(inArray(gcProjectAssignmentsTable.teamMemberUserId, allUserIds));
+    await db.delete(projectMembersTable).where(inArray(projectMembersTable.userId, allUserIds));
+    await db.delete(subcontractCommentReadsTable).where(inArray(subcontractCommentReadsTable.userId, allUserIds));
+    await db.delete(subcontractCommentsTable).where(inArray(subcontractCommentsTable.userId, allUserIds));
+    await db.delete(bidsTable).where(inArray(bidsTable.subId, allUserIds));
+    await db.delete(subcontractsTable).where(inArray(subcontractsTable.subId, allUserIds));
+    await db.delete(adminImpersonationLogsTable).where(eq(adminImpersonationLogsTable.gcUserId, userId));
+
+    // Step 6: Delete all users (team members + GC owner; notifications CASCADE)
+    await db.delete(usersTable).where(or(eq(usersTable.id, userId), eq(usersTable.gcParentId, userId)));
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("Admin delete GC error:", err);
+    res.status(500).json({ error: "Failed to delete account: " + (err?.message ?? "unknown error") });
+  }
 });
 
 // ── Send Message ──────────────────────────────────────────────────────────────
