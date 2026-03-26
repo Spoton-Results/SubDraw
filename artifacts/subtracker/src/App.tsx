@@ -1,4 +1,11 @@
 import * as React from "react";
+
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+    dataLayer?: unknown[];
+  }
+}
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -95,9 +102,21 @@ function ProtectedRoute({
   return <Component />;
 }
 
+function AnalyticsTracker() {
+  const [location] = useLocation();
+  React.useEffect(() => {
+    if (typeof window.gtag === "function") {
+      window.gtag("config", "G-GY5VTKVQ88", { page_path: location });
+    }
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
-    <Switch>
+    <>
+      <AnalyticsTracker />
+      <Switch>
       <Route path="/admin" component={AdminLogin} />
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/login" component={Login} />
@@ -116,6 +135,7 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 
