@@ -9,6 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/s3-request-presigner": "^3.1018.0",
     "@google-cloud/storage": "^7.19.0",
     "@replit/connectors-sdk": "^0.3.0",
     "@sendgrid/mail": "^8.1.6",

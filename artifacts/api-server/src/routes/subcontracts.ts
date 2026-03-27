@@ -24,8 +24,21 @@ import { triggerOwnerCoNotification } from "./projects.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { isR2Path, deleteFromR2 } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
+
+async function tryDeleteStorageFile(path: string | null | undefined): Promise<void> {
+  if (!path) return;
+  try {
+    if (isR2Path(path)) {
+      await deleteFromR2(path);
+    } else {
+      const f = await objectStorageService.getObjectEntityFile(path);
+      await f.delete();
+    }
+  } catch { }
+}
 
 const router = Router();
 
@@ -321,9 +334,7 @@ router.post("/:subcontractId/contract-document", requireAuth, requireGC, async (
   if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
   // Delete old doc from storage if replacing
-  if (sc.contractDocPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(sc.contractDocPath); await f.delete(); } catch { }
-  }
+  await tryDeleteStorageFile(sc.contractDocPath);
 
   const [updated] = await db.update(subcontractsTable)
     .set({ contractDocPath: objectPath, contractDocName: fileName, contractDocUploadedAt: new Date(), signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, contractWaived: false, updatedAt: new Date() })
@@ -358,12 +369,8 @@ router.delete("/:subcontractId/contract-document", requireAuth, requireGC, async
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
   if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  if (sc.contractDocPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(sc.contractDocPath); await f.delete(); } catch { }
-  }
-  if (sc.signedContractPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
-  }
+  await tryDeleteStorageFile(sc.contractDocPath);
+  await tryDeleteStorageFile(sc.signedContractPath);
 
   const [updated] = await db.update(subcontractsTable)
     .set({ contractDocPath: null, contractDocName: null, contractDocUploadedAt: null, signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, contractWaived: false, updatedAt: new Date() })
@@ -387,9 +394,7 @@ router.post("/:subcontractId/signed-contract", requireAuth, requireSub, async (r
   if (!sc.contractDocPath) { res.status(400).json({ error: "GC has not uploaded a contract document yet" }); return; }
 
   // Delete old signed doc from storage if replacing
-  if (sc.signedContractPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
-  }
+  await tryDeleteStorageFile(sc.signedContractPath);
 
   const [updated] = await db.update(subcontractsTable)
     .set({ signedContractPath: objectPath, signedContractName: fileName, signedContractUploadedAt: new Date(), updatedAt: new Date() })
@@ -425,9 +430,7 @@ router.delete("/:subcontractId/signed-contract", requireAuth, requireGC, async (
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1);
   if (!project || project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  if (sc.signedContractPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(sc.signedContractPath); await f.delete(); } catch { }
-  }
+  await tryDeleteStorageFile(sc.signedContractPath);
 
   const [updated] = await db.update(subcontractsTable)
     .set({ signedContractPath: null, signedContractName: null, signedContractUploadedAt: null, updatedAt: new Date() })

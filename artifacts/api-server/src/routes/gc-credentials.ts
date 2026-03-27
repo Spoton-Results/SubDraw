@@ -5,6 +5,7 @@ import { gcProjectCredentialsTable, projectsTable, projectMembersTable, usersTab
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { isR2Path, deleteFromR2, extractR2Key, getPresignedGetUrl } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
@@ -151,8 +152,12 @@ router.delete("/document/:docType", requireAuth, requireGC, async (req, res) => 
     const pathField = docType === "cert" ? existing.insCertPath : existing.licDocPath;
     if (pathField) {
       try {
-        const file = await objectStorageService.getObjectEntityFile(pathField);
-        await file.delete();
+        if (isR2Path(pathField)) {
+          await deleteFromR2(pathField);
+        } else {
+          const file = await objectStorageService.getObjectEntityFile(pathField);
+          await file.delete();
+        }
       } catch { }
     }
     await db
@@ -191,10 +196,18 @@ router.get("/download/:docType", requireAuth, async (req, res) => {
   if (!objectPath) { res.status(404).json({ error: "No document uploaded" }); return; }
 
   try {
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-    const response = await objectStorageService.downloadObject(objectFile);
     const ext = objectPath.match(/\.(png|jpg|jpeg|gif|webp|pdf)$/i)?.[1] ?? "pdf";
     const fileName = docType === "cert" ? `gc-insurance-certificate.${ext}` : `gc-contractor-license.${ext}`;
+
+    if (isR2Path(objectPath)) {
+      const key = extractR2Key(objectPath);
+      const signedUrl = await getPresignedGetUrl(key, fileName);
+      res.redirect(307, signedUrl);
+      return;
+    }
+
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    const response = await objectStorageService.downloadObject(objectFile);
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     response.headers.forEach((value, key) => res.setHeader(key, value));
     if (response.body) {

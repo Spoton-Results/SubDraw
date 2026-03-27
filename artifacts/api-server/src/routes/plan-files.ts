@@ -4,6 +4,7 @@ import { planFilesTable, planFileViewsTable, activityLogsTable, subcontractsTabl
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { isR2Path, deleteFromR2 } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
 
@@ -61,8 +62,12 @@ router.delete("/:planFileId", requireAuth, requireGC, async (req, res) => {
 
   if (plan.objectPath) {
     try {
-      const file = await objectStorageService.getObjectEntityFile(plan.objectPath);
-      await file.delete();
+      if (isR2Path(plan.objectPath)) {
+        await deleteFromR2(plan.objectPath);
+      } else {
+        const file = await objectStorageService.getObjectEntityFile(plan.objectPath);
+        await file.delete();
+      }
     } catch {
     }
   }

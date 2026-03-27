@@ -4,6 +4,7 @@ import { complianceChecklistItemsTable, complianceCompletionsTable, subcontracts
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { isR2Path, deleteFromR2 } from "../lib/r2.js";
 import { getActorName, getActorRoleLabel } from "../lib/auth.js";
 import {
   sendComplianceDocUploadedEmail,
@@ -151,7 +152,14 @@ router.delete("/:itemId", requireAuth, requireGC, async (req, res) => {
   const completions = await db.select().from(complianceCompletionsTable).where(eq(complianceCompletionsTable.checklistItemId, itemId));
   for (const c of completions) {
     if (c.documentPath) {
-      try { const f = await objectStorageService.getObjectEntityFile(c.documentPath); await f.delete(); } catch { }
+      try {
+        if (isR2Path(c.documentPath)) {
+          await deleteFromR2(c.documentPath);
+        } else {
+          const f = await objectStorageService.getObjectEntityFile(c.documentPath);
+          await f.delete();
+        }
+      } catch { }
     }
   }
 
@@ -228,7 +236,14 @@ router.post("/:itemId/document/:subcontractId", requireAuth, async (req, res) =>
     .where(and(eq(complianceCompletionsTable.checklistItemId, itemId), eq(complianceCompletionsTable.subcontractId, subcontractId))).limit(1);
 
   if (existing?.documentPath) {
-    try { const f = await objectStorageService.getObjectEntityFile(existing.documentPath); await f.delete(); } catch { }
+    try {
+      if (isR2Path(existing.documentPath)) {
+        await deleteFromR2(existing.documentPath);
+      } else {
+        const f = await objectStorageService.getObjectEntityFile(existing.documentPath);
+        await f.delete();
+      }
+    } catch { }
   }
 
   let completion;
@@ -522,7 +537,14 @@ router.delete("/:itemId/complete/:subcontractId", requireAuth, async (req, res) 
 
   if (existing) {
     if (existing.documentPath) {
-      try { const f = await objectStorageService.getObjectEntityFile(existing.documentPath); await f.delete(); } catch { }
+      try {
+        if (isR2Path(existing.documentPath)) {
+          await deleteFromR2(existing.documentPath);
+        } else {
+          const f = await objectStorageService.getObjectEntityFile(existing.documentPath);
+          await f.delete();
+        }
+      } catch { }
     }
     await db.update(complianceCompletionsTable).set({
       isComplete: false,

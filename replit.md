@@ -29,6 +29,7 @@ The project is built as a pnpm monorepo using Node.js 24 and TypeScript 5.9. The
 -   **AI Bid Intelligence:** GCs can leverage AI (Claude) to analyze plan files and generate trade-by-trade bid range benchmarks, enhancing bid comparison without exposing AI data to subcontractors.
 -   **Billing & Pricing:** Subscription tiers based on active subcontract count, with blocking mechanisms for exceeding limits and a dedicated billing page for plan management.
 -   **Super Admin Dashboard:** A separate, isolated internal portal for platform administration, offering detailed metrics, user management (impersonation, pausing accounts), revenue tracking, feature flag management, and support tools.
+-   **File Storage (Cloudflare R2):** All user file uploads (plan files, scope docs, compliance docs, contracts, GC credentials) use Cloudflare R2 via S3-compatible presigned PUT URLs. New files store an objectPath prefixed with `/r2/` in the database. Downloads route through `/api/storage/r2/*` which issues presigned GET URLs (307 redirect). Legacy GCS files remain accessible via `/api/storage/objects/*`. Delete operations check the path prefix to use the correct storage backend.
 
 # External Dependencies
 

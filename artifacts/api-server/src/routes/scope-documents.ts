@@ -4,6 +4,7 @@ import { scopeDocumentsTable, projectsTable, projectMembersTable } from "@worksp
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { isR2Path, deleteFromR2 } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
@@ -60,8 +61,12 @@ router.delete("/:docId", requireAuth, requireGC, async (req, res) => {
 
   if (doc.objectPath) {
     try {
-      const file = await objectStorageService.getObjectEntityFile(doc.objectPath);
-      await file.delete();
+      if (isR2Path(doc.objectPath)) {
+        await deleteFromR2(doc.objectPath);
+      } else {
+        const file = await objectStorageService.getObjectEntityFile(doc.objectPath);
+        await file.delete();
+      }
     } catch { }
   }
 
