@@ -11,10 +11,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  // Check if the session was issued before a password change (invalidates old sessions)
+  // Check password change and paused status from DB
   if (decoded.iat !== undefined) {
     const [user] = await db
-      .select({ passwordChangedAt: usersTable.passwordChangedAt })
+      .select({ passwordChangedAt: usersTable.passwordChangedAt, pausedAt: usersTable.pausedAt })
       .from(usersTable)
       .where(eq(usersTable.id, decoded.id))
       .limit(1);
@@ -25,6 +25,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         res.status(401).json({ error: "Session expired. Please log in again." });
         return;
       }
+    }
+
+    // Block paused accounts — bypass when admin is impersonating
+    if (user?.pausedAt && !decoded.impersonatedBy) {
+      res.status(403).json({ error: "Account paused. Please contact support." });
+      return;
     }
   }
 
