@@ -10,25 +10,15 @@ interface UploadMetadata {
 interface UploadResponse {
   uploadURL: string;
   objectPath: string;
-  uploaded?: boolean;
   metadata?: UploadMetadata;
 }
 
 interface UseUploadOptions {
-  /** Base path where object storage routes are mounted (default: "/api/storage") */
   basePath?: string;
   onSuccess?: (response: UploadResponse) => void;
   onError?: (error: Error) => void;
 }
 
-/**
- * React hook for handling file uploads via presigned PUT URL.
- *
- * Step 1: POST metadata to server → receive presigned R2 PUT URL + objectPath
- * Step 2: Browser PUTs file directly to R2 using the presigned URL
- *
- * Requires Cloudflare R2 bucket to have CORS configured for browser PUT requests.
- */
 export function useUpload(options: UseUploadOptions = {}) {
   const basePath = options.basePath ?? "/api/storage";
   const [isUploading, setIsUploading] = useState(false);
@@ -50,7 +40,7 @@ export function useUpload(options: UseUploadOptions = {}) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to get upload URL");
+        throw new Error(errorData.error || `Server error ${response.status}: Failed to get upload URL`);
       }
 
       return response.json();
@@ -60,17 +50,31 @@ export function useUpload(options: UseUploadOptions = {}) {
 
   const uploadToPresignedUrl = useCallback(
     async (file: File, uploadURL: string): Promise<void> => {
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-      });
+      console.log("[upload] Uploading to presigned URL:", uploadURL);
+      console.log("[upload] File:", file.name, file.size, "bytes", file.type);
+
+      let response: Response;
+      try {
+        response = await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+        });
+      } catch (networkErr: any) {
+        console.error("[upload] Network error during PUT to R2:", networkErr);
+        console.error("[upload] URL was:", uploadURL);
+        throw new Error(`Network error uploading to R2: ${networkErr?.message ?? "Failed to fetch"}. Check browser console Network tab for details.`);
+      }
 
       if (!response.ok) {
-        throw new Error("Failed to upload file to storage");
+        const body = await response.text().catch(() => "");
+        console.error("[upload] R2 PUT failed:", response.status, response.statusText, body);
+        throw new Error(`R2 upload failed (${response.status}): ${body || response.statusText}`);
       }
+
+      console.log("[upload] R2 PUT succeeded:", response.status);
     },
     []
   );
@@ -83,7 +87,9 @@ export function useUpload(options: UseUploadOptions = {}) {
 
       try {
         setProgress(10);
+        console.log("[upload] Requesting presigned URL for:", file.name);
         const uploadResponse = await requestUploadUrl(file);
+        console.log("[upload] Got presigned URL, objectPath:", uploadResponse.objectPath);
 
         setProgress(30);
         await uploadToPresignedUrl(file, uploadResponse.uploadURL);
@@ -93,6 +99,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         return uploadResponse;
       } catch (err) {
         const error = err instanceof Error ? err : new Error("Upload failed");
+        console.error("[upload] Upload failed:", error.message);
         setError(error);
         options.onError?.(error);
         return null;
