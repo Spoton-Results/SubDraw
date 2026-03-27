@@ -663,7 +663,6 @@ export const RequestUploadUrlBody = zod.object({
 export const RequestUploadUrlResponse = zod.object({
   uploadURL: zod.string().url(),
   objectPath: zod.string(),
-  uploaded: zod.boolean().optional(),
   metadata: zod.object({
     name: zod.string(),
     size: zod.number(),

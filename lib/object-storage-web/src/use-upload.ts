@@ -22,12 +22,12 @@ interface UseUploadOptions {
 }
 
 /**
- * React hook for handling file uploads.
+ * React hook for handling file uploads via presigned PUT URL.
  *
- * Sends the file as multipart form data to the server, which uploads it
- * directly to Cloudflare R2 and returns the objectPath and public URL.
- * When the server responds with `uploaded: true` the client-side PUT step
- * is skipped (the upload is already done).
+ * Step 1: POST metadata to server → receive presigned R2 PUT URL + objectPath
+ * Step 2: Browser PUTs file directly to R2 using the presigned URL
+ *
+ * Requires Cloudflare R2 bucket to have CORS configured for browser PUT requests.
  */
 export function useUpload(options: UseUploadOptions = {}) {
   const basePath = options.basePath ?? "/api/storage";
@@ -37,18 +37,20 @@ export function useUpload(options: UseUploadOptions = {}) {
 
   const requestUploadUrl = useCallback(
     async (file: File): Promise<UploadResponse> => {
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-
       const response = await fetch(`${basePath}/uploads/request-url`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type || "application/octet-stream",
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to upload file");
+        throw new Error(errorData.error || "Failed to get upload URL");
       }
 
       return response.json();
@@ -83,10 +85,8 @@ export function useUpload(options: UseUploadOptions = {}) {
         setProgress(10);
         const uploadResponse = await requestUploadUrl(file);
 
-        if (!uploadResponse.uploaded) {
-          setProgress(30);
-          await uploadToPresignedUrl(file, uploadResponse.uploadURL);
-        }
+        setProgress(30);
+        await uploadToPresignedUrl(file, uploadResponse.uploadURL);
 
         setProgress(100);
         options.onSuccess?.(uploadResponse);
@@ -111,17 +111,19 @@ export function useUpload(options: UseUploadOptions = {}) {
       url: string;
       headers?: Record<string, string>;
     }> => {
-      const formData = new FormData();
-      formData.append("file", file.data as Blob, file.name);
-
       const response = await fetch(`${basePath}/uploads/request-url`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: (file.type as string) || "application/octet-stream",
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to upload file");
+        throw new Error("Failed to get upload URL");
       }
 
       const data = await response.json();
