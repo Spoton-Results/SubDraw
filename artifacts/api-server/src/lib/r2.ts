@@ -16,6 +16,7 @@ function getR2Client(): S3Client {
       accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
     },
+    forcePathStyle: true,
   });
 }
 
@@ -84,7 +85,8 @@ export async function uploadBufferToR2(
       ContentLength: buffer.length,
     })
   );
-  return makeR2Path(key);
+  const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+  return `${publicBase}/${key}`;
 }
 
 export async function deleteFromR2(pathOrKey: string): Promise<void> {
