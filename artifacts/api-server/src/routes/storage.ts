@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
+import multer from "multer";
 import {
   RequestUploadUrlResponse,
 } from "@workspace/api-zod";
@@ -9,49 +10,53 @@ import {
   makeR2Path,
   isR2Path,
   extractR2Key,
-  getPresignedPutUrl,
   getPresignedGetUrl,
+  uploadBufferToR2,
 } from "../lib/r2";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 150 * 1024 * 1024 },
+});
 
 /**
  * POST /storage/uploads/request-url
  *
- * Generates a presigned PUT URL so the browser can upload directly to R2.
- * No file data is sent to this server — only metadata (name, size, contentType).
+ * Accepts the file as multipart form data, uploads it server-side to
+ * Cloudflare R2 via the Cloudflare REST API (api.cloudflare.com), and
+ * returns the public URL + objectPath.
  *
- * R2 bucket must have CORS configured to allow PUT from browser origins.
+ * Requires CLOUDFLARE_API_TOKEN with R2:Edit permission.
  */
-router.post("/uploads/request-url", async (req: Request, res: Response) => {
-  const { name, size, contentType } = req.body as {
-    name?: string;
-    size?: number;
-    contentType?: string;
-  };
-
-  if (!name || !contentType) {
-    res.status(400).json({ error: "name and contentType are required" });
+router.post("/uploads/request-url", upload.single("file"), async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: "No file provided. Send the file as multipart form-data with field name 'file'." });
     return;
   }
 
+  const name = file.originalname;
+  const size = file.size;
+  const contentType = file.mimetype || "application/octet-stream";
   const key = generateR2Key("uploads", name);
 
   try {
-    const uploadURL = await getPresignedPutUrl(key, contentType);
+    const publicUrl = await uploadBufferToR2(file.buffer, key, contentType);
     const objectPath = makeR2Path(key);
 
     res.json(
       RequestUploadUrlResponse.parse({
-        uploadURL,
+        uploadURL: publicUrl,
         objectPath,
-        metadata: { name, size: size ?? 0, contentType },
+        uploaded: true,
+        metadata: { name, size, contentType },
       }),
     );
   } catch (error: any) {
-    console.error("[upload] Failed to generate presigned URL:", error);
-    res.status(500).json({ error: error?.message ?? "Failed to generate upload URL" });
+    console.error("[upload] Upload failed:", error?.message ?? error);
+    res.status(500).json({ error: error?.message ?? "Failed to upload file" });
   }
 });
 
