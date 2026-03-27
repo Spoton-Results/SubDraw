@@ -16,6 +16,7 @@ function getR2Client(): S3Client {
       accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
     },
+    forcePathStyle: true,
   });
 }
 
