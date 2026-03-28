@@ -7,10 +7,8 @@ import { getEffectiveGcId } from "../lib/auth.js";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
 import { isR2Path, extractR2Key, downloadBufferFromR2 } from "../lib/r2.js";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
+// @ts-ignore — pdf-parse v1 is a CJS module; tsx and esbuild both handle this interop
+import pdfParse from "pdf-parse";
 
 const router = Router({ mergeParams: true });
 const objectStorageService = new ObjectStorageService();
