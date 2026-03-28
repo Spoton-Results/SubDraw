@@ -180,7 +180,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const roleLabel = roleMeta?.label ?? (user.role === "GC" ? "GC" : "SUB");
 
   return (
-    <div className="min-h-screen bg-secondary/30 flex">
+    <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full">
       {/* Sidebar — desktop only */}
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
@@ -229,7 +229,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <header className="h-16 bg-card border-b border-border flex items-center px-4 md:px-8 shadow-sm justify-between">
           <div className="md:hidden flex items-center gap-2">
             <HardHat className="h-6 w-6 text-primary" />

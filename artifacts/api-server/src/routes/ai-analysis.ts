@@ -146,6 +146,8 @@ Please analyze the attached plan files and provide bid range estimates for each 
       max_tokens: 8192,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: contentBlocks as any }],
+    }, {
+      headers: { "anthropic-beta": "pdfs-2024-09-25" },
     });
 
     const responseText = message.content.find(b => b.type === "text")?.text ?? "";
