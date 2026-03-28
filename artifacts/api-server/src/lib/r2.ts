@@ -106,6 +106,23 @@ export async function uploadBufferToR2(
   return `${publicBase}/${key}`;
 }
 
+/**
+ * Download a file from Cloudflare R2 via its public URL.
+ * Works even when the S3-compatible endpoint is blocked (uses pub-*.r2.dev CDN).
+ */
+export async function downloadBufferFromR2(key: string): Promise<Buffer> {
+  const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+  if (!publicBase) throw new Error("CLOUDFLARE_R2_PUBLIC_URL is not set");
+  const url = `${publicBase}/${key}`;
+  console.log(`[r2] Downloading from public URL: ${url}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`R2 download failed (${response.status}) for key: ${key}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export async function deleteFromR2(pathOrKey: string): Promise<void> {
   const key = isR2Path(pathOrKey) ? extractR2Key(pathOrKey) : pathOrKey;
   const client = getR2Client();

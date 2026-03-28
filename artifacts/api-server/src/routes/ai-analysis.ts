@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { getEffectiveGcId } from "../lib/auth.js";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
+import { isR2Path, extractR2Key, downloadBufferFromR2 } from "../lib/r2.js";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router = Router({ mergeParams: true });
@@ -74,8 +75,15 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
         continue;
       }
       try {
-        const file = await objectStorageService.getObjectEntityFile(pf.objectPath);
-        const [buffer] = await file.download();
+        let buffer: Buffer;
+        if (isR2Path(pf.objectPath)) {
+          const key = extractR2Key(pf.objectPath);
+          buffer = await downloadBufferFromR2(key);
+        } else {
+          const file = await objectStorageService.getObjectEntityFile(pf.objectPath);
+          const [downloaded] = await file.download();
+          buffer = downloaded;
+        }
         const base64 = buffer.toString("base64");
         planFileContents.push({ fileName: pf.fileName, base64, mediaType });
       } catch (err) {
@@ -83,7 +91,8 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
           console.warn(`[ai-analysis] Plan file not found in storage: ${pf.objectPath}`);
           continue;
         }
-        throw err;
+        console.warn(`[ai-analysis] Failed to download plan file ${pf.objectPath}:`, (err as any)?.message);
+        continue;
       }
     }
 
