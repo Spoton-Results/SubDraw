@@ -148,6 +148,7 @@ function App() {
         </WouterRouter>
         <Toaster
           position="top-center"
+          containerStyle={{ maxWidth: "calc(100vw - 32px)" }}
           toastOptions={{
             duration: 4000,
             style: {
@@ -156,6 +157,9 @@ function App() {
               border: '1px solid hsl(var(--border))',
               borderRadius: '1rem',
               fontWeight: 600,
+              maxWidth: "calc(100vw - 32px)",
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
             }
           }}
         />
