@@ -1,0 +1,22 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only add the Sub Change Order Request feature as described below. Keep all existing change order system, scoreboard, invoice flagging, and all other features exactly as they are.
+Add a Change Order Request system that allows subcontractors to submit requests for additional compensation when they encounter work outside their original scope. This is different from the existing GC-created change order system — this is a sub-initiated request flow that feeds into the GC's decision to create a formal change order.
+SUB SIDE — SUBMITTING A CHANGE ORDER REQUEST:
+On the sub's subcontract detail page add a Request Change Order button in the Change Orders section. When tapped the sub sees a form with the following fields: Description of extra work — required — text area where sub describes what is outside their original scope. Proposed amount — required — dollar amount the sub is requesting for the extra work. Reason this is outside original scope — required — text area where sub explains why this work was not included in their original bid. Supporting documents — optional — file upload accepting PDF and images — for photos, daily logs, material receipts, or T&M sheets. When the sub taps Submit Request the request is created with status PENDING GC REVIEW and the GC receives an immediate notification.
+GC SIDE — REVIEWING A CHANGE ORDER REQUEST:
+On the GC's subcontract detail page show all sub-submitted Change Order Requests in a separate section labeled Change Order Requests from Sub — clearly separate from the existing GC-created change orders section. Each request shows the sub company name, description of extra work, proposed amount, reason outside scope, date submitted, any attached documents with download buttons, and current status. The GC has three actions on each pending request:
+Action 1 — Approve and Create CO: GC taps this button and it automatically creates a formal change order using the sub's description and proposed amount. The formal CO then goes through the normal two-step approval process — sub approves, GC gives final approval. The Change Order Request status changes to CO CREATED.
+Action 2 — Approve with Modified Amount: GC taps this button, enters a different amount than the sub requested with an optional note explaining the adjustment, and creates a formal CO with the modified amount. The Change Order Request status changes to CO CREATED with a note showing the original requested amount and the approved amount.
+Action 3 — Reject: GC enters a rejection reason — required — and rejects the request. The sub is notified immediately with the rejection reason. The Change Order Request status changes to REJECTED.
+STATUSES:
+PENDING GC REVIEW in yellow — sub submitted, GC has not acted yet
+CO CREATED in blue — GC approved and created a formal change order
+REJECTED in red — GC rejected with reason
+NOTIFICATIONS:
+GC notified immediately when sub submits a Change Order Request — notification shows sub name, project name, description, and proposed amount. Sub notified when GC rejects their request — notification includes the rejection reason. Sub notified when GC approves and creates a formal CO from their request.
+ACTION REQUIRED DASHBOARD:
+Pending Change Order Requests from subs appear in the GC Action Required dashboard showing sub name, project name, proposed amount, and days since submitted. Any request pending for more than 5 days shows as URGENT.
+ACTIVITY LOG:
+All Change Order Request actions logged permanently — sub submitted request with amount, GC approved and created CO, GC approved with modified amount showing original and modified amounts, GC rejected with reason — each with user name and timestamp.
+IMPORTANT DISTINCTION:
+Change Order Requests from subs are completely separate from GC-created change orders. They do not automatically add money to the contract. Money is only added to the contract after the GC creates a formal change order from the request AND both parties complete the normal two-step approval. A sub submitting a Change Order Request does not change the scoreboard — only an approved formal change order changes the scoreboard.
+
