@@ -151,6 +151,23 @@ export default function SubcontractDetail() {
   const [licExpDate, setLicExpDate] = React.useState("");
   const [licSaving, setLicSaving] = React.useState(false);
 
+  // Sub self-submission state
+  const [subInsDialogOpen, setSubInsDialogOpen] = React.useState(false);
+  const [subInsCompany, setSubInsCompany] = React.useState("");
+  const [subInsPolicy, setSubInsPolicy] = React.useState("");
+  const [subInsGL, setSubInsGL] = React.useState("");
+  const [subInsWC, setSubInsWC] = React.useState("");
+  const [subInsExpDate, setSubInsExpDate] = React.useState("");
+  const [subInsCertPath, setSubInsCertPath] = React.useState<string | null>(null);
+  const [subInsSaving, setSubInsSaving] = React.useState(false);
+
+  const [subLicDialogOpen, setSubLicDialogOpen] = React.useState(false);
+  const [subLicNumber, setSubLicNumber] = React.useState("");
+  const [subLicType, setSubLicType] = React.useState("");
+  const [subLicState, setSubLicState] = React.useState("");
+  const [subLicExpDate, setSubLicExpDate] = React.useState("");
+  const [subLicSaving, setSubLicSaving] = React.useState(false);
+
   // Compliance state
   const [complianceUploadingId, setComplianceUploadingId] = React.useState<string | null>(null);
   const [complianceApprovingId, setComplianceApprovingId] = React.useState<string | null>(null);
@@ -409,6 +426,10 @@ export default function SubcontractDetail() {
 
   const { uploadFile: uploadSignedDoc, progress: signedDocProgress, isUploading: signedDocIsUploading } = useUpload({
     onError: (err) => toast.error(err.message || "Signed contract upload failed"),
+  });
+
+  const { uploadFile: uploadSubCert, isUploading: subCertUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Certificate upload failed"),
   });
 
   const invalidate = () => {
@@ -956,6 +977,98 @@ export default function SubcontractDetail() {
       toast.error(err.message || "Failed to save license");
     } finally {
       setLicSaving(false);
+    }
+  };
+
+  const openSubInsDialog = () => {
+    setSubInsCompany(insurance?.insuranceCompany ?? "");
+    setSubInsPolicy(insurance?.policyNumber ?? "");
+    setSubInsGL(insurance?.generalLiabilityCoverage?.toString() ?? "");
+    setSubInsWC(insurance?.workersCompCoverage?.toString() ?? "");
+    setSubInsExpDate(insurance?.expirationDate ?? "");
+    setSubInsCertPath(insurance?.certificateObjectPath ?? null);
+    setSubInsDialogOpen(true);
+  };
+
+  const handleSubInsUploadCert = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadSubCert(file, `/insurance/${subcontractId}/`, file.name);
+      setSubInsCertPath(result.objectPath);
+      toast.success("Certificate uploaded — click Submit to save");
+    } catch { }
+  };
+
+  const handleSubInsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    setSubInsSaving(true);
+    try {
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/insurance/sub-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          insuranceCompany: subInsCompany.trim() || null,
+          policyNumber: subInsPolicy.trim() || null,
+          generalLiabilityCoverage: subInsGL ? parseFloat(subInsGL) : null,
+          workersCompCoverage: subInsWC ? parseFloat(subInsWC) : null,
+          expirationDate: subInsExpDate || null,
+          certificateObjectPath: subInsCertPath || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to submit insurance");
+      }
+      toast.success("Insurance certificate submitted to GC");
+      refetchInsurance();
+      invalidate();
+      setSubInsDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit insurance");
+    } finally {
+      setSubInsSaving(false);
+    }
+  };
+
+  const openSubLicDialog = () => {
+    setSubLicNumber(license?.licenseNumber ?? "");
+    setSubLicType(license?.licenseType ?? "");
+    setSubLicState(license?.issuingState ?? "");
+    setSubLicExpDate(license?.expirationDate ?? "");
+    setSubLicDialogOpen(true);
+  };
+
+  const handleSubLicSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    setSubLicSaving(true);
+    try {
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/license/sub-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          licenseNumber: subLicNumber.trim() || null,
+          licenseType: subLicType.trim() || null,
+          issuingState: subLicState.trim() || null,
+          expirationDate: subLicExpDate || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to submit license");
+      }
+      toast.success("Contractor license submitted to GC");
+      refetchLicense();
+      invalidate();
+      setSubLicDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit license");
+    } finally {
+      setSubLicSaving(false);
     }
   };
 
@@ -1687,12 +1800,17 @@ export default function SubcontractDetail() {
                 <Pencil className="h-3.5 w-3.5" /> {!insurance?.id ? "Add Insurance" : "Update"}
               </Button>
             )}
+            {!isGC && (
+              <Button size="sm" variant="outline" onClick={openSubInsDialog} className="gap-1.5 min-h-[36px]">
+                <Upload className="h-3.5 w-3.5" /> {!insurance?.id ? "Submit Certificate" : "Update Certificate"}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
           {!insurance?.id ? (
             <p className="text-sm text-muted-foreground">
-              {isGC ? "No insurance certificate on file. Click Update to add coverage details." : "No insurance certificate has been recorded yet. Contact the GC if you believe this is an error."}
+              {isGC ? "No insurance certificate on file. Click Update to add coverage details." : "No insurance certificate on file yet. Click \"Submit Certificate\" above to upload your certificate of insurance."}
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1783,13 +1901,18 @@ export default function SubcontractDetail() {
                 <Pencil className="h-3.5 w-3.5" /> {licStatus === "NO_LICENSE" ? "Add License" : "Update"}
               </Button>
             )}
+            {!isGC && (
+              <Button size="sm" variant="outline" onClick={openSubLicDialog} className="gap-1.5 min-h-[36px]">
+                <Upload className="h-3.5 w-3.5" /> {licStatus === "NO_LICENSE" ? "Submit License" : "Update License"}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
           {licStatus === "NO_LICENSE" ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                {isGC ? "No contractor license on file. Click Add License to record their license details." : "No contractor license has been recorded yet. Contact the GC if you believe this is an error."}
+                {isGC ? "No contractor license on file. Click Add License to record their license details." : "No contractor license on file yet. Click \"Submit License\" above to submit your contractor license details."}
               </p>
               {(sub as any).subLicenseNumber && (
                 <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
@@ -3460,6 +3583,105 @@ export default function SubcontractDetail() {
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* SUB INSURANCE SUBMIT DIALOG */}
+      <Dialog open={subInsDialogOpen} onOpenChange={setSubInsDialogOpen}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSubInsDialogOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b shrink-0">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" /> Submit Insurance Certificate
+              </h3>
+              <button onClick={() => setSubInsDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleSubInsSubmit} className="p-6 space-y-4 overflow-y-auto">
+              <p className="text-sm text-muted-foreground">Provide your current certificate of insurance details. The GC will be notified and can review the submission.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Insurance Company</label>
+                  <Input value={subInsCompany} onChange={e => setSubInsCompany(e.target.value)} placeholder="e.g. Acme Insurance Co." />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Policy Number</label>
+                  <Input value={subInsPolicy} onChange={e => setSubInsPolicy(e.target.value)} placeholder="e.g. POL-123456" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">General Liability Coverage ($)</label>
+                  <Input type="number" min="0" step="1000" value={subInsGL} onChange={e => setSubInsGL(e.target.value)} placeholder="e.g. 1000000" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Workers Comp Coverage ($)</label>
+                  <Input type="number" min="0" step="1000" value={subInsWC} onChange={e => setSubInsWC(e.target.value)} placeholder="e.g. 500000" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Certificate Expiration Date <span className="text-red-500">*</span></label>
+                  <Input type="date" required value={subInsExpDate} onChange={e => setSubInsExpDate(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">Certificate PDF (recommended)</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-dashed border-border hover:border-primary/60 transition-colors bg-muted/30 text-sm text-muted-foreground hover:text-primary">
+                    <Upload className="h-4 w-4" />
+                    {subCertUploading ? "Uploading…" : subInsCertPath ? "Replace Certificate" : "Upload Certificate PDF"}
+                    <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleSubInsUploadCert} disabled={subCertUploading} />
+                  </label>
+                  {subInsCertPath && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Certificate on file
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1" isLoading={subInsSaving} disabled={subCertUploading}>
+                  Submit to GC
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setSubInsDialogOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* SUB LICENSE SUBMIT DIALOG */}
+      <Dialog open={subLicDialogOpen} onOpenChange={setSubLicDialogOpen}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSubLicDialogOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <BadgeCheck className="h-5 w-5 text-primary" /> Submit Contractor License
+              </h3>
+              <button onClick={() => setSubLicDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleSubLicSubmit} className="p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">Provide your contractor license details. The GC will be notified and can verify the information.</p>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">License Number <span className="text-red-500">*</span></label>
+                <Input required value={subLicNumber} onChange={e => setSubLicNumber(e.target.value)} placeholder="e.g. LIC-789012" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">License Type</label>
+                <Input value={subLicType} onChange={e => setSubLicType(e.target.value)} placeholder="e.g. General Contractor, Electrical, Plumbing" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Issuing State</label>
+                <Input value={subLicState} onChange={e => setSubLicState(e.target.value)} placeholder="e.g. California" maxLength={50} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Expiration Date <span className="text-red-500">*</span></label>
+                <Input type="date" required value={subLicExpDate} onChange={e => setSubLicExpDate(e.target.value)} />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1" isLoading={subLicSaving}>
+                  Submit to GC
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setSubLicDialogOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
       </Dialog>
     </Layout>
   );

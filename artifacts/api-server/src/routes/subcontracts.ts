@@ -1504,6 +1504,106 @@ router.put("/:subcontractId/license", requireAuth, requireGC, async (req, res) =
   res.json({ ...lic, status });
 });
 
+// POST /:subcontractId/insurance/sub-submit — sub can submit their own insurance certificate
+router.post("/:subcontractId/insurance/sub-submit", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  if (user.role !== "SUB" || sc.subId !== user.id) {
+    res.status(403).json({ error: "Forbidden — only the assigned subcontractor can submit their own insurance" });
+    return;
+  }
+
+  const { insuranceCompany, policyNumber, generalLiabilityCoverage, workersCompCoverage, expirationDate, certificateObjectPath } = req.body;
+
+  const [existing] = await db.select().from(subcontractInsurancesTable).where(eq(subcontractInsurancesTable.subcontractId, subcontractId)).limit(1);
+
+  let ins;
+  if (existing) {
+    [ins] = await db.update(subcontractInsurancesTable).set({
+      insuranceCompany: insuranceCompany ?? null,
+      policyNumber: policyNumber ?? null,
+      generalLiabilityCoverage: generalLiabilityCoverage ?? null,
+      workersCompCoverage: workersCompCoverage ?? null,
+      expirationDate: expirationDate ?? null,
+      certificateObjectPath: certificateObjectPath ?? existing.certificateObjectPath,
+      updatedAt: new Date(),
+    }).where(eq(subcontractInsurancesTable.id, existing.id)).returning();
+  } else {
+    [ins] = await db.insert(subcontractInsurancesTable).values({
+      subcontractId,
+      insuranceCompany: insuranceCompany ?? null,
+      policyNumber: policyNumber ?? null,
+      generalLiabilityCoverage: generalLiabilityCoverage ?? null,
+      workersCompCoverage: workersCompCoverage ?? null,
+      expirationDate: expirationDate ?? null,
+      certificateObjectPath: certificateObjectPath ?? null,
+    }).returning();
+  }
+
+  await logActivity(
+    subcontractId,
+    "INSURANCE_UPDATED",
+    `Insurance certificate submitted by subcontractor — ${insuranceCompany ?? "N/A"} | Expires: ${expirationDate ?? "N/A"}`,
+    getActorName(user),
+    "SUB"
+  );
+
+  const status = calcInsuranceStatus(ins.expirationDate);
+  res.json({ ...ins, status });
+});
+
+// POST /:subcontractId/license/sub-submit — sub can submit their own contractor license
+router.post("/:subcontractId/license/sub-submit", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  if (user.role !== "SUB" || sc.subId !== user.id) {
+    res.status(403).json({ error: "Forbidden — only the assigned subcontractor can submit their own license" });
+    return;
+  }
+
+  const { licenseNumber, licenseType, issuingState, expirationDate } = req.body;
+
+  const [existing] = await db.select().from(contractorLicensesTable).where(eq(contractorLicensesTable.subcontractId, subcontractId)).limit(1);
+
+  let lic;
+  if (existing) {
+    [lic] = await db.update(contractorLicensesTable).set({
+      licenseNumber: licenseNumber ?? null,
+      licenseType: licenseType ?? null,
+      issuingState: issuingState ?? null,
+      expirationDate: expirationDate ?? null,
+      updatedAt: new Date(),
+    }).where(eq(contractorLicensesTable.id, existing.id)).returning();
+  } else {
+    [lic] = await db.insert(contractorLicensesTable).values({
+      subcontractId,
+      licenseNumber: licenseNumber ?? null,
+      licenseType: licenseType ?? null,
+      issuingState: issuingState ?? null,
+      expirationDate: expirationDate ?? null,
+    }).returning();
+  }
+
+  await logActivity(
+    subcontractId,
+    "LICENSE_UPDATED",
+    `Contractor license submitted by subcontractor — ${licenseNumber ?? "N/A"} | Type: ${licenseType ?? "N/A"} | Expires: ${expirationDate ?? "N/A"}`,
+    getActorName(user),
+    "SUB"
+  );
+
+  const status = calcLicenseStatus(lic.expirationDate);
+  res.json({ ...lic, status });
+});
+
 router.post("/:subcontractId/release-retention", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { subcontractId } = req.params;

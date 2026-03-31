@@ -10,7 +10,6 @@ import {
   makeR2Path,
   isR2Path,
   extractR2Key,
-  getPresignedGetUrl,
   uploadBufferToR2,
 } from "../lib/r2";
 
@@ -79,9 +78,9 @@ router.get("/r2/*path", async (req: Request, res: Response) => {
     }
 
     const key = extractR2Key(r2Path);
-    const filename = key.split("/").pop() ?? "download";
-    const signedUrl = await getPresignedGetUrl(key, filename);
-    res.redirect(307, signedUrl);
+    const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+    if (!publicBase) { res.status(500).json({ error: "R2 public URL not configured" }); return; }
+    res.redirect(307, `${publicBase}/${key}`);
   } catch (error) {
     console.error("Error serving R2 object:", error);
     res.status(500).json({ error: "Failed to serve file" });

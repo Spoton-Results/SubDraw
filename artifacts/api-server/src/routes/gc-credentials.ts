@@ -5,7 +5,7 @@ import { gcProjectCredentialsTable, projectsTable, projectMembersTable, usersTab
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
-import { isR2Path, deleteFromR2, extractR2Key, getPresignedGetUrl } from "../lib/r2.js";
+import { isR2Path, deleteFromR2, extractR2Key } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
@@ -201,8 +201,9 @@ router.get("/download/:docType", requireAuth, async (req, res) => {
 
     if (isR2Path(objectPath)) {
       const key = extractR2Key(objectPath);
-      const signedUrl = await getPresignedGetUrl(key, fileName);
-      res.redirect(307, signedUrl);
+      const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
+      if (!publicBase) { res.status(500).json({ error: "R2 public URL not configured" }); return; }
+      res.redirect(307, `${publicBase}/${key}`);
       return;
     }
 
