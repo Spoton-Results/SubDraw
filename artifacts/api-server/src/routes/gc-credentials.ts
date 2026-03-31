@@ -5,7 +5,7 @@ import { gcProjectCredentialsTable, projectsTable, projectMembersTable, usersTab
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
-import { isR2Path, deleteFromR2, extractR2Key } from "../lib/r2.js";
+import { isR2Path, deleteFromR2, extractR2Key, downloadBufferFromR2 } from "../lib/r2.js";
 
 const objectStorageService = new ObjectStorageService();
 const router = Router({ mergeParams: true });
@@ -201,9 +201,12 @@ router.get("/download/:docType", requireAuth, async (req, res) => {
 
     if (isR2Path(objectPath)) {
       const key = extractR2Key(objectPath);
-      const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
-      if (!publicBase) { res.status(500).json({ error: "R2 public URL not configured" }); return; }
-      res.redirect(307, `${publicBase}/${key}`);
+      const buffer = await downloadBufferFromR2(key);
+      const contentType = ext === "pdf" ? "application/pdf" : "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.setHeader("Content-Length", String(buffer.length));
+      res.end(buffer);
       return;
     }
 
