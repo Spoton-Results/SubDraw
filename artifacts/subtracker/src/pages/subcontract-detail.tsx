@@ -25,7 +25,7 @@ import {
   Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
   Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
-  ListChecks, SquareCheck, Download,
+  ListChecks, SquareCheck, Download, Send, Inbox,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useUpload } from "@workspace/object-storage-web";
@@ -168,6 +168,16 @@ export default function SubcontractDetail() {
   const [subLicExpDate, setSubLicExpDate] = React.useState("");
   const [subLicSaving, setSubLicSaving] = React.useState(false);
 
+  // Submittals state
+  const [submittalDialogOpen, setSubmittalDialogOpen] = React.useState(false);
+  const [submittalName, setSubmittalName] = React.useState("");
+  const [submittalOpeningMsg, setSubmittalOpeningMsg] = React.useState("");
+  const [submittalResponseDate, setSubmittalResponseDate] = React.useState("");
+  const [submittalDocPath, setSubmittalDocPath] = React.useState<string | null>(null);
+  const [submittalDocName, setSubmittalDocName] = React.useState<string | null>(null);
+  const [submittalSaving, setSubmittalSaving] = React.useState(false);
+  const [submittalFilter, setSubmittalFilter] = React.useState<"ALL" | "PENDING_REVIEW" | "IN_DISCUSSION" | "ACKNOWLEDGED" | "OVERDUE">("ALL");
+
   // Compliance state
   const [complianceUploadingId, setComplianceUploadingId] = React.useState<string | null>(null);
   const [complianceApprovingId, setComplianceApprovingId] = React.useState<string | null>(null);
@@ -257,6 +267,26 @@ export default function SubcontractDetail() {
   const complianceApprovedCount = complianceItems.filter(i => i.required && i.completion?.status === "APPROVED").length;
   const complianceRequiredCount = complianceItems.filter(i => i.required).length;
   const complianceFullyCompliant = complianceRequiredCount > 0 && complianceApprovedCount === complianceRequiredCount;
+
+  type SubmittalListItem = {
+    id: string; name: string; documentPath: string; documentName: string;
+    openingMessage: string | null; requiredResponseDate: string | null;
+    acknowledgedAt: string | null; acknowledgedByName: string | null;
+    status: "PENDING_REVIEW" | "IN_DISCUSSION" | "ACKNOWLEDGED" | "OVERDUE";
+    messageCount: number; lastMessagePreview: string | null; lastActivityAt: string; createdAt: string;
+  };
+
+  const { data: submittals = [], refetch: refetchSubmittals } = useQuery<SubmittalListItem[]>({
+    queryKey: ["submittals", subcontractId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL_SUB}/api/submittals/subcontracts/${subcontractId}/submittals`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!subcontractId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   type GcCredentialsSub = {
     gcCompanyName: string | null;
@@ -432,9 +462,60 @@ export default function SubcontractDetail() {
     onError: (err) => toast.error(err.message || "Certificate upload failed"),
   });
 
+  const { uploadFile: uploadSubmittalDoc, isUploading: submittalDocUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Document upload failed"),
+  });
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetSubcontractQueryKey(subcontractId) });
     queryClient.invalidateQueries({ queryKey: getGetSubcontractActivityQueryKey(subcontractId) });
+  };
+
+  const handleSubmittalDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const result = await uploadSubmittalDoc(file);
+    if (result?.objectPath) {
+      setSubmittalDocPath(result.objectPath);
+      setSubmittalDocName(file.name);
+    }
+    e.target.value = "";
+  };
+
+  const handleCreateSubmittal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submittalName.trim()) return toast.error("Submittal name is required");
+    if (!submittalDocPath || !submittalDocName) return toast.error("Please upload a document");
+    setSubmittalSaving(true);
+    try {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/submittals/subcontracts/${subcontractId}/submittals`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: submittalName.trim(),
+          documentPath: submittalDocPath,
+          documentName: submittalDocName,
+          openingMessage: submittalOpeningMsg.trim() || undefined,
+          requiredResponseDate: submittalResponseDate || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to create submittal");
+      }
+      toast.success("Submittal sent to subcontractor");
+      setSubmittalDialogOpen(false);
+      setSubmittalName(""); setSubmittalOpeningMsg(""); setSubmittalResponseDate("");
+      setSubmittalDocPath(null); setSubmittalDocName(null);
+      refetchSubmittals();
+      queryClient.invalidateQueries({ queryKey: getGetSubcontractActivityQueryKey(subcontractId) });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create submittal");
+    } finally {
+      setSubmittalSaving(false);
+    }
   };
 
   const handlePaymentTermsChange = async (newTerms: number) => {
@@ -3212,6 +3293,122 @@ export default function SubcontractDetail() {
         </CardContent>
       </Card>
 
+      {/* SUBMITTALS SECTION — visible during CONSTRUCTION phase */}
+      {projectStatus === "CONSTRUCTION" && (
+        <Card className="mb-8">
+          <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Inbox className="h-5 w-5 text-primary" /> Submittals
+              </CardTitle>
+              {submittals.length > 0 && (
+                <span className="text-xs text-muted-foreground font-normal">({submittals.length})</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Filter tabs */}
+              {submittals.length > 0 && (
+                <div className="hidden sm:flex items-center gap-1 text-xs">
+                  {(["ALL", "PENDING_REVIEW", "IN_DISCUSSION", "ACKNOWLEDGED", "OVERDUE"] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setSubmittalFilter(f)}
+                      className={cn(
+                        "px-2 py-1 rounded-md transition-colors",
+                        submittalFilter === f
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {f === "ALL" ? "All" : f === "PENDING_REVIEW" ? "Pending" : f === "IN_DISCUSSION" ? "In Discussion" : f === "ACKNOWLEDGED" ? "Acknowledged" : "Overdue"}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isGC && (
+                <Button size="sm" className="gap-1 min-h-[44px]" onClick={() => setSubmittalDialogOpen(true)}>
+                  <PlusCircle className="h-4 w-4" /> Upload Submittal
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {submittals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-center px-8">
+                <Inbox className="h-12 w-12 mb-3 opacity-20" />
+                <p className="font-medium">{isGC ? "No submittals sent yet." : "No submittals from the GC yet."}</p>
+                {isGC && <p className="text-sm mt-1">Upload a submittal to send a document to this subcontractor for review.</p>}
+              </div>
+            ) : (() => {
+              const filtered = submittalFilter === "ALL" ? submittals : submittals.filter(s => s.status === submittalFilter);
+              const getSubmittalStatusConfig = (status: string) => {
+                switch (status) {
+                  case "PENDING_REVIEW": return { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800" };
+                  case "IN_DISCUSSION": return { label: "In Discussion", className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800" };
+                  case "ACKNOWLEDGED": return { label: "Acknowledged", className: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" };
+                  case "OVERDUE": return { label: "Overdue", className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800" };
+                  default: return { label: status, className: "" };
+                }
+              };
+              return filtered.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">No submittals match this filter.</div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {filtered.map(s => {
+                    const sc = getSubmittalStatusConfig(s.status);
+                    return (
+                      <div key={s.id} className={cn(
+                        "p-4 hover:bg-muted/50 transition-colors",
+                        s.status === "OVERDUE" && "bg-red-50/30 dark:bg-red-950/10",
+                        (s.status === "PENDING_REVIEW" || s.status === "IN_DISCUSSION") && !isGC && "bg-amber-50/30 dark:bg-amber-950/10"
+                      )}>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <Badge variant="outline" className={cn("text-xs font-semibold", sc.className)}>{sc.label}</Badge>
+                              {s.requiredResponseDate && s.status !== "ACKNOWLEDGED" && (
+                                <span className={cn(
+                                  "flex items-center gap-1 text-xs",
+                                  s.status === "OVERDUE" ? "text-red-600 dark:text-red-400 font-semibold" : "text-muted-foreground"
+                                )}>
+                                  <CalendarDays className="h-3 w-3" /> Due {s.requiredResponseDate}
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-semibold text-foreground truncate">{s.name}</p>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-muted-foreground">{format(new Date(s.createdAt), "MMM d, yyyy")}</span>
+                              {s.messageCount > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <MessageSquare className="h-3 w-3" /> {s.messageCount} message{s.messageCount !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
+                            {s.lastMessagePreview && (
+                              <p className="text-xs text-muted-foreground mt-1 truncate italic">"{s.lastMessagePreview}"</p>
+                            )}
+                            {s.status === "ACKNOWLEDGED" && s.acknowledgedAt && (
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" /> Acknowledged {format(new Date(s.acknowledgedAt!), "MMM d, yyyy")}
+                              </p>
+                            )}
+                          </div>
+                          <Link href={`/submittals/${s.id}`}>
+                            <Button size="sm" variant="outline" className="shrink-0 min-h-[44px] gap-1.5">
+                              <ExternalLink className="h-3.5 w-3.5" /> View Thread
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
+
       {/* ACTIVITY LOG */}
       <Card className="mb-8">
         <CardHeader className="border-b pb-4">
@@ -3639,6 +3836,75 @@ export default function SubcontractDetail() {
                   Submit to GC
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setSubInsDialogOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* CREATE SUBMITTAL DIALOG — GC only */}
+      <Dialog open={submittalDialogOpen} onOpenChange={setSubmittalDialogOpen}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSubmittalDialogOpen(false)}>
+          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                <Inbox className="h-5 w-5 text-primary" /> Upload Submittal
+              </h3>
+              <button onClick={() => setSubmittalDialogOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={handleCreateSubmittal} className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Submittal Name <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  value={submittalName}
+                  onChange={e => setSubmittalName(e.target.value)}
+                  placeholder="e.g. Cabinet Color Selection"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Document <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-3">
+                  <label className={cn(
+                    "flex items-center gap-2 cursor-pointer px-3 py-2 rounded-lg border border-dashed border-border transition-colors bg-muted/30 text-sm text-muted-foreground hover:text-primary hover:border-primary/60",
+                    submittalDocUploading && "opacity-50 cursor-not-allowed"
+                  )}>
+                    <Upload className="h-4 w-4" />
+                    {submittalDocUploading ? "Uploading…" : submittalDocName ? "Replace Document" : "Upload PDF or Image"}
+                    <input type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx" className="hidden" onChange={handleSubmittalDocUpload} disabled={submittalDocUploading} />
+                  </label>
+                  {submittalDocName && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-semibold flex items-center gap-1 truncate max-w-[160px]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> {submittalDocName}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Opening Message to Sub <span className="font-normal text-muted-foreground">(optional)</span></label>
+                <Textarea
+                  value={submittalOpeningMsg}
+                  onChange={e => setSubmittalOpeningMsg(e.target.value)}
+                  placeholder="Please review and respond with your proposed materials before ordering."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Required Response Date <span className="font-normal text-muted-foreground">(optional)</span></label>
+                <input
+                  type="date"
+                  value={submittalResponseDate}
+                  onChange={e => setSubmittalResponseDate(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1 gap-1.5" isLoading={submittalSaving} disabled={submittalDocUploading || !submittalDocName}>
+                  <Send className="h-4 w-4" /> Send to Subcontractor
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setSubmittalDialogOpen(false)}>Cancel</Button>
               </div>
             </form>
           </div>

@@ -1055,3 +1055,85 @@ export async function sendAccountCancelledEmail(opts: {
   `);
   await send(opts.toEmail, "Your SubTracker subscription has been cancelled", html);
 }
+
+// ─── Submittal: GC sends a submittal to sub ────────────────────────────────────
+export async function sendSubmittalCreatedEmail(opts: {
+  toEmail: string;
+  submittalName: string;
+  projectName: string;
+  gcCompanyName: string;
+  openingMessage?: string | null;
+  requiredResponseDate?: string | null;
+  submittalUrl: string;
+}) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Project", value: opts.projectName },
+    { label: "From", value: opts.gcCompanyName },
+    { label: "Submittal", value: opts.submittalName },
+  ];
+  if (opts.requiredResponseDate) rows.push({ label: "Response Required By", value: opts.requiredResponseDate });
+  const html = layout(`
+    ${heading(`New Submittal from ${opts.gcCompanyName}`)}
+    ${subtext(`You have received a new submittal on <strong>${opts.projectName}</strong> that requires your review.`)}
+    ${infoBox(rows)}
+    ${opts.openingMessage ? `<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;font-size:14px;color:#374151;">${opts.openingMessage}</div>` : ""}
+    ${ctaButton("View & Respond", opts.submittalUrl)}
+  `);
+  await send(opts.toEmail, `New submittal: ${opts.submittalName} — review required`, html);
+}
+
+// ─── Submittal: someone replied ────────────────────────────────────────────────
+export async function sendSubmittalReplyEmail(opts: {
+  toEmail: string;
+  submittalName: string;
+  projectName: string;
+  senderName: string;
+  senderRole: "GC" | "SUB";
+  messagePreview?: string | null;
+  hasDocument: boolean;
+  submittalUrl: string;
+}) {
+  const roleLabel = opts.senderRole === "GC" ? "General Contractor" : "Subcontractor";
+  const whatHappened = opts.hasDocument && opts.messagePreview
+    ? "sent a message and uploaded a document"
+    : opts.hasDocument
+    ? "uploaded a document"
+    : "sent a message";
+  const html = layout(`
+    ${heading(`New Reply on "${opts.submittalName}"`)}
+    ${subtext(`<strong>${opts.senderName}</strong> (${roleLabel}) ${whatHappened} on the submittal for <strong>${opts.projectName}</strong>.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Submittal", value: opts.submittalName },
+      { label: "From", value: opts.senderName },
+    ])}
+    ${opts.messagePreview ? `<div style="margin:16px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;font-size:14px;color:#374151;">"${opts.messagePreview}"</div>` : ""}
+    ${ctaButton("View Thread", opts.submittalUrl)}
+  `);
+  await send(opts.toEmail, `New reply on submittal: ${opts.submittalName}`, html);
+}
+
+// ─── Submittal: sub formally acknowledged ─────────────────────────────────────
+export async function sendSubmittalAcknowledgedEmail(opts: {
+  toEmail: string;
+  submittalName: string;
+  projectName: string;
+  subCompanyName: string;
+  acknowledgmentMessage?: string | null;
+  acknowledgedAt: string;
+  submittalUrl: string;
+}) {
+  const html = layout(`
+    ${heading(`Submittal Acknowledged by ${opts.subCompanyName}`)}
+    ${subtext(`<strong>${opts.subCompanyName}</strong> has formally acknowledged the submittal on <strong>${opts.projectName}</strong>. This acknowledgment is permanently timestamped.`)}
+    ${infoBox([
+      { label: "Project", value: opts.projectName },
+      { label: "Submittal", value: opts.submittalName },
+      { label: "Acknowledged By", value: opts.subCompanyName },
+      { label: "Acknowledged At", value: new Date(opts.acknowledgedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }) },
+    ])}
+    ${opts.acknowledgmentMessage ? `<div style="margin:16px 0;padding:12px 16px;background:#f0fdf4;border-left:3px solid #22c55e;border-radius:6px;font-size:14px;color:#374151;">"${opts.acknowledgmentMessage}"</div>` : ""}
+    ${ctaButton("View Submittal", opts.submittalUrl)}
+  `);
+  await send(opts.toEmail, `Submittal acknowledged: ${opts.submittalName}`, html);
+}

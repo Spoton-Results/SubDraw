@@ -20,6 +20,7 @@ import scopeTemplatesRouter from "./scope-templates.js";
 import aiAnalysisRouter from "./ai-analysis.js";
 import notificationsRouter from "./notifications.js";
 import adminRouter from "./admin.js";
+import submittalsRouter from "./submittals.js";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use("/stripe", stripeRouter);
 router.use("/team", teamRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/admin", adminRouter);
+router.use("/submittals", submittalsRouter);
 
 export default router;

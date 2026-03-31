@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable, submittalsTable, submittalMessagesTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -347,14 +347,15 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
   const scIds = subcontracts.map(sc => sc.id);
   const scMap = Object.fromEntries(subcontracts.map(sc => [sc.id, sc]));
 
-  // 3. Batch-fetch invoices, change orders, insurances, sub users
-  const [allInvoices, allCOs, allInsurances, subUsers] = await Promise.all([
+  // 3. Batch-fetch invoices, change orders, insurances, sub users, submittals
+  const [allInvoices, allCOs, allInsurances, subUsers, allSubmittals] = await Promise.all([
     db.select().from(invoicesTable).where(inArray(invoicesTable.subcontractId, scIds)),
     db.select().from(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, scIds)),
     db.select().from(subcontractInsurancesTable).where(inArray(subcontractInsurancesTable.subcontractId, scIds)),
     db.select({ id: usersTable.id, companyName: usersTable.companyName })
       .from(usersTable)
       .where(inArray(usersTable.id, [...new Set(subcontracts.map(sc => sc.subId))])),
+    db.select().from(submittalsTable).where(and(inArray(submittalsTable.subcontractId, scIds), isNull(submittalsTable.acknowledgedAt))),
   ]);
 
   const subUserMap = Object.fromEntries(subUsers.map(u => [u.id, u.companyName ?? "Unknown"]));
@@ -584,6 +585,31 @@ router.get("/gc/action-items", requireAuth, requireGC, async (req, res) => {
       description,
       amount: co.amount,
       href: `/subcontracts/${sc.id}`,
+    });
+  }
+
+  // URGENT: Overdue submittals (required response date passed, not acknowledged)
+  for (const submittal of allSubmittals) {
+    if (!submittal.requiredResponseDate) continue;
+    const due = new Date(submittal.requiredResponseDate);
+    due.setHours(23, 59, 59, 999);
+    if (due >= now) continue;
+    const sc = scMap[submittal.subcontractId];
+    if (!sc) continue;
+    const project = projectMap[sc.projectId];
+    if (!project) continue;
+    const subName = subUserMap[sc.subId] ?? "Unknown";
+    const daysOverdue = Math.ceil((now.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+    items.push({
+      id: `submittal-overdue-${submittal.id}`,
+      type: "OVERDUE_SUBMITTAL",
+      urgency: "URGENT",
+      projectId: project.id,
+      projectName: project.name,
+      subcontractId: sc.id,
+      subCompanyName: subName,
+      description: `Submittal "${submittal.name}" for ${subName} is ${daysOverdue} day${daysOverdue !== 1 ? "s" : ""} overdue — sub has not acknowledged`,
+      href: `/submittals/${submittal.id}`,
     });
   }
 

@@ -30,6 +30,7 @@ import Team from "./pages/team";
 import BidComparison from "./pages/bid-comparison";
 import AdminLogin from "./pages/admin-login";
 import AdminDashboard from "./pages/admin-dashboard";
+import SubmittalDetail from "./pages/submittal-detail";
 import { PausedScreen } from "./components/paused-screen";
 
 export const queryClient = new QueryClient({
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/projects/:id/bid-comparison" component={() => <ProtectedRoute component={BidComparison} gcOnly />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
+      <Route path="/submittals/:id" component={() => <ProtectedRoute component={SubmittalDetail} />} />
       <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
       <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} ownerOnly />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} ownerOnly />} />

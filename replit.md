@@ -24,6 +24,7 @@ The project is built as a pnpm monorepo using Node.js 24 and TypeScript 5.9. The
 -   **Project Owner & CO Notification System:** Allows GCs to add project owners who receive notifications for change orders exceeding a set threshold, with options to approve or reject via secure links.
 -   **Contact Book Bulk Import:** GCs can import subcontractor contacts via CSV or manual entry, with duplicate detection.
 -   **Compliance Management:** Features for additional insurance requirements, contractor license tracking, and a project-level compliance checklist for subcontractors.
+-   **Submittals:** GCs can send documents to specific subcontractors for review, discussion, and formal acknowledgment during the CONSTRUCTION phase. Each submittal has its own threaded conversation with file uploads from both parties, statuses (PENDING_REVIEW, IN_DISCUSSION, ACKNOWLEDGED, OVERDUE), a required response date, and a permanent acknowledgment timestamp. Overdue submittals appear in the GC Action Required dashboard. Subs see all their submittals in a dedicated dashboard section.
 -   **Communication:** A per-subcontract messaging system with read-tracking and email notifications.
 -   **GC Credentials:** GCs can upload their insurance certificates and contractor licenses, which are visible to subcontractors and include expiry tracking and notifications.
 -   **AI Bid Intelligence:** GCs can leverage AI (Claude) to analyze plan files and generate trade-by-trade bid range benchmarks, enhancing bid comparison without exposing AI data to subcontractors.

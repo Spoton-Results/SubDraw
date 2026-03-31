@@ -154,6 +154,37 @@ export const insertSubcontractInsuranceSchema = createInsertSchema(subcontractIn
 export type InsertSubcontractInsurance = z.infer<typeof insertSubcontractInsuranceSchema>;
 export type SubcontractInsurance = typeof subcontractInsurancesTable.$inferSelect;
 
+export const submittalsTable = pgTable("submittals", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  name: text("name").notNull(),
+  documentPath: text("document_path").notNull(),
+  documentName: text("document_name").notNull(),
+  openingMessage: text("opening_message"),
+  requiredResponseDate: text("required_response_date"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  acknowledgedByName: text("acknowledged_by_name"),
+  acknowledgmentMessage: text("acknowledgment_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Submittal = typeof submittalsTable.$inferSelect;
+
+export const submittalMessagesTable = pgTable("submittal_messages", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  submittalId: text("submittal_id").notNull().references(() => submittalsTable.id),
+  senderId: text("sender_id").notNull().references(() => usersTable.id),
+  senderName: text("sender_name").notNull(),
+  senderRole: text("sender_role").notNull(), // GC | SUB
+  message: text("message"),
+  documentPath: text("document_path"),
+  documentName: text("document_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type SubmittalMessage = typeof submittalMessagesTable.$inferSelect;
+
 export const insertSubcontractSchema = createInsertSchema(subcontractsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSubcontract = z.infer<typeof insertSubcontractSchema>;
 export type Subcontract = typeof subcontractsTable.$inferSelect;

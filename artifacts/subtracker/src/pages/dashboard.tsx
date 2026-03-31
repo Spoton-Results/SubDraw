@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail, Inbox, MessageSquare } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -77,6 +77,7 @@ function getItemIcon(type: string) {
     case "UNSIGNED_CONTRACT":  return <PenLine className="h-4 w-4 shrink-0" />;
     case "INSURANCE_EXPIRING": return <Shield className="h-4 w-4 shrink-0" />;
     case "PROJECTED_OVERRUN":  return <AlertTriangle className="h-4 w-4 shrink-0" />;
+    case "OVERDUE_SUBMITTAL":  return <Inbox className="h-4 w-4 shrink-0" />;
     default:                   return <AlertTriangle className="h-4 w-4 shrink-0" />;
   }
 }
@@ -223,6 +224,25 @@ export default function Dashboard() {
     },
     enabled: !isGC,
     refetchInterval: 60_000,
+  });
+
+  type SubSubmittal = {
+    id: string; name: string; projectName: string; gcCompanyName: string;
+    openingMessage: string | null; requiredResponseDate: string | null;
+    status: "PENDING_REVIEW" | "IN_DISCUSSION" | "ACKNOWLEDGED" | "OVERDUE";
+    messageCount: number; lastMessagePreview: string | null; createdAt: string;
+  };
+
+  const { data: subSubmittals = [] } = useQuery<SubSubmittal[]>({
+    queryKey: ["sub-submittals-dashboard"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_DASH}/api/submittals/sub-all`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !isGC,
+    staleTime: 30_000,
+    refetchOnMount: "always",
   });
 
   usePageTitle("Projects");
@@ -786,6 +806,82 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* SUB: Submittals Dashboard Section */}
+      {!isGC && subSubmittals.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-primary/10 rounded-xl p-2">
+              <Inbox className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold font-display text-foreground">Submittals</h2>
+              <p className="text-sm text-muted-foreground">Documents sent by the GC for your review, response, and acknowledgment.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {subSubmittals.map(s => {
+              const isActionRequired = s.status === "PENDING_REVIEW" || s.status === "OVERDUE";
+              const isNew = s.messageCount === 0 && s.status === "PENDING_REVIEW";
+              const statusConfig = {
+                PENDING_REVIEW: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800" },
+                IN_DISCUSSION: { label: "In Discussion", className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800" },
+                ACKNOWLEDGED: { label: "Acknowledged", className: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" },
+                OVERDUE: { label: "Overdue", className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800" },
+              }[s.status];
+              return (
+                <div key={s.id} className={cn(
+                  "rounded-2xl border-2 p-4",
+                  s.status === "OVERDUE" && "border-red-400 bg-red-50 dark:bg-red-950/20",
+                  s.status === "PENDING_REVIEW" && "border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20",
+                  s.status === "IN_DISCUSSION" && "border-blue-200 bg-blue-50/40 dark:bg-blue-950/10 dark:border-blue-800",
+                  s.status === "ACKNOWLEDGED" && "border-border bg-card",
+                )}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <Badge variant="outline" className={cn("text-xs font-semibold", statusConfig.className)}>{statusConfig.label}</Badge>
+                        {isNew && (
+                          <Badge className="text-xs bg-primary text-primary-foreground">NEW</Badge>
+                        )}
+                        {isActionRequired && !isNew && (
+                          <Badge variant="outline" className="text-xs bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700">Action Required</Badge>
+                        )}
+                      </div>
+                      <p className="font-semibold text-foreground truncate">{s.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{s.projectName}</span>
+                        <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{s.gcCompanyName}</span>
+                        {s.requiredResponseDate && (
+                          <span className={cn(
+                            "flex items-center gap-1",
+                            s.status === "OVERDUE" ? "text-red-600 dark:text-red-400 font-semibold" : ""
+                          )}>
+                            <CalendarDays className="h-3.5 w-3.5" /> Due {s.requiredResponseDate}
+                          </span>
+                        )}
+                        {s.messageCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="h-3.5 w-3.5" /> {s.messageCount} message{s.messageCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                      {s.openingMessage && (
+                        <p className="text-xs text-muted-foreground mt-1.5 italic truncate max-w-md">"{s.openingMessage}"</p>
+                      )}
+                    </div>
+                    <Link href={`/submittals/${s.id}`}>
+                      <Button size="sm" variant={isActionRequired ? "default" : "outline"} className="gap-1.5 min-h-[44px] shrink-0">
+                        <ExternalLink className="h-4 w-4" /> View &amp; Respond
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
