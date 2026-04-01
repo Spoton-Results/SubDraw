@@ -1,15 +1,15 @@
 import * as React from "react";
 import { startCheckout, formatPlanPrice } from "@/lib/stripe";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket, HardHat, LogOut } from "lucide-react";
+import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket, HardHat, LogOut, Building2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 const PLANS = [
   {
     name: "SubTracker Starter" as const,
     label: "Starter",
-    monthlyUsd: 39900,
-    limit: 5,
+    monthlyUsd: 19900,
+    limit: 10 as number | null,
     icon: Zap,
     color: "border-blue-200",
     headerColor: "text-blue-700",
@@ -18,8 +18,8 @@ const PLANS = [
   {
     name: "SubTracker Growth" as const,
     label: "Growth",
-    monthlyUsd: 59900,
-    limit: 20,
+    monthlyUsd: 29900,
+    limit: 20 as number | null,
     icon: TrendingUp,
     color: "border-primary ring-2 ring-primary",
     headerColor: "text-primary",
@@ -29,11 +29,21 @@ const PLANS = [
   {
     name: "SubTracker Scale" as const,
     label: "Scale",
-    monthlyUsd: 79900,
-    limit: 30,
+    monthlyUsd: 39900,
+    limit: 40 as number | null,
     icon: Rocket,
     color: "border-violet-200",
     headerColor: "text-violet-700",
+    buttonVariant: "outline" as const,
+  },
+  {
+    name: "SubTracker Enterprise" as const,
+    label: "Enterprise",
+    monthlyUsd: 69900,
+    limit: null as number | null,
+    icon: Building2,
+    color: "border-border",
+    headerColor: "text-foreground",
     buttonVariant: "outline" as const,
   },
 ];
@@ -88,7 +98,7 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
 
       {/* Content */}
       <div className="flex-1 flex items-start justify-center px-4 pt-10 pb-16">
-        <div className="max-w-3xl w-full">
+        <div className="max-w-4xl w-full">
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 text-sm font-semibold px-4 py-1.5 rounded-full mb-4">
               <Zap className="h-4 w-4" />
@@ -103,7 +113,7 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
           </div>
 
           {/* Plan cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             {PLANS.map((plan) => {
               const Icon = plan.icon;
               const isLoading = loadingPlan === plan.name;
@@ -129,7 +139,9 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
                     </div>
                     <div className="text-xs text-muted-foreground">/month</div>
                   </div>
-                  <div className="text-sm text-muted-foreground">Up to {plan.limit} active projects</div>
+                  <div className="text-sm text-muted-foreground">
+                    {plan.limit === null ? "Unlimited subcontracts" : `Up to ${plan.limit} active subcontracts`}
+                  </div>
                   <Button
                     variant={plan.buttonVariant}
                     className="w-full mt-auto"
