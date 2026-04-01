@@ -3,7 +3,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { startCheckout, formatPlanPrice } from "@/lib/stripe";
 import toast from "react-hot-toast";
-import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket } from "lucide-react";
+import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket, Building2 } from "lucide-react";
 
 interface PaywallModalProps {
   open: boolean;
@@ -18,8 +18,8 @@ const PLANS = [
   {
     name: "SubTracker Starter" as const,
     label: "Starter",
-    monthlyUsd: 39900,
-    limit: 5,
+    monthlyUsd: 19900,
+    limit: 10,
     icon: Zap,
     color: "border-blue-200 bg-blue-50/50",
     headerColor: "text-blue-700",
@@ -29,7 +29,7 @@ const PLANS = [
   {
     name: "SubTracker Growth" as const,
     label: "Growth",
-    monthlyUsd: 59900,
+    monthlyUsd: 29900,
     limit: 20,
     icon: TrendingUp,
     color: "border-primary bg-primary/5 ring-2 ring-primary",
@@ -41,12 +41,23 @@ const PLANS = [
   {
     name: "SubTracker Scale" as const,
     label: "Scale",
-    monthlyUsd: 79900,
-    limit: 30,
+    monthlyUsd: 39900,
+    limit: 40,
     icon: Rocket,
     color: "border-violet-200 bg-violet-50/50",
     headerColor: "text-violet-700",
     badgeColor: "bg-violet-100 text-violet-700",
+    buttonVariant: "outline" as const,
+  },
+  {
+    name: "SubTracker Enterprise" as const,
+    label: "Enterprise",
+    monthlyUsd: 69900,
+    limit: null,
+    icon: Building2,
+    color: "border-border bg-muted/30",
+    headerColor: "text-foreground",
+    badgeColor: "bg-muted text-muted-foreground",
     buttonVariant: "outline" as const,
   },
 ];
@@ -82,7 +93,7 @@ export function PaywallModal({ open, onOpenChange, limitMessage, suggestedPlanNa
       description={limitMessage || "Your first project is free. Select a plan to manage more projects."}
     >
       <div className="space-y-4 mt-2">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {PLANS.map((plan) => {
             const Icon = plan.icon;
             const isLoading = loadingPlan === plan.name;
@@ -110,7 +121,7 @@ export function PaywallModal({ open, onOpenChange, limitMessage, suggestedPlanNa
                   <div className="text-xs text-muted-foreground">/month</div>
                 </div>
                 <div className={`text-xs font-semibold px-2 py-1 rounded-lg mb-3 text-center ${plan.badgeColor}`}>
-                  Up to {plan.limit} active projects
+                  {plan.limit === null ? "Unlimited subcontracts" : `Up to ${plan.limit} active subcontracts`}
                 </div>
                 <Button
                   size="sm"
