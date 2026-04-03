@@ -10,6 +10,7 @@ import {
   ownerCoNotificationsTable, planFilesTable, projectMembersTable,
   tradeScopesTable, scopeTemplatesTable, gcContactsTable, subProfilesTable,
   demoClicksTable, pageViewsTable,
+  submittalsTable, submittalMessagesTable,
 } from "@workspace/db/schema";
 import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
 import {
@@ -450,11 +451,20 @@ router.delete("/gc/:userId", requireAdmin, async (req, res) => {
       subcontractIds = subs.map(s => s.id);
     }
 
-    // Step 1: Delete subcontract-level children (all NO ACTION FK → subcontracts)
+    // Step 1: Delete subcontract-level children (order matters — must delete FK dependents first)
     if (subcontractIds.length > 0) {
+      // submittal_messages → submittals → subcontracts (must delete messages before submittals)
+      const submittalRows = await db.select({ id: submittalsTable.id }).from(submittalsTable)
+        .where(inArray(submittalsTable.subcontractId, subcontractIds));
+      if (submittalRows.length > 0) {
+        const submittalIds = submittalRows.map(s => s.id);
+        await db.delete(submittalMessagesTable).where(inArray(submittalMessagesTable.submittalId, submittalIds));
+      }
+      await db.delete(submittalsTable).where(inArray(submittalsTable.subcontractId, subcontractIds));
+      // lien_waivers.invoice_id → invoices.id (must delete lien waivers before invoices)
+      await db.delete(lienWaiversTable).where(inArray(lienWaiversTable.subcontractId, subcontractIds));
       await db.delete(invoicesTable).where(inArray(invoicesTable.subcontractId, subcontractIds));
       await db.delete(changeOrdersTable).where(inArray(changeOrdersTable.subcontractId, subcontractIds));
-      await db.delete(lienWaiversTable).where(inArray(lienWaiversTable.subcontractId, subcontractIds));
       await db.delete(activityLogsTable).where(inArray(activityLogsTable.subcontractId, subcontractIds));
       await db.delete(subcontractCommentsTable).where(inArray(subcontractCommentsTable.subcontractId, subcontractIds));
       await db.delete(subcontractCommentReadsTable).where(inArray(subcontractCommentReadsTable.subcontractId, subcontractIds));

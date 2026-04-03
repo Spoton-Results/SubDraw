@@ -22,6 +22,8 @@ import {
   subcontractCommentsTable,
   subcontractCommentReadsTable,
   contractorLicensesTable,
+  submittalsTable,
+  submittalMessagesTable,
 } from "@workspace/db/schema";
 import { hashPassword } from "./auth.js";
 import { eq, inArray } from "drizzle-orm";
@@ -78,6 +80,14 @@ async function wipeDemoData(gcId: string) {
 
   if (scs.length > 0) {
     const scIds = scs.map((s) => s.id);
+    // Delete submittal messages before submittals (FK chain: messages → submittals → subcontracts)
+    const submittalRows = await db.select({ id: submittalsTable.id }).from(submittalsTable)
+      .where(inArray(submittalsTable.subcontractId, scIds));
+    if (submittalRows.length > 0) {
+      await db.delete(submittalMessagesTable).where(inArray(submittalMessagesTable.submittalId, submittalRows.map(s => s.id)));
+    }
+    await db.delete(submittalsTable).where(inArray(submittalsTable.subcontractId, scIds));
+    // lien_waivers.invoice_id → invoices.id: delete lien waivers before invoices
     await db.delete(lienWaiversTable).where(inArray(lienWaiversTable.subcontractId, scIds));
     await db.delete(activityLogsTable).where(inArray(activityLogsTable.subcontractId, scIds));
     await db.delete(invoicesTable).where(inArray(invoicesTable.subcontractId, scIds));

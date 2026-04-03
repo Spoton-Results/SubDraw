@@ -167,7 +167,7 @@ export default function AdminDashboard() {
     if (tab === "accounts" && accounts.length === 0) loadAccounts();
     if (tab === "revenue" && !revenueData) loadRevenue();
     if (tab === "trials" && trials.length === 0) loadTrials();
-    if (tab === "activity" && activity.length === 0) loadActivity();
+    if (tab === "activity" && activity === null) loadActivity();
     if (tab === "audit" && auditLogs.length === 0) loadAuditLogs();
   }, [tab, authChecking]);
 
