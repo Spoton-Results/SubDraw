@@ -9,6 +9,7 @@ import {
   bidsTable, drawScheduleItemsTable, gcProjectAssignmentsTable,
   ownerCoNotificationsTable, planFilesTable, projectMembersTable,
   tradeScopesTable, scopeTemplatesTable, gcContactsTable, subProfilesTable,
+  demoClicksTable, pageViewsTable,
 } from "@workspace/db/schema";
 import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
 import {
@@ -725,11 +726,89 @@ router.get("/trials", requireAdmin, async (req, res) => {
 
 // ── Activity Feed ─────────────────────────────────────────────────────────────
 
+const ACTION_LABEL: Record<string, string> = {
+  BID_SUBMITTED: "Bid Submitted",
+  BID_ACCEPTED: "Bid Accepted",
+  BID_DECLINED: "Bid Declined",
+  CONTRACT_UPLOADED: "Contract Uploaded",
+  CONTRACT_SIGNED: "Contract Signed",
+  INVOICE_SUBMITTED: "Invoice Submitted",
+  INVOICE_APPROVED: "Invoice Approved",
+  INVOICE_REJECTED: "Invoice Rejected",
+  INVOICE_FLAGGED: "Invoice Flagged",
+  CHANGE_ORDER_CREATED: "Change Order Created",
+  CHANGE_ORDER_APPROVED: "Change Order Approved",
+  CHANGE_ORDER_REJECTED: "Change Order Rejected",
+  CHANGE_ORDER_REQUEST_SUBMITTED: "CO Request Submitted",
+  CHANGE_ORDER_REQUEST_APPROVED: "CO Request Approved",
+  CHANGE_ORDER_REQUEST_REJECTED: "CO Request Rejected",
+  PAYMENT_RECORDED: "Payment Recorded",
+  PAYMENT_CONFIRMED: "Payment Confirmed",
+  PAYMENT_DISPUTED: "Payment Disputed",
+  LIEN_WAIVER_GENERATED: "Lien Waiver Generated",
+  LIEN_WAIVER_SIGNED: "Lien Waiver Signed",
+  PLAN_FILE_UPLOADED: "Plan File Uploaded",
+  SCOPE_DOC_UPLOADED: "Scope Doc Uploaded",
+  COMPLIANCE_COMPLETED: "Compliance Completed",
+  COMPLIANCE_WAIVED: "Compliance Waived",
+  COMPLIANCE_UNWAIVED: "Compliance Unwaived",
+  SUBMITTAL_CREATED: "Submittal Created",
+  SUBMITTAL_MESSAGE_SENT: "Submittal Message Sent",
+  SUBMITTAL_ACKNOWLEDGED: "Submittal Acknowledged",
+  SUBCONTRACT_CREATED: "Subcontract Created",
+  SUBCONTRACT_SIGNED: "Subcontract Signed",
+  PAYMENT_TERMS_UPDATED: "Payment Terms Updated",
+  INSURANCE_UPDATED: "Insurance Updated",
+  INVOICE_PAYMENT_CONFIRMED: "Payment Confirmed",
+  INVOICE_PAYMENT_UNCONFIRMED: "Payment Unconfirmed",
+  DRAW_ITEM_SUBMITTED: "Draw Item Submitted",
+  DRAW_ITEM_APPROVED: "Draw Item Approved",
+  DRAW_ITEM_REJECTED: "Draw Item Rejected",
+  NOTICE_SENT: "Notice Sent",
+  PROJECT_COMPLETED: "Project Completed",
+  PROJECT_CREATED: "Project Created",
+};
+
+const FILTER_PREFIXES: Record<string, string[]> = {
+  invoices: ["INVOICE"],
+  changeorders: ["CHANGE_ORDER"],
+  payments: ["PAYMENT"],
+  lienWaivers: ["LIEN_WAIVER"],
+  submittals: ["SUBMITTAL"],
+  bids: ["BID"],
+  contracts: ["CONTRACT", "PLAN_FILE", "SCOPE_DOC"],
+  compliance: ["COMPLIANCE"],
+};
+
 router.get("/activity", requireAdmin, async (req, res) => {
+  const { filter, page = "1" } = req.query as { filter?: string; page?: string };
+  const pageSize = 25;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+
   const logs = await db.select().from(activityLogsTable)
     .orderBy(desc(activityLogsTable.createdAt))
-    .limit(500);
-  res.json(logs);
+    .limit(2000);
+
+  let filtered = logs;
+  if (filter && FILTER_PREFIXES[filter]) {
+    const prefixes = FILTER_PREFIXES[filter];
+    filtered = logs.filter(l => prefixes.some(p => l.type.startsWith(p)));
+  }
+
+  const total = filtered.length;
+  const slice = filtered.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+
+  const items = slice.map(l => ({
+    id: l.id,
+    action: ACTION_LABEL[l.type] ?? l.type.replace(/_/g, " "),
+    entity: l.description,
+    actor: l.actorName,
+    actorRole: l.actorRole,
+    createdAt: l.createdAt,
+    type: l.type,
+  }));
+
+  res.json({ items, total, page: pageNum, pageSize });
 });
 
 // ── Impersonation Audit Log ───────────────────────────────────────────────────
@@ -1131,21 +1210,59 @@ router.get("/demo/stats", requireAdmin, async (req, res) => {
     .where(and(eq(usersTable.isDemo, true), eq(usersTable.role, "SUB")))
     .limit(1);
 
-  // Total real signups (non-demo)
   const now = new Date();
   const cutoff7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+  // Real signups (non-demo GC owners)
   const signups7dResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL AND created_at > ${cutoff7d}`);
   const signups7d = parseInt((signups7dResult.rows[0] as any)?.c ?? "0", 10);
   const signups30dResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL AND created_at > ${cutoff30d}`);
   const signups30d = parseInt((signups30dResult.rows[0] as any)?.c ?? "0", 10);
+
+  // Demo click counts
+  const gcClicks7dResult = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'GC_DEMO' AND created_at > ${cutoff7d}`);
+  const gcClicks7d = parseInt((gcClicks7dResult.rows[0] as any)?.c ?? "0", 10);
+  const gcClicks30dResult = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'GC_DEMO' AND created_at > ${cutoff30d}`);
+  const gcClicks30d = parseInt((gcClicks30dResult.rows[0] as any)?.c ?? "0", 10);
+  const subClicks7dResult = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'SUB_DEMO' AND created_at > ${cutoff7d}`);
+  const subClicks7d = parseInt((subClicks7dResult.rows[0] as any)?.c ?? "0", 10);
+  const subClicks30dResult = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'SUB_DEMO' AND created_at > ${cutoff30d}`);
+  const subClicks30d = parseInt((subClicks30dResult.rows[0] as any)?.c ?? "0", 10);
+  const totalClicks30d = gcClicks30d + subClicks30d;
+  const conversionRate = totalClicks30d > 0 ? Math.round((signups30d / totalClicks30d) * 1000) / 10 : null;
+
+  // Recent demo sessions (last 30)
+  const recentSessionsResult = await db.execute(sql`SELECT id, event_type, ip_address, created_at FROM demo_clicks ORDER BY created_at DESC LIMIT 30`);
+  const recentSessions = recentSessionsResult.rows.map((r: any) => ({
+    id: r.id,
+    eventType: r.event_type,
+    ipAddress: r.ip_address,
+    createdAt: r.created_at,
+  }));
+
+  // Page view stats (last 7 days)
+  const pageViews7dResult = await db.execute(sql`SELECT COUNT(*) as c FROM page_views WHERE created_at > ${cutoff7d}`);
+  const pageViews7d = parseInt((pageViews7dResult.rows[0] as any)?.c ?? "0", 10);
+  const uniqueIps7dResult = await db.execute(sql`SELECT COUNT(DISTINCT path) as c FROM page_views WHERE created_at > ${cutoff7d}`);
+  const uniquePaths7d = parseInt((uniqueIps7dResult.rows[0] as any)?.c ?? "0", 10);
+  const topPagesResult = await db.execute(sql`SELECT path, COUNT(*) as views FROM page_views WHERE created_at > ${cutoff7d} GROUP BY path ORDER BY views DESC LIMIT 10`);
+  const topPages = topPagesResult.rows.map((r: any) => ({ path: r.path, views: parseInt(r.views, 10) }));
 
   res.json({
     gcDemoExists: !!gcDemoUser,
     subDemoExists: !!subDemoUser,
     signups7d,
     signups30d,
+    gcClicks7d,
+    gcClicks30d,
+    subClicks7d,
+    subClicks30d,
+    conversionRate,
+    recentSessions,
+    pageViews7d,
+    uniquePaths7d,
+    topPages,
   });
 });
 

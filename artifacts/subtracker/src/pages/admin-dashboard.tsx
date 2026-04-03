@@ -115,7 +115,9 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = React.useState<Metrics | null>(null);
   const [accounts, setAccounts] = React.useState<GCAccount[]>([]);
   const [trials, setTrials] = React.useState<TrialAccount[]>([]);
-  const [activity, setActivity] = React.useState<any[]>([]);
+  const [activity, setActivity] = React.useState<{ items: any[]; total: number; page: number; pageSize: number } | null>(null);
+  const [activityFilter, setActivityFilter] = React.useState<string>("all");
+  const [activityPage, setActivityPage] = React.useState(1);
   const [auditLogs, setAuditLogs] = React.useState<ImpersonationLog[]>([]);
   const [revenueData, setRevenueData] = React.useState<any>(null);
 
@@ -202,13 +204,16 @@ export default function AdminDashboard() {
     } finally { setTrialsLoading(false); }
   };
 
-  const loadActivity = async () => {
+  const loadActivity = React.useCallback(async (filter = activityFilter, page = activityPage) => {
     setActivityLoading(true);
     try {
-      const r = await api("/activity");
+      const params = new URLSearchParams({ page: String(page) });
+      if (filter !== "all") params.set("filter", filter);
+      const r = await api(`/activity?${params}`);
       if (r.ok) setActivity(await r.json());
     } finally { setActivityLoading(false); }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadAuditLogs = async () => {
     setAuditLoading(true);
@@ -817,44 +822,109 @@ export default function AdminDashboard() {
         {/* ── Activity Tab ── */}
         {tab === "activity" && (
           <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h1 className="text-xl font-bold">Platform Activity</h1>
-              <button onClick={() => { setActivity([]); loadActivity(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <button onClick={() => { setActivity(null); setActivityPage(1); loadActivity(activityFilter, 1); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
+            </div>
+            {/* Filter row */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {[
+                { key: "all", label: "All" },
+                { key: "invoices", label: "Invoices" },
+                { key: "changeorders", label: "Change Orders" },
+                { key: "payments", label: "Payments" },
+                { key: "submittals", label: "Submittals" },
+                { key: "bids", label: "Bids" },
+                { key: "contracts", label: "Contracts" },
+                { key: "compliance", label: "Compliance" },
+                { key: "lienWaivers", label: "Lien Waivers" },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => {
+                    setActivityFilter(f.key);
+                    setActivityPage(1);
+                    loadActivity(f.key, 1);
+                  }}
+                  className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                    activityFilter === f.key
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
             {activityLoading ? (
               <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground text-xs">
-                      <th className="text-left px-4 py-3 font-medium">Action</th>
-                      <th className="text-left px-4 py-3 font-medium">Entity</th>
-                      <th className="text-left px-4 py-3 font-medium">When</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activity.length === 0 ? (
-                      <tr><td colSpan={3} className="text-center py-12 text-muted-foreground">No activity</td></tr>
-                    ) : activity.map((a, i) => (
-                      <tr key={a.id ?? i} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="px-4 py-3">
-                          <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-foreground/70">{a.action}</span>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {a.entityType && <span className="text-muted-foreground">{a.entityType}</span>}
-                          {a.entityId && <span className="text-muted-foreground"> {a.entityId.slice(0, 8)}…</span>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {a.createdAt ? formatDistanceToNow(new Date(a.createdAt), { addSuffix: true }) : "—"}
-                        </td>
+              <>
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground text-xs">
+                        <th className="text-left px-4 py-3 font-medium">Action</th>
+                        <th className="text-left px-4 py-3 font-medium">Description</th>
+                        <th className="text-left px-4 py-3 font-medium">Actor</th>
+                        <th className="text-left px-4 py-3 font-medium">When</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(!activity || activity.items.length === 0) ? (
+                        <tr><td colSpan={4} className="text-center py-12 text-muted-foreground">No activity found</td></tr>
+                      ) : activity.items.map((a, i) => (
+                        <tr key={a.id ?? i} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="px-4 py-3 min-w-[140px]">
+                            <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-foreground/70 whitespace-nowrap">{a.action}</span>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs max-w-[280px]">
+                            {a.entity || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {a.actor ? (
+                              <div>
+                                <span className="font-medium">{a.actor}</span>
+                                {a.actorRole && <span className="ml-1 text-muted-foreground text-xs">({a.actorRole})</span>}
+                              </div>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                            {a.createdAt ? formatDistanceToNow(new Date(a.createdAt), { addSuffix: true }) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination */}
+                {activity && activity.total > activity.pageSize && (
+                  <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+                    <span>
+                      Showing {((activity.page - 1) * activity.pageSize) + 1}–{Math.min(activity.page * activity.pageSize, activity.total)} of {activity.total}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={activity.page <= 1}
+                        onClick={() => { const p = activityPage - 1; setActivityPage(p); loadActivity(activityFilter, p); }}
+                        className="px-3 py-1.5 text-xs border border-border rounded-lg disabled:opacity-40 hover:bg-muted transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-xs">Page {activity.page} of {Math.ceil(activity.total / activity.pageSize)}</span>
+                      <button
+                        disabled={activity.page >= Math.ceil(activity.total / activity.pageSize)}
+                        onClick={() => { const p = activityPage + 1; setActivityPage(p); loadActivity(activityFilter, p); }}
+                        className="px-3 py-1.5 text-xs border border-border rounded-lg disabled:opacity-40 hover:bg-muted transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

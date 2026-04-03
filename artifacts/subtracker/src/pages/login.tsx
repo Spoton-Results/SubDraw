@@ -67,6 +67,11 @@ export default function Login() {
 
   const handleDemoLogin = async (role: "GC" | "SUB") => {
     setDemoLoading(role);
+    fetch(`${BASE}api/analytics/demo-click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }).catch(() => {});
     try {
       const res = await fetch(`${BASE}api/auth/demo-login`, {
         method: "POST",

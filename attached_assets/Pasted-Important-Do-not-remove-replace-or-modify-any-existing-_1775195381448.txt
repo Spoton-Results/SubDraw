@@ -1,0 +1,22 @@
+Important: Do not remove, replace, or modify any existing features or functionality that is currently working. Only fix the Platform Activity tab and the Demo Management tracking as described below.
+PROBLEM 1 — PLATFORM ACTIVITY TAB SHOWING BLANK ACTION AND ENTITY COLUMNS
+The Activity tab shows timestamps correctly but the Action and Entity columns are completely blank with gray squares. The data exists in the database but is not rendering. Fix this completely.
+Step 1 — Find the API route that serves activity data to the admin Activity tab. Check exactly what fields it is returning in the response. The response must include at minimum these three fields for every row: action — a plain English string describing what happened, entity — a string describing who and what was involved, createdAt or timestamp — the date and time.
+Step 2 — Find the Activity tab component. Check how it maps over the returned data and renders the Action and Entity columns. The gray squares mean the component is trying to render a field name that does not match what the API returns. Fix the field name mismatch between the API response and the component rendering.
+Step 3 — Each row must display exactly this: Action column showing plain English such as Invoice Submitted, Invoice Flagged, Invoice Approved, Invoice Rejected, Change Order Created, Change Order Approved, Change Order Request Submitted, Bid Submitted, Bid Accepted, Payment Recorded, Payment Confirmed, Payment Disputed, New Account Created, Trial Started, Plan Upgraded, Submittal Created, Submittal Acknowledged. Entity column showing who and what such as Shocker Electric on Mountain View Medical Office. When column showing the timestamp as a relative time like 5 hours ago or 2 days ago.
+Step 4 — Add a filter dropdown above the table with these options: All Activity, Invoices Only, Change Orders Only, Payments Only, Accounts Only, Submittals Only.
+Step 5 — Add pagination showing 25 rows per page with Next and Previous buttons at the bottom.
+Step 6 — Confirm the fix by verifying at least the most recent row shows real text in all three columns before reporting complete.
+PROBLEM 2 — DEMO MANAGEMENT NOT TRACKING DEMO CLICKS OR SITE VISITORS
+The Demo Management page only shows signup counts. It needs to also track who clicked the demo buttons and who visited the site.
+Step 1 — Add demo click tracking. Every time someone taps Try Demo as GC or Try Demo as Sub on the login page record an event in the database with the event type — GC Demo Click or Sub Demo Click — the timestamp, and the visitor's IP address and user agent for basic identification. Do not require login to track this.
+Step 2 — Update the Demo Management page to show the following additional metrics:
+GC Demo Clicks last 7 days — count of how many times Try Demo as GC was clicked
+GC Demo Clicks last 30 days — same for 30 days
+Sub Demo Clicks last 7 days — count of how many times Try Demo as Sub was clicked
+Sub Demo Clicks last 30 days — same for 30 days
+Demo to Signup Conversion Rate — percentage of demo clicks that resulted in a real signup within 48 hours
+Step 3 — Add a Recent Demo Sessions table below the metrics showing the last 20 demo click events with columns for: Demo Type — GC or Sub, When — relative timestamp, and Converted — yes if that session resulted in a signup within 48 hours or no if not.
+Step 4 — Add site visitor tracking. On every page load across the entire app and marketing homepage record a page view event with the page path, timestamp, and whether the visitor was logged in or anonymous. Store these in a simple page views table.
+Step 5 — Add a Site Traffic section to the Demo Management page showing: Total unique visitors last 7 days, Total page views last 7 days, Most visited pages last 7 days as a simple list showing page path and view count, Marketing homepage views last 7 days, Pricing page views last 7 days, Login page views last 7 days.
+Step 6 — Note that Google Analytics with ID G-GY5VTKVQ88 is already installed in index.html for external traffic tracking. This internal tracking is additional and shows data directly in the admin dashboard without needing to open Google Analytics separately.

@@ -105,11 +105,17 @@ function ProtectedRoute({
 
 function AnalyticsTracker() {
   const [location] = useLocation();
+  const { data: user } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   React.useEffect(() => {
     if (typeof window.gtag === "function") {
       window.gtag("config", "G-GY5VTKVQ88", { page_path: location });
     }
-  }, [location]);
+    fetch(`${import.meta.env.BASE_URL}api/analytics/pageview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: location, isAuthenticated: !!user }),
+    }).catch(() => {});
+  }, [location, user]);
   return null;
 }
 
