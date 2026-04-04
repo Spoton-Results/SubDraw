@@ -127,29 +127,59 @@ export default function Home() {
           <div className="inline-flex items-center gap-2 rounded-full bg-blue-600/15 border border-blue-400/30 px-4 py-1.5 mb-8">
             <span className="text-blue-400 text-xs font-semibold tracking-wide uppercase">Construction Financial Control</span>
           </div>
+
+          {/* CHANGE 1 — Main headline */}
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight max-w-4xl mx-auto">
-            Stop Approving Subcontractor Invoices That Go Over Budget
+            Your subcontractor just invoiced $8,500 over their contract. Did you catch it before you paid?
           </h1>
+
+          {/* CHANGE 2 — Subheadline */}
           <p className="mt-6 text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
-            SubTracker automatically flags every invoice before you approve it — and gives you and your sub the exact same financial scoreboard in real time.
+            SubTracker automatically flags every invoice before you approve it — and gives you and your sub the exact same financial scoreboard in real time. Most GCs are approving overruns every month and never know it.
           </p>
-          <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 hover:scale-105"
-              style={{ backgroundColor: "hsl(221 83% 53%)" }}
-            >
-              Start Free 14-Day Trial
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+
+          {/* CHANGE 3 — Social proof quote */}
+          <div className="mt-8 max-w-2xl mx-auto text-left border-l-4 pl-5 py-1" style={{ borderColor: "hsl(221 83% 53%)" }}>
+            <p className="text-slate-200 text-base sm:text-lg italic leading-relaxed">
+              "Finally — one screen that shows me and my subs the exact same numbers in real time. No more disputes about what was approved or what has been paid."
+            </p>
+            <p className="mt-2 text-slate-400 text-sm not-italic">— General Contractor, St George Utah</p>
+          </div>
+
+          {/* CHANGE 4 — Primary demo button */}
+          <div className="mt-10">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-base font-bold text-white border border-white/40 hover:bg-white/10 transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-xl text-base font-bold text-white shadow-2xl transition-all hover:opacity-90 hover:scale-105"
+              style={{ backgroundColor: "#f97316", padding: "1.25rem 2.5rem", fontSize: "1.05rem" }}
             >
-              Watch Demo
+              See a Flagged Invoice in 60 Seconds — No Signup Required
+              <ArrowRight className="h-5 w-5" />
             </Link>
           </div>
-          <p className="mt-4 text-sm text-slate-500">No credit card required · 14-day free trial · Subcontractors always free</p>
+
+          {/* CHANGE 5 — Secondary CTA */}
+          <p className="mt-4 text-sm text-slate-400">
+            Or{" "}
+            <Link href="/signup" className="underline hover:text-white transition-colors" style={{ color: "hsl(221 83% 70%)" }}>
+              start your free 14-day trial
+            </Link>
+            {" "}— no credit card required
+          </p>
+
+          {/* CHANGE 6 — Trust badges */}
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
+            {[
+              "No Credit Card Required",
+              "Subcontractors Always Free",
+              "Cancel Anytime",
+            ].map((badge) => (
+              <div key={badge} className="flex items-center gap-1.5 text-slate-500 text-xs">
+                <Check className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+                <span>{badge}</span>
+              </div>
+            ))}
+          </div>
 
           {/* Hero stats */}
           <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
