@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail, Inbox, MessageSquare } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail, Inbox, MessageSquare, X } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
@@ -261,6 +261,16 @@ export default function Dashboard() {
 
   const onboardingKey = user ? `onboarding-dismissed-${user.id}` : null;
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  const payBannerKey = user ? `st_pay_banner_dismissed_${user.id}` : null;
+  const [payBannerDismissed, setPayBannerDismissed] = React.useState(false);
+  React.useEffect(() => {
+    if (payBannerKey && sessionStorage.getItem(payBannerKey)) setPayBannerDismissed(true);
+  }, [payBannerKey]);
+  const dismissPayBanner = () => {
+    if (payBannerKey) sessionStorage.setItem(payBannerKey, "1");
+    setPayBannerDismissed(true);
+  };
 
   React.useEffect(() => {
     if (onboardingKey && !localStorage.getItem(onboardingKey) && !isLoading && projects !== undefined) {
@@ -531,6 +541,31 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* SUB: Payment Account Setup Banner — green, at very top, dismissible per-session */}
+      {!isGC && !payBannerDismissed && subPaymentStatus?.status === "NOT_SETUP" && (
+        <div className="mb-4 rounded-2xl bg-green-600 p-5 flex flex-col sm:flex-row sm:items-center gap-4 relative">
+          <button
+            onClick={dismissPayBanner}
+            className="absolute top-3 right-3 text-white/70 hover:text-white transition-colors"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <Banknote className="h-5 w-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0 pr-6 sm:pr-0">
+            <h3 className="font-bold text-white text-sm">Get paid faster.</h3>
+            <p className="text-sm text-white/85 mt-0.5 leading-snug">Set up your bank account to receive GC payments directly — takes 5 minutes.</p>
+          </div>
+          <a href="/account/payment-setup" className="shrink-0">
+            <Button className="min-h-[44px] gap-2 bg-white text-green-700 hover:bg-white/90 font-semibold">
+              Set Up Now
+            </Button>
+          </a>
+        </div>
+      )}
+
       {/* Trial countdown banner — only when trial is active and no paid plan */}
       {isGC && subStatus?.trialActive && !subStatus?.planName && (
         <TrialBanner
@@ -768,26 +803,6 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* SUB: Payment Account Setup Banner — only when NOT_SETUP */}
-      {!isGC && subPaymentStatus?.status === "NOT_SETUP" && (
-        <div className="mt-10">
-          <div className="rounded-2xl border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/20 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="h-10 w-10 rounded-xl bg-yellow-500 flex items-center justify-center shrink-0">
-              <CreditCard className="h-5 w-5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-yellow-800 dark:text-yellow-300 text-sm">Get paid directly to your bank through SubTracker</h3>
-              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-0.5 leading-snug">Set up your payment account in 5 minutes and receive payments directly from GCs.</p>
-            </div>
-            <a href="/account#payment" className="shrink-0">
-              <Button className="min-h-[44px] gap-2 bg-yellow-600 hover:bg-yellow-700 text-white">
-                Set Up Now
-              </Button>
-            </a>
           </div>
         </div>
       )}

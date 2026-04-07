@@ -46,6 +46,15 @@ export default function Account() {
 
   const hasPassword = (user as any)?.hasPassword ?? true;
 
+  const [payNavStatus, setPayNavStatus] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (user?.role !== "SUB") return;
+    fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setPayNavStatus(d.status ?? null))
+      .catch(() => {});
+  }, [user?.role]);
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) return toast.error("Company name cannot be empty");
@@ -173,13 +182,36 @@ export default function Account() {
 
   return (
     <Layout>
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold font-display tracking-tight">Account Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your profile and security settings</p>
       </div>
 
+      {/* Quick-nav for SUB users */}
+      {user.role === "SUB" && (
+        <div className="flex gap-1 mb-6 border-b">
+          {[
+            { href: "#profile", label: "Profile" },
+            { href: "#security", label: "Security" },
+            { href: "#payment", label: "Get Paid", dot: payNavStatus === "NOT_SETUP" },
+          ].map(item => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {item.label}
+              {item.dot && (
+                <span className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+
       <div className="max-w-2xl space-y-8">
         {/* PROFILE INFO CARD */}
+        <div id="profile" className="scroll-mt-20">
         <Card>
           <CardHeader className="border-b pb-4">
             <CardTitle className="flex items-center gap-2">
@@ -230,7 +262,10 @@ export default function Account() {
             </form>
           </CardContent>
         </Card>
+        </div>
 
+        {/* SECURITY SECTION */}
+        <div id="security" className="scroll-mt-20 space-y-8">
         {/* SET PASSWORD CARD — shown for magic-link-only users */}
         {!hasPassword && (
           <Card>
@@ -353,6 +388,8 @@ export default function Account() {
             </CardContent>
           </Card>
         )}
+
+        </div>
 
         {/* MY SCOPE TEMPLATES — GC only */}
         {user.role === "GC" && (
@@ -488,25 +525,32 @@ export default function Account() {
         )}
         {/* GET PAID SETUP — SUB only */}
         {user.role === "SUB" && (
-          <GetPaidSetupSection />
+          <div id="payment" className="scroll-mt-20">
+            <GetPaidSetupSection onStatusChange={setPayNavStatus} />
+          </div>
         )}
       </div>
     </Layout>
   );
 }
 
-function GetPaidSetupSection() {
+function GetPaidSetupSection({ onStatusChange }: { onStatusChange?: (status: string) => void }) {
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
   const [status, setStatus] = React.useState<"NOT_SETUP" | "PENDING" | "ACTIVE" | "RESTRICTED" | "loading">("loading");
   const [setupLoading, setSetupLoading] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
 
+  const updateStatus = (s: string) => {
+    setStatus(s as any);
+    onStatusChange?.(s);
+  };
+
   React.useEffect(() => {
     let cancelled = false;
     fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" })
       .then(r => r.json())
-      .then(d => { if (!cancelled) setStatus(d.status ?? "NOT_SETUP"); })
-      .catch(() => { if (!cancelled) setStatus("NOT_SETUP"); });
+      .then(d => { if (!cancelled) updateStatus(d.status ?? "NOT_SETUP"); })
+      .catch(() => { if (!cancelled) updateStatus("NOT_SETUP"); });
     return () => { cancelled = true; };
   }, []);
 
@@ -526,7 +570,7 @@ function GetPaidSetupSection() {
     try {
       const res = await fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" });
       const data = await res.json();
-      setStatus(data.status ?? "NOT_SETUP");
+      updateStatus(data.status ?? "NOT_SETUP");
       if (data.status === "ACTIVE") toast.success("Your payment account is now active!");
       else toast("Status updated. If you've completed verification, it may still be processing.", { icon: "ℹ️" });
     } catch { toast.error("Could not check status"); }

@@ -191,6 +191,9 @@ export async function sendInviteEmail(opts: {
       <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
     </div>
     ${ctaButton("Log in to SubTracker", opts.magicUrl)}
+    <div style="margin-top:20px;padding:16px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+      <p style="margin:0;font-size:13px;color:#166534;">Want to get paid faster? <a href="${opts.appUrl}/account/payment-setup" style="color:#15803d;font-weight:600;">Set up your payment account</a> to receive payments directly to your bank.</p>
+    </div>
   `);
   await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
 }

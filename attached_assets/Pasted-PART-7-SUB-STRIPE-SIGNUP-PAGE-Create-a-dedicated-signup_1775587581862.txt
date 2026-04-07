@@ -1,0 +1,25 @@
+PART 7 — SUB STRIPE SIGNUP PAGE:
+Create a dedicated signup page for subs to set up their Stripe Express account at the route /account/payment-setup. This page must be clean, simple, and friendly. It is the most important page for getting subs paid.
+The page shows the following content when paymentAccountStatus is NOT_SETUP:
+Large heading: Get Paid Directly to Your Bank
+Subheading in gray: Set up your payment account once and every GC payment goes straight to your bank automatically.
+Three benefit cards in a row on desktop and stacked on mobile. Each card has an icon and a short description:
+Card 1 — Bank icon — Direct Deposit — Money deposited directly into your bank account. No checks. No waiting.
+Card 2 — Clock icon — 2 Business Days — ACH payments arrive in your bank within 2 business days of GC approval.
+Card 3 — Shield icon — Bank-Level Security — Your bank details are handled entirely by Stripe. SubTracker never sees or stores them.
+Below the three cards show a simple step indicator showing what the sub will do:
+Step 1 — Enter your personal information
+Step 2 — Enter your business information
+Step 3 — Connect your bank account
+All three steps happen on the secure Stripe page — not on SubTracker.
+Below the step indicator show a large blue button — Get Started — Set Up Payment Account.
+Below the button show small gray text — Powered by Stripe — the same secure payment infrastructure used by Amazon, Shopify, and millions of businesses worldwide.
+Below that show a Stripe logo badge.
+When the sub taps Get Started call POST /api/stripe/connect/create-account and redirect them to the Stripe hosted onboarding page immediately.
+ADD THIS PAGE TO NAVIGATION:
+Add a Get Paid menu item to the sub account settings navigation. Show an orange dot badge on this menu item if paymentAccountStatus is NOT_SETUP so the sub notices it immediately when they open their account settings.
+Also add a prominent banner on the sub dashboard home screen when paymentAccountStatus is NOT_SETUP. The banner sits at the very top of the dashboard above everything else. Style it with a green background and white text. Content: Get paid faster. Set up your bank account to receive GC payments directly — takes 5 minutes. With a large white button — Set Up Now — linking to /account/payment-setup. The sub can dismiss this banner once but it reappears on their next login until their account is ACTIVE.
+ADD A LINK IN INVITATION EMAIL:
+When a GC invites a new sub the invitation email already goes out. Add one line to that email after the existing content — Want to get paid faster? Set up your payment account to receive payments directly to your bank. With a link to /account/payment-setup. This way new subs learn about payment setup from the very first email they receive.
+MAKE THE SIGNUP ACCESSIBLE WITHOUT BEING LOGGED IN AS A SPECIFIC ACCOUNT TYPE:
+The /account/payment-setup page must work for any authenticated sub user. If a sub navigates directly to this URL they should see the signup page. If they are not logged in redirect them to the login page first and then bring them back to /account/payment-setup after login.
