@@ -23,6 +23,7 @@ import adminRouter from "./admin.js";
 import submittalsRouter from "./submittals.js";
 import analyticsRouter from "./analytics.js";
 import connectRouter from "./connect.js";
+import stripeConnectRouter from "./stripe-connect.js";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use("/admin", adminRouter);
 router.use("/submittals", submittalsRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/connect", connectRouter);
+router.use("/stripe/connect", stripeConnectRouter);
 
 export default router;

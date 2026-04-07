@@ -63,6 +63,9 @@ export const invoicesTable = pgTable("invoices", {
   percentageComplete: integer("percentage_complete"),
   approvedAt: timestamp("approved_at"),
   paymentDueDate: timestamp("payment_due_date"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripePaymentMethod: text("stripe_payment_method"),
+  stripePaymentInitiatedAt: timestamp("stripe_payment_initiated_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

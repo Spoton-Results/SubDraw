@@ -19,13 +19,14 @@ import { TabSupportQueue } from "./admin/tab-support-queue";
 import { TabEmailTools } from "./admin/tab-email-tools";
 import { TabDemoManagement } from "./admin/tab-demo-management";
 import { TabFeatureFlags } from "./admin/tab-feature-flags";
+import { AdminStripePaymentsTab } from "./admin/tab-stripe-payments";
 
 const BASE = import.meta.env.BASE_URL;
 
 const api = (path: string, opts?: RequestInit) =>
   fetch(`${BASE}api/admin${path}`, { credentials: "include", ...opts });
 
-type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit";
+type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit" | "payments";
 
 interface Metrics {
   totalGCs: number; activePaying: number; onTrial: number; churned: number;
@@ -386,6 +387,7 @@ export default function AdminDashboard() {
     { id: "flags",     label: "Feature Flags",       icon: <Flag className="h-4 w-4" />,        group: "ops" },
     { id: "activity",  label: "Activity",            icon: <Activity className="h-4 w-4" />,    group: "ops" },
     { id: "audit",     label: "Audit Log",           icon: <Shield className="h-4 w-4" />,      group: "ops" },
+    { id: "payments",  label: "Stripe Payments",      icon: <CreditCard className="h-4 w-4" />,   group: "ops" },
   ];
 
   return (
@@ -1019,6 +1021,11 @@ export default function AdminDashboard() {
         {tab === "flags" && (
           <div className="p-6">
             <TabFeatureFlags />
+          </div>
+        )}
+        {tab === "payments" && (
+          <div className="p-6">
+            <AdminStripePaymentsTab />
           </div>
         )}
       </div>

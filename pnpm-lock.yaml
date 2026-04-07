@@ -394,6 +394,12 @@ importers:
 
   artifacts/subtracker:
     dependencies:
+      '@stripe/react-stripe-js':
+        specifier: ^6.1.0
+        version: 6.1.0(@stripe/stripe-js@9.0.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@stripe/stripe-js':
+        specifier: ^9.0.1
+        version: 9.0.1
       react-hot-toast:
         specifier: ^2.6.0
         version: 2.6.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -2615,6 +2621,17 @@ packages:
 
   '@stablelib/base64@1.0.1':
     resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
+
+  '@stripe/react-stripe-js@6.1.0':
+    resolution: {integrity: sha512-LbKbRv4+wUSHLb5VNxqiYcKaqXPvTju0bJaF0RrzH0h4+aKWDXAk4RzUBcpNxxj8KtjuxICElANs1Li7aTv1IQ==}
+    peerDependencies:
+      '@stripe/stripe-js': '>=9.0.0 <10.0.0'
+      react: '>=16.8.0 <20.0.0'
+      react-dom: '>=16.8.0 <20.0.0'
+
+  '@stripe/stripe-js@9.0.1':
+    resolution: {integrity: sha512-un0URSosrW7wNr7xZ5iI2mC9mdeXZ3KERoVlA2RdmeLXYxHUPXq0yHzir2n/MtyXXEdSaELtz4WXGS6dzPEeKA==}
+    engines: {node: '>=12.16'}
 
   '@swc/helpers@0.5.19':
     resolution: {integrity: sha512-QamiFeIK3txNjgUTNppE6MiG3p7TdninpZu0E0PbqVh1a9FNLT2FRhisaa4NcaX52XVhA5l7Pk58Ft7Sqi/2sA==}
@@ -7400,6 +7417,15 @@ snapshots:
       tslib: 2.8.1
 
   '@stablelib/base64@1.0.1': {}
+
+  '@stripe/react-stripe-js@6.1.0(@stripe/stripe-js@9.0.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+    dependencies:
+      '@stripe/stripe-js': 9.0.1
+      prop-types: 15.8.1
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+
+  '@stripe/stripe-js@9.0.1': {}
 
   '@swc/helpers@0.5.19':
     dependencies:

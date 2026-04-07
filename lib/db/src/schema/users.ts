@@ -21,6 +21,8 @@ export const usersTable = pgTable("users", {
   passwordChangedAt: timestamp("password_changed_at"),
   stripeConnectAccountId: text("stripe_connect_account_id"),
   stripeConnectPayoutsEnabled: boolean("stripe_connect_payouts_enabled").notNull().default(false),
+  paymentAccountStatus: text("payment_account_status").notNull().default("NOT_SETUP"),
+  stripeOnboardingComplete: boolean("stripe_onboarding_complete").notNull().default(false),
   pausedAt: timestamp("paused_at"),
   lastLoginAt: timestamp("last_login_at"),
   adminPlanOverride: text("admin_plan_override"),

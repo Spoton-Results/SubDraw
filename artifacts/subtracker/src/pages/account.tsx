@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Eye, EyeOff, User, KeyRound, Building2, Lock, ClipboardList, Plus, Trash2, Save, Pencil } from "lucide-react";
+import { Eye, EyeOff, User, KeyRound, Building2, Lock, ClipboardList, Plus, Trash2, Save, Pencil, CreditCard, CheckCircle2, Clock, AlertCircle, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 
 const TRADE_CATEGORIES = [
@@ -486,7 +486,133 @@ export default function Account() {
             </CardContent>
           </Card>
         )}
+        {/* GET PAID SETUP — SUB only */}
+        {user.role === "SUB" && (
+          <GetPaidSetupSection />
+        )}
       </div>
     </Layout>
+  );
+}
+
+function GetPaidSetupSection() {
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  const [status, setStatus] = React.useState<"NOT_SETUP" | "PENDING" | "ACTIVE" | "RESTRICTED" | "loading">("loading");
+  const [setupLoading, setSetupLoading] = React.useState(false);
+  const [checking, setChecking] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setStatus(d.status ?? "NOT_SETUP"); })
+      .catch(() => { if (!cancelled) setStatus("NOT_SETUP"); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSetup = async () => {
+    setSetupLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/stripe/connect/create-account`, { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      toast.error(data.error ?? "Could not start setup");
+    } catch { toast.error("Could not start setup"); }
+    finally { setSetupLoading(false); }
+  };
+
+  const handleCheckStatus = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" });
+      const data = await res.json();
+      setStatus(data.status ?? "NOT_SETUP");
+      if (data.status === "ACTIVE") toast.success("Your payment account is now active!");
+      else toast("Status updated. If you've completed verification, it may still be processing.", { icon: "ℹ️" });
+    } catch { toast.error("Could not check status"); }
+    finally { setChecking(false); }
+  };
+
+  if (status === "loading") return null;
+
+  return (
+    <Card>
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5 text-primary" /> Get Paid Setup
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-6">
+        {status === "NOT_SETUP" && (
+          <div className="space-y-5">
+            <div>
+              <h3 className="font-semibold text-base mb-1">Set Up to Receive Payments</h3>
+              <ul className="space-y-2 mt-3">
+                {["Get paid directly to your bank account", "ACH payments arrive in 2 business days", "Set up once and every future payment is automatic"].map(item => (
+                  <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" /> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Button className="w-full min-h-[44px] gap-2" isLoading={setupLoading} onClick={handleSetup}>
+              <CreditCard className="h-4 w-4" /> Set Up Payment Account
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">Powered by Stripe — your bank details are encrypted and never stored by SubTracker.</p>
+          </div>
+        )}
+
+        {status === "PENDING" && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/20 p-4">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-yellow-800 dark:text-yellow-300 text-sm">Stripe is verifying your information</p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-0.5">This usually takes 1 to 2 business days. We will notify you when your account is active.</p>
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" className="min-h-[44px] gap-2" isLoading={checking} onClick={handleCheckStatus}>
+              <RefreshCw className="h-4 w-4" /> Check Status
+            </Button>
+          </div>
+        )}
+
+        {status === "ACTIVE" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <Badge className="bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400">Payment Account Active</Badge>
+                <p className="text-sm text-muted-foreground mt-1">GCs can now pay you directly to your bank account.</p>
+              </div>
+            </div>
+            <Button variant="outline" className="min-h-[44px] gap-2" isLoading={setupLoading} onClick={handleSetup}>
+              <CreditCard className="h-4 w-4" /> Update Bank Account
+            </Button>
+          </div>
+        )}
+
+        {status === "RESTRICTED" && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/20 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-800 dark:text-red-300 text-sm">Stripe needs more information</p>
+                  <p className="text-sm text-red-700 dark:text-red-400 mt-0.5">Your account needs additional verification to receive payments.</p>
+                </div>
+              </div>
+            </div>
+            <Button className="min-h-[44px] gap-2 bg-red-600 hover:bg-red-700 text-white" isLoading={setupLoading} onClick={handleSetup}>
+              Complete Verification
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

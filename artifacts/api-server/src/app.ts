@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import router from "./routes/index.js";
 import { WebhookHandlers } from "./lib/webhookHandlers.js";
+import stripeConnectWebhookRouter from "./routes/stripe-connect-webhook.js";
 
 const app: Express = express();
 
@@ -24,6 +25,8 @@ app.post(
     }
   }
 );
+
+app.use("/api/webhooks/stripe-connect", stripeConnectWebhookRouter);
 
 app.use(cors());
 app.use(express.json());

@@ -31,6 +31,8 @@ import BidComparison from "./pages/bid-comparison";
 import AdminLogin from "./pages/admin-login";
 import AdminDashboard from "./pages/admin-dashboard";
 import SubmittalDetail from "./pages/submittal-detail";
+import PaymentSuccess from "./pages/payment-success";
+import PaymentSetupRefresh from "./pages/payment-setup-refresh";
 import { PausedScreen } from "./components/paused-screen";
 
 export const queryClient = new QueryClient({
@@ -139,6 +141,8 @@ function Router() {
       <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} ownerOnly />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} ownerOnly />} />
       <Route path="/billing" component={() => <ProtectedRoute component={Billing} ownerOnly />} />
+      <Route path="/account/payment-success" component={() => <ProtectedRoute component={PaymentSuccess} />} />
+      <Route path="/account/payment-setup" component={() => <ProtectedRoute component={PaymentSetupRefresh} />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />

@@ -1,5 +1,7 @@
 import * as React from "react";
 import { useRoute, Link } from "wouter";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Layout } from "@/components/layout";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import {
@@ -25,7 +27,7 @@ import {
   Clock, Building2, FileSignature, BadgeCheck, Ban, Loader2, FileDown,
   CreditCard, DollarSign, CheckCircle2, ShieldAlert, Unlock, Percent, Stamp,
   Shield, ShieldCheck, ShieldX, Upload, Pencil, ExternalLink, CalendarDays,
-  ListChecks, SquareCheck, Download, Send, Inbox,
+  ListChecks, SquareCheck, Download, Send, Inbox, Bell,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useUpload } from "@workspace/object-storage-web";
@@ -60,6 +62,106 @@ const TRADE_BADGE_COLORS: Record<string, string> = {
   Landscaping: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400",
   Other: "bg-muted text-muted-foreground border-border",
 };
+
+// ── Stripe Payment Form (inner component, uses Elements context) ──────────────
+function StripePaymentInner({
+  invoiceNumber, amount, subCompanyName, returnUrl, onSuccess, onError, isPaying,
+}: {
+  invoiceNumber: string; amount: number; subCompanyName: string; returnUrl: string;
+  onSuccess: (pm: string) => void; onError: (msg: string) => void; isPaying: boolean;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const handlePay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    try {
+      const result = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: returnUrl },
+        redirect: "if_required",
+      });
+      if (result.error) {
+        onError(result.error.message ?? "Payment failed");
+      } else if (result.paymentIntent?.status === "succeeded") {
+        const pm = result.paymentIntent.payment_method_types?.[0] === "us_bank_account" ? "ACH" : "CARD";
+        onSuccess(pm);
+      } else {
+        onSuccess("CARD");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handlePay} className="space-y-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3 text-sm space-y-1.5">
+        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+          <span>Paying</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{subCompanyName}</span>
+        </div>
+        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+          <span>Invoice</span>
+          <span className="font-medium">#{invoiceNumber}</span>
+        </div>
+        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+          <span>Amount</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</span>
+        </div>
+        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+          <span>Delivery</span>
+          <span className="font-medium">2 business days</span>
+        </div>
+      </div>
+      <PaymentElement options={{ layout: "tabs" }} />
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+        <Button
+          type="submit"
+          className="min-h-[44px] gap-2 bg-green-600 hover:bg-green-700 text-white w-full"
+          isLoading={submitting || isPaying}
+          disabled={!stripe || submitting || isPaying}
+        >
+          <DollarSign className="h-4 w-4" /> Confirm and Pay
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function StripePaymentFormWrapper({
+  clientSecret, publishableKey, stripeAccountId,
+  invoiceId, invoiceNumber, amount, subCompanyName, returnUrl,
+  onSuccess, onError, isPaying,
+}: {
+  clientSecret: string; publishableKey: string; stripeAccountId: string;
+  invoiceId: string; invoiceNumber: string; amount: number; subCompanyName: string; returnUrl: string;
+  onSuccess: (pm: string) => void; onError: (msg: string) => void; isPaying: boolean;
+}) {
+  const stripePromise = React.useMemo(
+    () => publishableKey ? loadStripe(publishableKey, { stripeAccount: stripeAccountId }) : null,
+    [publishableKey, stripeAccountId]
+  );
+
+  if (!stripePromise || !clientSecret) return null;
+
+  return (
+    <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "stripe" } }}>
+      <StripePaymentInner
+        invoiceNumber={invoiceNumber}
+        amount={amount}
+        subCompanyName={subCompanyName}
+        returnUrl={returnUrl}
+        onSuccess={onSuccess}
+        onError={onError}
+        isPaying={isPaying}
+      />
+    </Elements>
+  );
+}
 
 export default function SubcontractDetail() {
   const [, params] = useRoute("/subcontracts/:id");
@@ -119,43 +221,93 @@ export default function SubcontractDetail() {
   const [payReference, setPayReference] = React.useState("");
   const [payNotes, setPayNotes] = React.useState("");
 
-  const [stripePayDialog, setStripePayDialog] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
-  const [stripePayLoading, setStripePayLoading] = React.useState(false);
-
-  type SubConnectStatus = { connected: boolean; payoutsEnabled: boolean; subCompanyName?: string };
   const BASE_SC = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-  const { data: subConnectStatus } = useQuery<SubConnectStatus>({
-    queryKey: ["sub-connect-status-for-gc", subcontractId],
+
+  type SubPaymentStatus = { status: "NOT_SETUP" | "PENDING" | "ACTIVE" | "RESTRICTED"; subCompanyName: string; stripeConnectAccountId: string | null };
+  const { data: subPaymentStatus, refetch: refetchSubPaymentStatus } = useQuery<SubPaymentStatus>({
+    queryKey: ["sub-payment-status", subcontractId],
     queryFn: async () => {
-      const res = await fetch(`${BASE_SC}/api/connect/by-subcontract/${subcontractId}`, { credentials: "include" });
-      if (!res.ok) return { connected: false, payoutsEnabled: false };
+      const res = await fetch(`${BASE_SC}/api/stripe/connect/sub-payment-status/${subcontractId}`, { credentials: "include" });
+      if (!res.ok) return { status: "NOT_SETUP", subCompanyName: "", stripeConnectAccountId: null };
       return res.json();
     },
-    enabled: isGC && !!subcontractId,
+    enabled: user?.role === "GC" && !!subcontractId,
     staleTime: 60_000,
     refetchOnMount: "always",
   });
 
-  const handlePayViaStripe = async () => {
-    if (!stripePayDialog.id) return;
-    setStripePayLoading(true);
+  const [payChooserDialog, setPayChooserDialog] = React.useState<{ open: boolean; invoiceId: string; invoiceNumber: string; amount: number }>({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+  type StripeFlowState = "idle" | "creating" | "element" | "paying" | "done";
+  const [stripeFlowState, setStripeFlowState] = React.useState<StripeFlowState>("idle");
+  const [stripeClientSecret, setStripeClientSecret] = React.useState("");
+  const [stripeAccountId, setStripeAccountId] = React.useState("");
+  const [stripePubKey, setStripePubKey] = React.useState("");
+  const [stripePiId, setStripePiId] = React.useState("");
+  const [stripeFlowInvoice, setStripeFlowInvoice] = React.useState<{ id: string; number: string; amount: number }>({ id: "", number: "", amount: 0 });
+  const [sendingReminder, setSendingReminder] = React.useState(false);
+
+  const handleSendSetupReminder = async () => {
+    setSendingReminder(true);
     try {
-      const res = await fetch(`${BASE_SC}/api/subcontracts/${subcontractId}/invoices/${stripePayDialog.id}/pay-stripe`, {
+      await fetch(`${BASE_SC}/api/stripe/connect/send-reminder/${subcontractId}`, { method: "POST", credentials: "include" });
+      toast.success("Reminder sent to the subcontractor");
+    } catch {
+      toast.error("Could not send reminder");
+    } finally {
+      setSendingReminder(false);
+    }
+  };
+
+  const handleInitStripePayment = async (invoiceId: string, invoiceNumber: string, amount: number) => {
+    setPayChooserDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+    setStripeFlowInvoice({ id: invoiceId, number: invoiceNumber, amount });
+    setStripeFlowState("creating");
+    try {
+      const res = await fetch(`${BASE_SC}/api/stripe/connect/create-payment-intent`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ invoiceId }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Stripe transfer failed");
+        toast.error(data.error ?? "Failed to initialize payment");
+        setStripeFlowState("idle");
         return;
       }
-      toast.success(`Stripe transfer initiated — Invoice #${stripePayDialog.invoiceNumber} is now pending sub confirmation`);
-      setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 });
-      queryClient.invalidateQueries({ queryKey: ["subcontract", subcontractId] });
+      setStripeClientSecret(data.clientSecret);
+      setStripeAccountId(data.stripeConnectAccountId);
+      setStripePubKey(data.publishableKey);
+      setStripePiId(data.paymentIntentId);
+      setStripeFlowState("element");
     } catch {
-      toast.error("Stripe transfer failed. Please try again.");
-    } finally {
-      setStripePayLoading(false);
+      toast.error("Failed to initialize payment. Please try again.");
+      setStripeFlowState("idle");
+    }
+  };
+
+  const handleRecordStripePayment = async (pmType: string) => {
+    setStripeFlowState("paying");
+    try {
+      const res = await fetch(`${BASE_SC}/api/stripe/connect/record-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ invoiceId: stripeFlowInvoice.id, paymentIntentId: stripePiId, paymentMethod: pmType }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to record payment");
+        setStripeFlowState("element");
+        return;
+      }
+      toast.success(`Payment initiated — ${formatCurrency(stripeFlowInvoice.amount)} will arrive in ${subPaymentStatus?.subCompanyName ?? "the subcontractor"}'s bank account in 2 business days.`);
+      setStripeFlowState("done");
+      queryClient.invalidateQueries({ queryKey: ["subcontract", subcontractId] });
+      setTimeout(() => { setStripeFlowState("idle"); setStripeClientSecret(""); setStripeAccountId(""); }, 2000);
+    } catch {
+      toast.error("Failed to record payment. Please try again.");
+      setStripeFlowState("element");
     }
   };
 
@@ -1260,6 +1412,16 @@ export default function SubcontractDetail() {
             {sub.tradeCategory && (
               <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border ${TRADE_BADGE_COLORS[sub.tradeCategory] ?? TRADE_BADGE_COLORS.Other}`}>
                 {sub.tradeCategory}
+              </span>
+            )}
+            {isGC && subPaymentStatus?.status === "ACTIVE" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
+                <CreditCard className="h-3.5 w-3.5" /> STRIPE PAY READY
+              </span>
+            )}
+            {isGC && subPaymentStatus && subPaymentStatus.status !== "ACTIVE" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
+                <DollarSign className="h-3.5 w-3.5" /> MANUAL PAY ONLY
               </span>
             )}
             {insStatus === "VALID" && (
@@ -3095,14 +3257,9 @@ export default function SubcontractDetail() {
                         )}
                         {isGC && perms.canApproveInvoices && inv.status === "APPROVED" && (
                           <div className="flex flex-wrap gap-1.5">
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
-                              <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayChooserDialog({ open: true, invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
+                              <DollarSign className="h-3.5 w-3.5" /> Record Payment
                             </Button>
-                            {subConnectStatus?.payoutsEnabled && (
-                              <Button size="sm" className="min-h-[44px] text-xs gap-1.5" style={{ backgroundColor: "#635bff" }} onClick={() => setStripePayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
-                                <CreditCard className="h-3.5 w-3.5 text-white" /> <span className="text-white">Pay via Stripe</span>
-                              </Button>
-                            )}
                           </div>
                         )}
                         {!isGC && inv.status === "PENDING" && (
@@ -3754,43 +3911,115 @@ export default function SubcontractDetail() {
         </form>
       </Dialog>
 
-      {/* Pay via Stripe Dialog */}
+      {/* Payment Method Chooser Dialog */}
       <Dialog
-        open={stripePayDialog.open}
-        onOpenChange={(open) => { if (!open) setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 }); }}
-        title="Pay via Stripe"
-        description={`Invoice #${stripePayDialog.invoiceNumber} — ${formatCurrency(stripePayDialog.amount)}`}
+        open={payChooserDialog.open}
+        onOpenChange={(open) => { if (!open) setPayChooserDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 }); }}
+        title="Record Payment"
+        description={`Invoice #${payChooserDialog.invoiceNumber} — ${formatCurrency(payChooserDialog.amount)}`}
+      >
+        <div className="space-y-3 mt-2">
+          {/* Option 1: Pay via SubTracker */}
+          <div
+            className={`rounded-xl border-2 p-4 transition-colors ${subPaymentStatus?.status === "ACTIVE" ? "border-primary/40 bg-primary/5 cursor-pointer hover:border-primary/70 hover:bg-primary/10" : "border-border bg-muted/30 opacity-60"}`}
+            onClick={() => {
+              if (subPaymentStatus?.status === "ACTIVE") {
+                handleInitStripePayment(payChooserDialog.invoiceId, payChooserDialog.invoiceNumber, payChooserDialog.amount);
+              }
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#635bff" }}>
+                <CreditCard className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-sm">Pay via SubTracker</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#635bff" }}>PRIMARY</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Stripe processes payment directly to sub's bank account in 2 business days.</p>
+                {subPaymentStatus?.status !== "ACTIVE" && (
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1 font-medium">Sub has not set up their payment account yet.</p>
+                )}
+              </div>
+            </div>
+            {subPaymentStatus?.status !== "ACTIVE" && (
+              <div className="mt-3 flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="min-h-[36px] gap-1.5 text-xs"
+                  isLoading={sendingReminder}
+                  onClick={(e) => { e.stopPropagation(); handleSendSetupReminder(); }}
+                >
+                  <Bell className="h-3 w-3" /> Send Reminder
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Option 2: Record Manual Payment */}
+          <div
+            className="rounded-xl border-2 border-border p-4 cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors"
+            onClick={() => {
+              setPayChooserDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+              setPayDialog({ open: true, id: payChooserDialog.invoiceId, invoiceNumber: payChooserDialog.invoiceNumber, amount: payChooserDialog.amount });
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-sm">Record Manual Payment</span>
+                <p className="text-xs text-muted-foreground mt-0.5">Check, ACH, wire, or other — record the payment details manually.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setPayChooserDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 })}>Cancel</Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Stripe Payment Flow Dialog */}
+      <Dialog
+        open={stripeFlowState === "element" || stripeFlowState === "creating" || stripeFlowState === "paying" || stripeFlowState === "done"}
+        onOpenChange={(open) => { if (!open && stripeFlowState !== "paying") { setStripeFlowState("idle"); setStripeClientSecret(""); setStripeAccountId(""); } }}
+        title="Pay via SubTracker"
+        description={`Invoice #${stripeFlowInvoice.number} — ${formatCurrency(stripeFlowInvoice.amount)}`}
       >
         <div className="space-y-4 mt-2">
-          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-400">
-            This will initiate a real Stripe bank transfer of <strong>{formatCurrency(stripePayDialog.amount)}</strong> to {subConnectStatus?.subCompanyName ?? "the subcontractor"}'s connected bank account immediately. The transfer is irreversible once sent. The sub will be asked to confirm receipt and sign their lien waiver.
-          </div>
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3 text-sm space-y-1">
-            <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>Transfer amount</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(stripePayDialog.amount)}</span>
+          {stripeFlowState === "creating" && (
+            <div className="flex flex-col items-center py-8 gap-3 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="text-sm">Preparing secure payment form…</span>
             </div>
-            <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>Payment method</span>
-              <span className="font-medium">Stripe Transfer</span>
+          )}
+          {stripeFlowState === "done" && (
+            <div className="flex flex-col items-center py-8 gap-3 text-green-600">
+              <CheckCircle2 className="h-10 w-10" />
+              <span className="font-semibold">Payment Initiated!</span>
+              <span className="text-sm text-center text-muted-foreground">Funds will arrive in {subPaymentStatus?.subCompanyName ?? "the sub"}'s bank account in 2 business days.</span>
             </div>
-            <div className="flex justify-between text-slate-600 dark:text-slate-400">
-              <span>Recipient</span>
-              <span className="font-medium">{subConnectStatus?.subCompanyName ?? "—"}</span>
-            </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 })}>Cancel</Button>
-            <Button
-              type="button"
-              className="min-h-[44px] gap-2 text-white"
-              style={{ backgroundColor: "#635bff" }}
-              isLoading={stripePayLoading}
-              onClick={handlePayViaStripe}
-            >
-              <CreditCard className="h-4 w-4" /> Confirm Stripe Transfer
-            </Button>
-          </div>
+          )}
+          {(stripeFlowState === "element" || stripeFlowState === "paying") && stripeClientSecret && stripePubKey && stripeAccountId && (
+            <StripePaymentFormWrapper
+              clientSecret={stripeClientSecret}
+              publishableKey={stripePubKey}
+              stripeAccountId={stripeAccountId}
+              invoiceId={stripeFlowInvoice.id}
+              invoiceNumber={stripeFlowInvoice.number}
+              amount={stripeFlowInvoice.amount}
+              subCompanyName={subPaymentStatus?.subCompanyName ?? ""}
+              returnUrl={`${window.location.origin}${BASE_SC}/subcontracts/${subcontractId}?stripe_return=1`}
+              onSuccess={handleRecordStripePayment}
+              onError={(msg) => { toast.error(msg); setStripeFlowState("element"); }}
+              isPaying={stripeFlowState === "paying"}
+            />
+          )}
         </div>
       </Dialog>
 
