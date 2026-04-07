@@ -22,6 +22,7 @@ import notificationsRouter from "./notifications.js";
 import adminRouter from "./admin.js";
 import submittalsRouter from "./submittals.js";
 import analyticsRouter from "./analytics.js";
+import connectRouter from "./connect.js";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use("/notifications", notificationsRouter);
 router.use("/admin", adminRouter);
 router.use("/submittals", submittalsRouter);
 router.use("/analytics", analyticsRouter);
+router.use("/connect", connectRouter);
 
 export default router;

@@ -245,6 +245,38 @@ export default function Dashboard() {
     refetchOnMount: "always",
   });
 
+  type ConnectStatus = { connected: boolean; payoutsEnabled: boolean; accountId: string | null };
+  const { data: connectStatus, refetch: refetchConnectStatus, isLoading: connectLoading } = useQuery<ConnectStatus>({
+    queryKey: ["sub-connect-status"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_DASH}/api/connect/status`, { credentials: "include" });
+      if (!res.ok) return { connected: false, payoutsEnabled: false, accountId: null };
+      return res.json();
+    },
+    enabled: !isGC,
+    staleTime: 60_000,
+    refetchOnMount: "always",
+  });
+
+  const [connectLoading2, setConnectLoading2] = React.useState(false);
+
+  const handleConnectOnboard = async () => {
+    setConnectLoading2(true);
+    try {
+      const res = await fetch(`${BASE_DASH}/api/connect/onboard`, { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error(data.error ?? "Could not start Stripe onboarding");
+      }
+    } catch {
+      toast.error("Could not start Stripe onboarding");
+    } finally {
+      setConnectLoading2(false);
+    }
+  };
+
   usePageTitle("Projects");
 
   const onboardingKey = user ? `onboarding-dismissed-${user.id}` : null;
@@ -755,6 +787,69 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* SUB: Stripe Connect Bank Account Section */}
+      {!isGC && !connectLoading && (
+        <div className="mt-10">
+          {/* Not connected — show prominent CTA */}
+          {!connectStatus?.connected && (
+            <div className="rounded-2xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/20 p-6 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+                <CreditCard className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-blue-800 dark:text-blue-300 text-base">Connect your bank account to receive payments</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-400 mt-0.5 leading-snug">
+                  Your GC uses SubTracker to pay invoices directly. Connect your bank via Stripe so you can receive transfers automatically when your GC approves payment.
+                </p>
+              </div>
+              <Button
+                onClick={handleConnectOnboard}
+                isLoading={connectLoading2}
+                className="shrink-0 min-h-[44px] gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <CreditCard className="h-4 w-4" /> Connect Bank Account
+              </Button>
+            </div>
+          )}
+
+          {/* Connected but payouts not yet enabled — pending verification */}
+          {connectStatus?.connected && !connectStatus?.payoutsEnabled && (
+            <div className="rounded-2xl border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/20 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-yellow-500 flex items-center justify-center shrink-0">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-yellow-800 dark:text-yellow-300 text-sm">Stripe account connected — verification in progress</h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-0.5 leading-snug">
+                  Your Stripe account is set up but needs to finish verification before payouts are enabled. This usually takes a few minutes. If prompted, complete any missing steps.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleConnectOnboard}
+                isLoading={connectLoading2}
+                className="shrink-0 min-h-[44px] gap-2 border-yellow-400 text-yellow-800"
+              >
+                Complete Setup
+              </Button>
+            </div>
+          )}
+
+          {/* Fully connected — payouts enabled */}
+          {connectStatus?.connected && connectStatus?.payoutsEnabled && (
+            <div className="rounded-2xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4 flex items-center gap-3">
+              <div className="h-8 w-8 rounded-xl bg-green-600 flex items-center justify-center shrink-0">
+                <Check className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-green-800 dark:text-green-300 text-sm">Stripe account connected — payments enabled</span>
+                <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Your GC can now pay your approved invoices directly via Stripe. Funds will deposit to your connected bank account.</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

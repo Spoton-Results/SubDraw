@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable, complianceChecklistItemsTable, complianceCompletionsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and, gt, count } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
+import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import { getEffectiveGcId, getActorName, getActorRoleLabel } from "../lib/auth.js";
 import {
   sendChangeOrderCreatedEmail,
@@ -1181,6 +1182,86 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
   }).catch((err) => console.error("[email] sendPaymentRecordedEmail failed:", err));
 
   res.json(invoice);
+});
+
+// Pay invoice via Stripe Transfer (GC only) — transfers funds to sub's connected account
+router.post("/:subcontractId/invoices/:invoiceId/pay-stripe", requireAuth, requireGC, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const gcUser = (req as any).user;
+
+  const [existing] = await db.select().from(invoicesTable).where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+  if (existing.status !== "APPROVED") {
+    res.status(400).json({ error: "Only APPROVED invoices can be paid" });
+    return;
+  }
+
+  const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+
+  const [subUser] = await db.select().from(usersTable).where(eq(usersTable.id, sc.subId)).limit(1);
+  if (!subUser?.stripeConnectAccountId) {
+    res.status(400).json({ error: "This subcontractor has not connected their Stripe account yet." });
+    return;
+  }
+  if (!subUser.stripeConnectPayoutsEnabled) {
+    res.status(400).json({ error: "This subcontractor's Stripe account is not yet approved for payouts. They may need to complete their onboarding." });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const amountCents = Math.round(existing.amount * 100);
+
+  let transfer: any;
+  try {
+    transfer = await stripe.transfers.create({
+      amount: amountCents,
+      currency: "usd",
+      destination: subUser.stripeConnectAccountId,
+      description: `SubTracker: Invoice #${existing.invoiceNumber} — ${sc.tradeCategory ?? "Subcontract"}`,
+      metadata: {
+        invoiceId: existing.id,
+        subcontractId: sc.id,
+        invoiceNumber: String(existing.invoiceNumber),
+      },
+    });
+  } catch (err: any) {
+    const msg = err?.message ?? "Stripe transfer failed";
+    res.status(400).json({ error: msg });
+    return;
+  }
+
+  const paymentDate = new Date().toISOString().split("T")[0];
+  const [invoice] = await db
+    .update(invoicesTable)
+    .set({
+      status: "PAYMENT_UNCONFIRMED",
+      paymentDate,
+      paymentMethod: "Stripe Transfer",
+      paymentReference: transfer.id,
+      paymentNotes: `Paid via Stripe Connect. Transfer ID: ${transfer.id}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+
+  const rawSc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  const scWithRelations = await getSubcontractWithRelations(rawSc);
+  await logActivity(subcontractId, "INVOICE_PAYMENT_UNCONFIRMED", `Invoice #${invoice.invoiceNumber} paid via Stripe Transfer — awaiting sub confirmation`, getActorName(gcUser), getActorRoleLabel(gcUser));
+
+  sendPaymentRecordedEmail({
+    toEmail: scWithRelations.sub.email,
+    projectName: scWithRelations.project.name,
+    gcCompanyName: scWithRelations.project.gc.companyName,
+    invoiceNumber: invoice.invoiceNumber,
+    amount: invoice.amount,
+    paymentDate,
+    paymentMethod: "Stripe Transfer",
+    paymentReference: transfer.id,
+    appUrl: getAppUrl(req),
+  }).catch((err) => console.error("[email] sendPaymentRecordedEmail failed:", err));
+
+  res.json({ invoice, transferId: transfer.id });
 });
 
 // Sub signs the lien waiver before confirming payment

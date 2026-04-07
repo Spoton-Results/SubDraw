@@ -118,6 +118,47 @@ export default function SubcontractDetail() {
   const [payMethod, setPayMethod] = React.useState("");
   const [payReference, setPayReference] = React.useState("");
   const [payNotes, setPayNotes] = React.useState("");
+
+  const [stripePayDialog, setStripePayDialog] = React.useState<{ open: boolean; id: string; invoiceNumber: string; amount: number }>({ open: false, id: "", invoiceNumber: "", amount: 0 });
+  const [stripePayLoading, setStripePayLoading] = React.useState(false);
+
+  type SubConnectStatus = { connected: boolean; payoutsEnabled: boolean; subCompanyName?: string };
+  const BASE_SC = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  const { data: subConnectStatus } = useQuery<SubConnectStatus>({
+    queryKey: ["sub-connect-status-for-gc", subcontractId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_SC}/api/connect/by-subcontract/${subcontractId}`, { credentials: "include" });
+      if (!res.ok) return { connected: false, payoutsEnabled: false };
+      return res.json();
+    },
+    enabled: isGC && !!subcontractId,
+    staleTime: 60_000,
+    refetchOnMount: "always",
+  });
+
+  const handlePayViaStripe = async () => {
+    if (!stripePayDialog.id) return;
+    setStripePayLoading(true);
+    try {
+      const res = await fetch(`${BASE_SC}/api/subcontracts/${subcontractId}/invoices/${stripePayDialog.id}/pay-stripe`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Stripe transfer failed");
+        return;
+      }
+      toast.success(`Stripe transfer initiated — Invoice #${stripePayDialog.invoiceNumber} is now pending sub confirmation`);
+      setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 });
+      queryClient.invalidateQueries({ queryKey: ["subcontract", subcontractId] });
+    } catch {
+      toast.error("Stripe transfer failed. Please try again.");
+    } finally {
+      setStripePayLoading(false);
+    }
+  };
+
   const [disputeDialog, setDisputeDialog] = React.useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [disputeReasonText, setDisputeReasonText] = React.useState("");
   const [releaseRetentionLoading, setReleaseRetentionLoading] = React.useState(false);
@@ -3053,9 +3094,16 @@ export default function SubcontractDetail() {
                           </>
                         )}
                         {isGC && perms.canApproveInvoices && inv.status === "APPROVED" && (
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
-                            <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
-                          </Button>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white min-h-[44px] text-xs gap-1.5" onClick={() => setPayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
+                              <DollarSign className="h-3.5 w-3.5" /> Mark as Paid
+                            </Button>
+                            {subConnectStatus?.payoutsEnabled && (
+                              <Button size="sm" className="min-h-[44px] text-xs gap-1.5" style={{ backgroundColor: "#635bff" }} onClick={() => setStripePayDialog({ open: true, id: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}>
+                                <CreditCard className="h-3.5 w-3.5 text-white" /> <span className="text-white">Pay via Stripe</span>
+                              </Button>
+                            )}
+                          </div>
                         )}
                         {!isGC && inv.status === "PENDING" && (
                           cancelConfirm === inv.id ? (
@@ -3704,6 +3752,46 @@ export default function SubcontractDetail() {
             </Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Pay via Stripe Dialog */}
+      <Dialog
+        open={stripePayDialog.open}
+        onOpenChange={(open) => { if (!open) setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 }); }}
+        title="Pay via Stripe"
+        description={`Invoice #${stripePayDialog.invoiceNumber} — ${formatCurrency(stripePayDialog.amount)}`}
+      >
+        <div className="space-y-4 mt-2">
+          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-700 dark:text-blue-400">
+            This will initiate a real Stripe bank transfer of <strong>{formatCurrency(stripePayDialog.amount)}</strong> to {subConnectStatus?.subCompanyName ?? "the subcontractor"}'s connected bank account immediately. The transfer is irreversible once sent. The sub will be asked to confirm receipt and sign their lien waiver.
+          </div>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3 text-sm space-y-1">
+            <div className="flex justify-between text-slate-600 dark:text-slate-400">
+              <span>Transfer amount</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(stripePayDialog.amount)}</span>
+            </div>
+            <div className="flex justify-between text-slate-600 dark:text-slate-400">
+              <span>Payment method</span>
+              <span className="font-medium">Stripe Transfer</span>
+            </div>
+            <div className="flex justify-between text-slate-600 dark:text-slate-400">
+              <span>Recipient</span>
+              <span className="font-medium">{subConnectStatus?.subCompanyName ?? "—"}</span>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setStripePayDialog({ open: false, id: "", invoiceNumber: "", amount: 0 })}>Cancel</Button>
+            <Button
+              type="button"
+              className="min-h-[44px] gap-2 text-white"
+              style={{ backgroundColor: "#635bff" }}
+              isLoading={stripePayLoading}
+              onClick={handlePayViaStripe}
+            >
+              <CreditCard className="h-4 w-4" /> Confirm Stripe Transfer
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
       {/* Dispute Payment Dialog */}
