@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
-type SetupStatus = "NOT_SETUP" | "PENDING" | "ACTIVE" | "RESTRICTED" | "loading";
+type SetupStatus = "NOT_SETUP" | "PENDING" | "ACTIVE" | "RESTRICTED" | "loading" | "auto-redirecting";
 
 export default function PaymentSetupPage() {
   usePageTitle("Get Paid — Set Up Payment Account");
@@ -26,7 +26,24 @@ export default function PaymentSetupPage() {
     let cancelled = false;
     fetch(`${BASE}/api/stripe/connect/check-status`, { credentials: "include" })
       .then(r => r.json())
-      .then(d => { if (!cancelled) setStatus(d.status ?? "NOT_SETUP"); })
+      .then(d => {
+        if (cancelled) return;
+        // Part 5 — Refresh URL Handler: if account exists but onboarding wasn't completed,
+        // automatically generate a fresh Stripe link and redirect the sub seamlessly.
+        if (d.status === "PENDING" && d.onboardingComplete === false) {
+          setStatus("auto-redirecting");
+          fetch(`${BASE}/api/stripe/connect/create-account`, { method: "POST", credentials: "include" })
+            .then(r => r.json())
+            .then(link => {
+              if (cancelled) return;
+              if (link.url) { window.location.href = link.url; }
+              else { setStatus("PENDING"); }
+            })
+            .catch(() => { if (!cancelled) setStatus("PENDING"); });
+        } else {
+          setStatus(d.status ?? "NOT_SETUP");
+        }
+      })
       .catch(() => { if (!cancelled) setStatus("NOT_SETUP"); });
     return () => { cancelled = true; };
   }, [user]);
@@ -74,10 +91,13 @@ export default function PaymentSetupPage() {
     <Layout>
       <div className="max-w-2xl mx-auto px-4 py-10">
 
-        {/* Loading */}
-        {status === "loading" && (
-          <div className="flex justify-center py-24">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        {/* Loading / Auto-redirecting */}
+        {(status === "loading" || status === "auto-redirecting") && (
+          <div className="flex flex-col items-center gap-4 py-24 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            {status === "auto-redirecting" && (
+              <p className="text-sm">Resuming your Stripe setup — redirecting you now…</p>
+            )}
           </div>
         )}
 
@@ -172,7 +192,7 @@ export default function PaymentSetupPage() {
           </div>
         )}
 
-        {/* ── PENDING ────────────────────────────────────────────────────── */}
+        {/* ── PENDING (onboarding complete, Stripe reviewing) ─────────────── */}
         {status === "PENDING" && (
           <div className="max-w-lg mx-auto text-center space-y-6 py-10">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-yellow-100 dark:bg-yellow-950/30 mb-2">
