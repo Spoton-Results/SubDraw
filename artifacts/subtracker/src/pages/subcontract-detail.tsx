@@ -1400,7 +1400,7 @@ export default function SubcontractDetail() {
   return (
     <Layout>
       <div className="mb-6">
-        <Link href={`/projects/${sub.projectId}`} className="text-primary hover:underline flex items-center gap-1 text-sm font-semibold mb-4 w-fit">
+        <Link href={`/projects/${sub.projectId}`} data-demo-target="back-to-project" className="text-primary hover:underline flex items-center gap-1 text-sm font-semibold mb-4 w-fit">
           <ArrowLeft className="h-4 w-4" /> Back to Project
         </Link>
         <div className="flex flex-wrap items-start gap-3">
@@ -1408,7 +1408,7 @@ export default function SubcontractDetail() {
             <h1 className="text-2xl md:text-3xl font-bold font-display leading-tight">Subcontract: {sub.sub.companyName}</h1>
             <p className="text-muted-foreground mt-1 md:text-lg">{sub.project.name}</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap mt-1">
+          <div className="flex items-center gap-2 flex-wrap mt-1" data-demo-target="insurance-badges">
             {sub.tradeCategory && (
               <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border ${TRADE_BADGE_COLORS[sub.tradeCategory] ?? TRADE_BADGE_COLORS.Other}`}>
                 {sub.tradeCategory}

@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield } from "lucide-react";
+import { DemoWalkthroughProvider, DemoProgressBar, DemoWalkthroughOverlay } from "@/components/demo-walkthrough";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import {
@@ -179,7 +180,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const roleLabel = roleMeta?.label ?? (user.role === "GC" ? "GC" : "SUB");
 
+  const isDemoGC = (user as any).isDemo === true && user.role === "GC";
+
   return (
+    <DemoWalkthroughProvider isDemoGC={isDemoGC}>
     <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full">
       {/* Sidebar — desktop only */}
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
@@ -312,20 +316,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         )}
-        {(user as any).isDemo && (
-          <div className="bg-blue-600 text-white px-4 py-2.5 flex items-center justify-between gap-4 shrink-0">
-            <div className="flex items-center gap-2 text-sm font-medium min-w-0">
-              <FlaskConical className="h-4 w-4 shrink-0" />
-              <span className="truncate">You are exploring the SubTracker demo — sign up free to create your own projects</span>
-            </div>
-            <Link
-              href="/register"
-              className="flex items-center gap-1 text-sm font-bold bg-white text-blue-700 hover:bg-blue-50 px-3 py-1 rounded-lg shrink-0 transition-colors"
-            >
-              Sign Up Free <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        )}
+        <DemoProgressBar />
         <div className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-6xl mx-auto">
             {children}
@@ -376,6 +367,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           Account
         </Link>
       </nav>
+      <DemoWalkthroughOverlay />
     </div>
+    </DemoWalkthroughProvider>
   );
 }

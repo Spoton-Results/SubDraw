@@ -605,7 +605,9 @@ export default function Dashboard() {
 
       {/* ── GC: Action Required Dashboard ─────────────────────────────────── */}
       {isGC && (
-        <ActionRequired items={actionItems} isLoading={actionItemsLoading} />
+        <div data-demo-target="action-required">
+          <ActionRequired items={actionItems} isLoading={actionItemsLoading} />
+        </div>
       )}
 
       {isLoading ? (

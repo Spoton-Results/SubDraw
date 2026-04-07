@@ -2254,7 +2254,7 @@ export default function ProjectDetail() {
                   return (
                     <div className="p-4 sm:p-6 space-y-4">
                       {/* Card grid — 1 col mobile, 2 col desktop */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-demo-target="subcontract-cards">
                         {visible.map(sub => {
                           const sb = sub.scoreboard;
                           const remaining = sb?.remaining ?? sub.baseContractAmount;
