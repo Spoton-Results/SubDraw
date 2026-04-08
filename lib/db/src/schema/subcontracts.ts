@@ -168,6 +168,7 @@ export const submittalsTable = pgTable("submittals", {
   acknowledgedAt: timestamp("acknowledged_at"),
   acknowledgedByName: text("acknowledged_by_name"),
   acknowledgmentMessage: text("acknowledgment_message"),
+  overdueNotifiedAt: timestamp("overdue_notified_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

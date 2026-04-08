@@ -28,6 +28,8 @@ export const usersTable = pgTable("users", {
   adminPlanOverride: text("admin_plan_override"),
   adminPlanOverrideExpiresAt: timestamp("admin_plan_override_expires_at"),
   adminNotes: text("admin_notes"),
+  pushPromptLastSeenAt: timestamp("push_prompt_last_seen_at"),
+  homeScreenBannerDismissedAt: timestamp("home_screen_banner_dismissed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

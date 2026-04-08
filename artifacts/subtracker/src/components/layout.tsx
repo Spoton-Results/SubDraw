@@ -2,10 +2,12 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield, Smartphone, X } from "lucide-react";
 import { DemoWalkthroughProvider, DemoProgressBar, DemoWalkthroughOverlay } from "@/components/demo-walkthrough";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
+import { PushPermissionPrompt } from "@/components/push-permission-prompt";
+import { dismissHomeScreenBanner } from "@/lib/notifications";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,8 +46,13 @@ function NotificationBell({ onNavigate }: { onNavigate: (path: string) => void }
 
   const handleClick = (n: Notification) => {
     if (!n.readAt) markRead.mutate(n.id);
-    const data = n.data ? JSON.parse(n.data) : {};
-    if (data.subcontractId) onNavigate(`/subcontracts/${data.subcontractId}`);
+    if (n.url) {
+      onNavigate(n.url);
+    } else {
+      const data = n.data ? JSON.parse(n.data) : {};
+      if (data.submittalId) onNavigate(`/submittals/${data.submittalId}`);
+      else if (data.subcontractId) onNavigate(`/subcontracts/${data.subcontractId}`);
+    }
     setOpen(false);
   };
 
@@ -56,7 +63,7 @@ function NotificationBell({ onNavigate }: { onNavigate: (path: string) => void }
           <Bell className="h-5 w-5 text-muted-foreground" />
           {unread > 0 && (
             <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center leading-none">
-              {unread > 9 ? "9+" : unread}
+              {unread > 99 ? "99+" : unread}
             </span>
           )}
         </button>
@@ -182,6 +189,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isDemoGC = (user as any).isDemo === true && user.role === "GC";
 
+  // Mobile home screen banner — show if mobile browser, not standalone, not recently dismissed
+  const [showHomeScreen, setShowHomeScreen] = React.useState(false);
+  React.useEffect(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    if (isStandalone) return;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile) return;
+    const dismissedAt = (user as any).homeScreenBannerDismissedAt;
+    if (dismissedAt) {
+      const days = (Date.now() - new Date(dismissedAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (days < 30) return;
+    }
+    const timer = setTimeout(() => setShowHomeScreen(true), 8000);
+    return () => clearTimeout(timer);
+  }, [(user as any).homeScreenBannerDismissedAt]);
+
+  const handleDismissHomeScreen = async () => {
+    setShowHomeScreen(false);
+    await dismissHomeScreenBanner().catch(() => {});
+  };
+
   return (
     <DemoWalkthroughProvider isDemoGC={isDemoGC}>
     <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full">
@@ -199,6 +227,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <nav className="space-y-1">
             {navItem("/dashboard", <LayoutDashboard className="h-5 w-5" />, "Projects")}
             {perms.isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
+            {navItem("/notifications", <Bell className="h-5 w-5" />, "Notifications")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
             {navItem("/account", <Settings className="h-5 w-5" />, "Account Settings")}
             {perms.canManageTeam && navItem("/team", <Users className="h-5 w-5" />, "Team")}
@@ -368,6 +397,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </Link>
       </nav>
       <DemoWalkthroughOverlay />
+
+      {/* Push Notification Permission Prompt */}
+      <PushPermissionPrompt
+        pushPromptLastSeenAt={(user as any).pushPromptLastSeenAt}
+        onDismiss={() => {}}
+      />
+
+      {/* Mobile Home Screen Banner */}
+      {showHomeScreen && (
+        <div className="fixed bottom-16 md:hidden left-3 right-3 z-40 bg-card border border-border rounded-2xl shadow-xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Smartphone className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm text-foreground leading-tight">Add to your home screen</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              Install SubTracker for quick access. On iOS: tap <strong>Share → Add to Home Screen</strong>. On Android: tap <strong>Menu → Add to Home Screen</strong>.
+            </p>
+          </div>
+          <button
+            onClick={handleDismissHomeScreen}
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
     </DemoWalkthroughProvider>
   );

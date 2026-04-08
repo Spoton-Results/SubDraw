@@ -23,6 +23,7 @@ import ChangePassword from "./pages/change-password";
 import ForgotPassword from "./pages/forgot-password";
 import ResetPassword from "./pages/reset-password";
 import Account from "./pages/account";
+import Notifications from "./pages/notifications";
 import Contacts from "./pages/contacts";
 import ProfileSetup from "./pages/profile-setup";
 import Billing from "./pages/billing";
@@ -138,6 +139,7 @@ function Router() {
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
       <Route path="/submittals/:id" component={() => <ProtectedRoute component={SubmittalDetail} />} />
       <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
+      <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} />} />
       <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} ownerOnly />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} ownerOnly />} />
       <Route path="/billing" component={() => <ProtectedRoute component={Billing} ownerOnly />} />

@@ -1,0 +1,17 @@
+{
+  "name": "SubTracker",
+  "short_name": "SubTracker",
+  "description": "Subcontract management built for modern GCs",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

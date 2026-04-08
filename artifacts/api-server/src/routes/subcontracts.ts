@@ -577,7 +577,8 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
       userId: sc.sub.id,
       type: "CO_CREATED",
       title: `New Change Order from ${sc.project.gc.companyName}`,
-      body: `${description} — ${amountFmt} — Tap to Review`,
+      body: `${description} — ${amountFmt} on ${sc.project.name}. Your approval is needed.`,
+      url: `/subcontracts/${req.params.subcontractId}`,
       data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
     }).catch((err) => console.error("[notification] CO_CREATED failed:", err));
 
@@ -606,8 +607,9 @@ router.post("/:subcontractId/change-orders", requireAuth, async (req, res) => {
     createNotification({
       userId: sc.project.gc.id,
       type: "CO_SUBMITTED_BY_SUB",
-      title: `${sc.sub.companyName} submitted a Change Order`,
-      body: `${description} — ${amountFmt} — on ${sc.project.name} — Tap to Review`,
+      title: `Change Order Request — ${sc.sub.companyName}`,
+      body: `${sc.sub.companyName} submitted a change order request for ${amountFmt} on ${sc.project.name}. Your review is needed.`,
+      url: `/subcontracts/${req.params.subcontractId}`,
       data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
     }).catch((err) => console.error("[notification] CO_SUBMITTED_BY_SUB failed:", err));
 
@@ -650,8 +652,9 @@ router.post("/:subcontractId/change-orders/:changeOrderId/approve", requireAuth,
   createNotification({
     userId: sc.project.gc.id,
     type: "CO_APPROVED_BY_SUB",
-    title: `${sc.sub.companyName} approved a Change Order`,
-    body: `${co.description} — ${amountFmt} — Your final approval is needed`,
+    title: `Change Order Approved — ${sc.sub.companyName}`,
+    body: `${sc.sub.companyName} approved the ${amountFmt} change order. Your final approval is needed.`,
+    url: `/subcontracts/${req.params.subcontractId}`,
     data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
   }).catch((err) => console.error("[notification] CO_APPROVED_BY_SUB failed:", err));
 
@@ -705,8 +708,9 @@ router.post("/:subcontractId/change-orders/:changeOrderId/reject", requireAuth, 
   createNotification({
     userId: sc.project.gc.id,
     type: "CO_REJECTED_BY_SUB",
-    title: `${sc.sub.companyName} rejected a Change Order`,
-    body: `${co.description} — ${amountFmt}${rejectionReason ? ` — "${rejectionReason}"` : ""}`,
+    title: `Change Order Rejected — ${sc.sub.companyName}`,
+    body: `${sc.sub.companyName} rejected the change order. Tap to see their reason.`,
+    url: `/subcontracts/${req.params.subcontractId}`,
     data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
   }).catch((err) => console.error("[notification] CO_REJECTED_BY_SUB failed:", err));
 
@@ -756,6 +760,7 @@ router.post("/:subcontractId/change-orders/:changeOrderId/gc-approve", requireAu
     type: "CO_GC_APPROVED",
     title: `Change Order Approved by ${sc.project.gc.companyName}`,
     body: `${co.description} — ${amountFmt} — has been fully approved`,
+    url: `/subcontracts/${req.params.subcontractId}`,
     data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
   }).catch((err) => console.error("[notification] CO_GC_APPROVED failed:", err));
 
@@ -806,6 +811,7 @@ router.post("/:subcontractId/change-orders/:changeOrderId/gc-reject", requireAut
     type: "CO_GC_REJECTED",
     title: `Change Order Voided by ${sc.project.gc.companyName}`,
     body: `${co.description} — ${amountFmt}${rejectionReason ? ` — "${rejectionReason}"` : ""}`,
+    url: `/subcontracts/${req.params.subcontractId}`,
     data: { subcontractId: req.params.subcontractId, changeOrderId: co.id, projectId: sc.project.id },
   }).catch((err) => console.error("[notification] CO_GC_REJECTED failed:", err));
 
@@ -953,6 +959,27 @@ router.post("/:subcontractId/invoices", requireAuth, async (req, res) => {
     }
   })();
 
+  const amtFmt = `$${invoiceAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+  if (status === "FLAGGED") {
+    createNotification({
+      userId: scWithRelations.project.gc.id,
+      type: "INVOICE_FLAGGED",
+      title: `Invoice Flagged — ${scWithRelations.sub.companyName}`,
+      body: `Invoice #${String(invoiceNumber).trim()} for ${amtFmt} exceeds contract balance on ${scWithRelations.project.name}. Review required.`,
+      url: `/subcontracts/${subcontractId}`,
+      data: { subcontractId },
+    }).catch((err) => console.error("[notification] INVOICE_FLAGGED failed:", err));
+  } else {
+    createNotification({
+      userId: scWithRelations.project.gc.id,
+      type: "INVOICE_SUBMITTED",
+      title: `New Invoice — ${scWithRelations.sub.companyName}`,
+      body: `Invoice #${String(invoiceNumber).trim()} for ${amtFmt} submitted on ${scWithRelations.project.name}. Your approval is needed.`,
+      url: `/subcontracts/${subcontractId}`,
+      data: { subcontractId },
+    }).catch((err) => console.error("[notification] INVOICE_SUBMITTED failed:", err));
+  }
+
   res.status(201).json(invoice);
 });
 
@@ -1039,6 +1066,15 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
     }
   })();
 
+  createNotification({
+    userId: sc.sub.id,
+    type: "INVOICE_APPROVED",
+    title: `Invoice Approved — ${sc.project.gc.companyName}`,
+    body: `Invoice #${invoice.invoiceNumber} for $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} has been approved on ${sc.project.name}.`,
+    url: `/subcontracts/${subcontractId}`,
+    data: { subcontractId, invoiceId },
+  }).catch((err) => console.error("[notification] INVOICE_APPROVED failed:", err));
+
   res.json(invoice);
 });
 
@@ -1077,6 +1113,15 @@ router.post("/:subcontractId/invoices/:invoiceId/reject", requireAuth, requireGC
     rejectionReason: reason,
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendInvoiceDecisionEmail failed:", err));
+
+  createNotification({
+    userId: sc.sub.id,
+    type: "INVOICE_REJECTED",
+    title: `Invoice Rejected — ${sc.project.gc.companyName}`,
+    body: `Invoice #${invoice.invoiceNumber} was rejected: ${reason}`,
+    url: `/subcontracts/${req.params.subcontractId}`,
+    data: { subcontractId: req.params.subcontractId, invoiceId: req.params.invoiceId },
+  }).catch((err) => console.error("[notification] INVOICE_REJECTED failed:", err));
 
   res.json(invoice);
 });
@@ -1181,6 +1226,15 @@ router.post("/:subcontractId/invoices/:invoiceId/pay", requireAuth, requireGC, a
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendPaymentRecordedEmail failed:", err));
 
+  createNotification({
+    userId: sc.sub.id,
+    type: "PAYMENT_MANUAL",
+    title: `Payment Recorded — ${sc.project.gc.companyName}`,
+    body: `${sc.project.gc.companyName} recorded a payment of $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} via ${paymentMethod}. Please confirm receipt.`,
+    url: `/subcontracts/${subcontractId}`,
+    data: { subcontractId, invoiceId },
+  }).catch((err) => console.error("[notification] PAYMENT_MANUAL failed:", err));
+
   res.json(invoice);
 });
 
@@ -1260,6 +1314,15 @@ router.post("/:subcontractId/invoices/:invoiceId/pay-stripe", requireAuth, requi
     paymentReference: transfer.id,
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendPaymentRecordedEmail failed:", err));
+
+  createNotification({
+    userId: scWithRelations.sub.id,
+    type: "PAYMENT_STRIPE",
+    title: `Payment Sent via Stripe — ${scWithRelations.project.gc.companyName}`,
+    body: `$${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} has been transferred to your Stripe account for Invoice #${invoice.invoiceNumber}. Please confirm receipt.`,
+    url: `/subcontracts/${subcontractId}`,
+    data: { subcontractId, invoiceId },
+  }).catch((err) => console.error("[notification] PAYMENT_STRIPE failed:", err));
 
   res.json({ invoice, transferId: transfer.id });
 });
@@ -1375,6 +1438,15 @@ router.post("/:subcontractId/invoices/:invoiceId/confirm-payment", requireAuth, 
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendPaymentConfirmedEmail failed:", err));
 
+  createNotification({
+    userId: sc2.project.gc.id,
+    type: "PAYMENT_CONFIRMED",
+    title: `Payment Confirmed — ${sc2.sub.companyName}`,
+    body: `${sc2.sub.companyName} confirmed receipt of $${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} for Invoice #${invoice.invoiceNumber} on ${sc2.project.name}.`,
+    url: `/subcontracts/${subcontractId}`,
+    data: { subcontractId, invoiceId },
+  }).catch((err) => console.error("[notification] PAYMENT_CONFIRMED failed:", err));
+
   res.json(invoice);
 });
 
@@ -1410,6 +1482,15 @@ router.post("/:subcontractId/invoices/:invoiceId/dispute-payment", requireAuth, 
     disputeReason: disputeReason ?? undefined,
     appUrl: getAppUrl(req),
   }).catch((err) => console.error("[email] sendPaymentDisputedEmail failed:", err));
+
+  createNotification({
+    userId: sc3.project.gc.id,
+    type: "PAYMENT_DISPUTED",
+    title: `Payment Disputed — ${sc3.sub.companyName}`,
+    body: `${sc3.sub.companyName} disputes receiving payment for Invoice #${invoice.invoiceNumber} (${`$${invoice.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}). Immediate attention required.`,
+    url: `/subcontracts/${subcontractId}`,
+    data: { subcontractId, invoiceId },
+  }).catch((err) => console.error("[notification] PAYMENT_DISPUTED failed:", err));
 
   res.json(invoice);
 });

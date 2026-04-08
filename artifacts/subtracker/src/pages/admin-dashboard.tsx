@@ -4,7 +4,7 @@ import {
   Users, TrendingUp, CreditCard, Activity, Shield, LogOut, Search, Filter, ChevronDown,
   Loader2, AlertTriangle, HardHat, Play, Pause, Clock, BarChart2, FileText,
   Mail, Trash2, UserX, RefreshCw, Eye, CheckCircle, XCircle, Zap,
-  Sun, ShieldAlert, Target, BarChart, Flag, Monitor, Send,
+  Sun, ShieldAlert, Target, BarChart, Flag, Monitor, Send, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDistanceToNow, format } from "date-fns";
@@ -20,13 +20,14 @@ import { TabEmailTools } from "./admin/tab-email-tools";
 import { TabDemoManagement } from "./admin/tab-demo-management";
 import { TabFeatureFlags } from "./admin/tab-feature-flags";
 import { AdminStripePaymentsTab } from "./admin/tab-stripe-payments";
+import { TabPushNotifications } from "./admin/tab-push-notifications";
 
 const BASE = import.meta.env.BASE_URL;
 
 const api = (path: string, opts?: RequestInit) =>
   fetch(`${BASE}api/admin${path}`, { credentials: "include", ...opts });
 
-type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit" | "payments";
+type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit" | "payments" | "push";
 
 interface Metrics {
   totalGCs: number; activePaying: number; onTrial: number; churned: number;
@@ -388,6 +389,7 @@ export default function AdminDashboard() {
     { id: "activity",  label: "Activity",            icon: <Activity className="h-4 w-4" />,    group: "ops" },
     { id: "audit",     label: "Audit Log",           icon: <Shield className="h-4 w-4" />,      group: "ops" },
     { id: "payments",  label: "Stripe Payments",      icon: <CreditCard className="h-4 w-4" />,   group: "ops" },
+    { id: "push",      label: "Push Notifications",   icon: <Bell className="h-4 w-4" />,          group: "ops" },
   ];
 
   return (
@@ -1028,6 +1030,7 @@ export default function AdminDashboard() {
             <AdminStripePaymentsTab />
           </div>
         )}
+        {tab === "push" && <TabPushNotifications />}
       </div>
 
       {/* ── Modals ── */}

@@ -4,13 +4,20 @@ import {
   useGetMe, useUpdateProfile, useChangePassword, getGetMeQueryKey
 } from "@workspace/api-client-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Eye, EyeOff, User, KeyRound, Building2, Lock, ClipboardList, Plus, Trash2, Save, Pencil, CreditCard, CheckCircle2, Clock, AlertCircle, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, User, KeyRound, Building2, Lock, ClipboardList, Plus, Trash2, Save, Pencil, CreditCard, CheckCircle2, Clock, AlertCircle, RefreshCw, Bell, BellOff } from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  subscribeToPush,
+  unsubscribeFromPush,
+  getPushSubscriptionStatus,
+} from "@/lib/notifications";
 
 const TRADE_CATEGORIES = [
   "General", "Electrical", "Plumbing", "HVAC", "Framing", "Drywall",
@@ -529,8 +536,159 @@ export default function Account() {
             <GetPaidSetupSection onStatusChange={setPayNavStatus} />
           </div>
         )}
+
+        {/* NOTIFICATION SETTINGS */}
+        <div id="notifications" className="scroll-mt-20">
+          <NotificationSettingsSection role={user.role as string} />
+        </div>
       </div>
     </Layout>
+  );
+}
+
+function NotificationSettingsSection({ role }: { role: string }) {
+  const [pushStatus, setPushStatus] = React.useState<"granted" | "denied" | "default" | "unsupported" | "loading">("loading");
+  const [pushLoading, setPushLoading] = React.useState(false);
+
+  const { data: prefs, refetch: refetchPrefs } = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: getNotificationPreferences,
+  });
+
+  const updatePrefs = useMutation({
+    mutationFn: updateNotificationPreferences,
+    onSuccess: () => refetchPrefs(),
+    onError: () => toast.error("Failed to update notification preference"),
+  });
+
+  React.useEffect(() => {
+    getPushSubscriptionStatus().then(s => setPushStatus(s));
+  }, []);
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    try {
+      if (pushStatus === "granted") {
+        await unsubscribeFromPush();
+        setPushStatus("default");
+        toast.success("Push notifications disabled");
+      } else {
+        const ok = await subscribeToPush();
+        if (ok) {
+          setPushStatus("granted");
+          toast.success("Push notifications enabled!");
+        } else if (Notification.permission === "denied") {
+          toast.error("Notifications blocked — enable them in your browser settings.");
+        } else {
+          toast.error("Could not enable push notifications.");
+        }
+      }
+    } catch {
+      toast.error("Could not change push notification status");
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const gcPrefs = [
+    { key: "invoiceSubmitted", label: "Invoice Submitted", desc: "When a sub submits an invoice for approval" },
+    { key: "invoiceFlagged", label: "Invoice Flagged", desc: "When an invoice exceeds the contract balance" },
+    { key: "changeOrderRequest", label: "Change Order Request", desc: "When a sub submits a change order for your review" },
+    { key: "changeOrderApproved", label: "Change Order Approved by Sub", desc: "When a sub approves your change order" },
+    { key: "changeOrderRejected", label: "Change Order Rejected by Sub", desc: "When a sub rejects your change order" },
+    { key: "paymentConfirmed", label: "Payment Confirmed", desc: "When a sub confirms receipt of payment" },
+    { key: "paymentDisputed", label: "Payment Disputed", desc: "When a sub disputes a payment" },
+    { key: "insuranceExpiring", label: "Insurance Expiring", desc: "When a sub's insurance is expiring soon" },
+    { key: "licenseExpiring", label: "License Expiring", desc: "When a sub's license is expiring soon" },
+  ] as const;
+
+  const subPrefs = [
+    { key: "changeOrderCreated", label: "New Change Order", desc: "When your GC creates a change order for your approval" },
+    { key: "invoiceApproved", label: "Invoice Approved", desc: "When your GC approves your invoice" },
+    { key: "invoiceRejected", label: "Invoice Rejected", desc: "When your GC rejects your invoice" },
+    { key: "paymentManual", label: "Payment Recorded", desc: "When your GC records a payment" },
+    { key: "paymentStripe", label: "Stripe Payment Sent", desc: "When your GC sends a Stripe payment" },
+    { key: "submittalReceived", label: "New Submittal", desc: "When your GC sends a new submittal" },
+    { key: "insuranceExpiring", label: "Insurance Expiring", desc: "When your insurance certificate is expiring soon" },
+    { key: "licenseExpiring", label: "License Expiring", desc: "When your contractor license is expiring soon" },
+    { key: "paymentSetupReminder", label: "Payment Setup Reminders", desc: "Reminders to set up your Stripe payment account" },
+  ] as const;
+
+  const prefItems = role === "GC" ? gcPrefs : subPrefs;
+
+  const PrefToggle = ({ prefKey, label, desc }: { prefKey: string; label: string; desc: string }) => {
+    const enabled = prefs ? (prefs as any)[prefKey] !== false : true;
+    return (
+      <div className="flex items-start justify-between gap-4 py-3 border-b border-border last:border-b-0">
+        <div>
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+        </div>
+        <button
+          onClick={() => updatePrefs.mutate({ [prefKey]: !enabled } as any)}
+          disabled={updatePrefs.isPending}
+          className={`relative h-6 w-11 rounded-full transition-colors shrink-0 mt-0.5 ${enabled ? "bg-primary" : "bg-muted"}`}
+          role="switch"
+          aria-checked={enabled}
+        >
+          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : "translate-x-0"}`} />
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="flex items-center gap-2">
+          <Bell className="h-5 w-5 text-primary" /> Notification Settings
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-6 space-y-6">
+        {/* Push Toggle */}
+        <div>
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div>
+              <h3 className="font-semibold text-sm text-foreground">Push Notifications</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {pushStatus === "granted" && "Push notifications are enabled on this device."}
+                {pushStatus === "denied" && "Push notifications are blocked. Enable them in your browser settings."}
+                {pushStatus === "default" && "Enable push notifications to get real-time alerts."}
+                {pushStatus === "unsupported" && "Your browser doesn't support push notifications."}
+                {pushStatus === "loading" && "Checking status…"}
+              </p>
+            </div>
+            {pushStatus !== "unsupported" && pushStatus !== "denied" && pushStatus !== "loading" && (
+              <Button
+                size="sm"
+                variant={pushStatus === "granted" ? "outline" : "default"}
+                onClick={handleTogglePush}
+                disabled={pushLoading}
+                className="shrink-0 gap-2 h-9"
+              >
+                {pushStatus === "granted" ? <><BellOff className="h-4 w-4" /> Disable</> : <><Bell className="h-4 w-4" /> Enable</>}
+              </Button>
+            )}
+          </div>
+          {pushStatus === "denied" && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+              To re-enable, click the lock icon in your browser's address bar and allow notifications for this site.
+            </div>
+          )}
+        </div>
+
+        {/* Per-type toggles */}
+        <div>
+          <h3 className="font-semibold text-sm text-foreground mb-1">Notification Types</h3>
+          <p className="text-xs text-muted-foreground mb-3">Control which in-app and push notifications you receive.</p>
+          <div>
+            {prefItems.map(item => (
+              <PrefToggle key={item.key} prefKey={item.key} label={item.label} desc={item.desc} />
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

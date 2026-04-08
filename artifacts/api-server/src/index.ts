@@ -4,6 +4,7 @@ import { startInsuranceNotifier } from "./lib/insuranceNotifier.js";
 import { startLicenseNotifier } from "./lib/licenseNotifier.js";
 import { startGCCredentialNotifier } from "./lib/gcCredentialNotifier.js";
 import { startDemoSeeder } from "./lib/demoSeeder.js";
+import { startSubmittalOverdueNotifier } from "./lib/submittalOverdueNotifier.js";
 
 const rawPort = process.env["PORT"];
 
@@ -53,6 +54,7 @@ async function initStripe() {
   startInsuranceNotifier(appBaseUrl);
   startLicenseNotifier(appBaseUrl);
   startGCCredentialNotifier(appBaseUrl);
+  startSubmittalOverdueNotifier();
   startDemoSeeder();
 
   app.listen(port, () => {

@@ -170,8 +170,9 @@ router.post("/subcontracts/:subcontractId/submittals", requireAuth, requireGC, a
   createNotification({
     userId: subUser.id,
     type: "SUBMITTAL_CREATED",
-    title: `New submittal from ${user.companyName ?? "GC"}`,
-    body: `${name} — ${project.name} — Tap to review`,
+    title: `New Submittal — ${user.companyName ?? "GC"}`,
+    body: `${name} on ${project.name} requires your review and response.`,
+    url: `/submittals/${submittal.id}`,
     data: { subcontractId, submittalId: submittal.id, projectId: project.id },
   }).catch(err => console.error("[notification] SUBMITTAL_CREATED failed:", err));
 
@@ -284,7 +285,8 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
         userId: subUser.id,
         type: "SUBMITTAL_MESSAGE",
         title: `New message on "${submittal.name}"`,
-        body: `${senderName} sent a message — tap to view`,
+        body: `${senderName} sent a message on ${project.name}. Tap to view.`,
+        url: `/submittals/${submittal.id}`,
         data: { subcontractId: sc.id, submittalId: submittal.id, projectId: project.id },
       }).catch(err => console.error("[notification] SUBMITTAL_MESSAGE failed:", err));
 
@@ -306,8 +308,9 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
       createNotification({
         userId: gcUser.id,
         type: "SUBMITTAL_MESSAGE",
-        title: `${senderName} replied on "${submittal.name}"`,
+        title: `Reply on "${submittal.name}" — ${senderName}`,
         body: `${message?.trim().slice(0, 80) || "New document uploaded"} — tap to view`,
+        url: `/submittals/${submittal.id}`,
         data: { subcontractId: sc.id, submittalId: submittal.id, projectId: project.id },
       }).catch(err => console.error("[notification] SUBMITTAL_MESSAGE failed:", err));
 
@@ -365,8 +368,9 @@ router.post("/:id/acknowledge", requireAuth, requireSub, async (req, res) => {
     createNotification({
       userId: gcUser.id,
       type: "SUBMITTAL_ACKNOWLEDGED",
-      title: `${acknowledgedByName} acknowledged "${submittal.name}"`,
-      body: `Formal acknowledgment received — tap to view`,
+      title: `Submittal Acknowledged — ${acknowledgedByName}`,
+      body: `${acknowledgedByName} formally acknowledged "${submittal.name}" on ${project.name}.`,
+      url: `/submittals/${submittal.id}`,
       data: { subcontractId: sc.id, submittalId: submittal.id, projectId: project.id },
     }).catch(err => console.error("[notification] SUBMITTAL_ACKNOWLEDGED failed:", err));
 

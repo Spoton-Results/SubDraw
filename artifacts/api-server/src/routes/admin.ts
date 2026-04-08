@@ -11,6 +11,7 @@ import {
   tradeScopesTable, scopeTemplatesTable, gcContactsTable, subProfilesTable,
   demoClicksTable, pageViewsTable,
   submittalsTable, submittalMessagesTable,
+  pushSubscriptionsTable, notificationPreferencesTable,
 } from "@workspace/db/schema";
 import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
 import {
@@ -22,6 +23,7 @@ import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import { PLANS, getPlanByName, getActiveSubcontractCount, getGCPlanInfo } from "../lib/stripeStorage.js";
 import { sendAdminMessageEmail, sendAccountCancelledEmail } from "../lib/email.js";
 import { forceResetDemoData } from "../lib/demoSeeder.js";
+import { sendPushNotification } from "../lib/push.js";
 import { parse } from "cookie";
 
 const router = Router();
@@ -1328,6 +1330,67 @@ router.patch("/feature-flags/:flagId", requireAdmin, async (req, res) => {
 
   if (!updated) { res.status(404).json({ error: "Flag not found" }); return; }
   res.json(updated);
+});
+
+// ── Admin: Push Notification Stats ────────────────────────────────────────────
+router.get("/push/stats", requireAdmin, async (_req, res) => {
+  const rows = await db
+    .select({
+      role: usersTable.role,
+      count: sql<number>`count(*)::int`,
+      uniqueUsers: sql<number>`count(distinct ${pushSubscriptionsTable.userId})::int`,
+    })
+    .from(pushSubscriptionsTable)
+    .innerJoin(usersTable, eq(pushSubscriptionsTable.userId, usersTable.id))
+    .groupBy(usersTable.role);
+
+  let totalSubscriptions = 0, gcSubscriptions = 0, subSubscriptions = 0, uniqueUsers = 0;
+  for (const row of rows) {
+    totalSubscriptions += row.count;
+    uniqueUsers += row.uniqueUsers;
+    if (row.role === "gc") gcSubscriptions += row.count;
+    else if (row.role === "sub") subSubscriptions += row.count;
+  }
+  res.json({ totalSubscriptions, gcSubscriptions, subSubscriptions, uniqueUsers });
+});
+
+// ── Admin: Broadcast Push Notification ────────────────────────────────────────
+router.post("/push/broadcast", requireAdmin, async (req, res) => {
+  const { title, body, url, target } = req.body as {
+    title: string; body: string; url?: string; target: "all" | "gc" | "sub";
+  };
+  if (!title || !body) { res.status(400).json({ error: "title and body required" }); return; }
+
+  // Get subscriptions filtered by role
+  let query = db
+    .select({
+      endpoint: pushSubscriptionsTable.endpoint,
+      p256dh: pushSubscriptionsTable.p256dh,
+      auth: pushSubscriptionsTable.auth,
+    })
+    .from(pushSubscriptionsTable)
+    .innerJoin(usersTable, eq(pushSubscriptionsTable.userId, usersTable.id));
+
+  const subscriptions = target === "all"
+    ? await query
+    : await query.where(eq(usersTable.role, target === "gc" ? "gc" : "sub"));
+
+  let sent = 0, failed = 0;
+  await Promise.all(subscriptions.map(async (sub) => {
+    try {
+      await sendPushNotification({
+        subscription: { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        title,
+        body,
+        url: url ?? "/dashboard",
+      });
+      sent++;
+    } catch {
+      failed++;
+    }
+  }));
+
+  res.json({ sent, failed, total: subscriptions.length });
 });
 
 export default router;

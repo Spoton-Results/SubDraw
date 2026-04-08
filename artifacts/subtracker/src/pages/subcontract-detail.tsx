@@ -3694,7 +3694,7 @@ export default function SubcontractDetail() {
             <label className="text-sm font-semibold mb-1 block">
               Amount ($) <span className="text-red-500">*</span>
             </label>
-            <Input required type="number" step="0.01" placeholder="1500.00" value={coAmount} onChange={e => setCoAmount(e.target.value)} />
+            <Input required type="number" step="0.01" placeholder="e.g. 5,000.00" value={coAmount} onChange={e => setCoAmount(e.target.value)} />
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setCoDialogOpen(false)}>Cancel</Button>
