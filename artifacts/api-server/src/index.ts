@@ -5,6 +5,7 @@ import { startLicenseNotifier } from "./lib/licenseNotifier.js";
 import { startGCCredentialNotifier } from "./lib/gcCredentialNotifier.js";
 import { startDemoSeeder } from "./lib/demoSeeder.js";
 import { startSubmittalOverdueNotifier } from "./lib/submittalOverdueNotifier.js";
+import { startMorningEmailer } from "./lib/morningEmailer.js";
 
 const rawPort = process.env["PORT"];
 
@@ -55,6 +56,7 @@ async function initStripe() {
   startLicenseNotifier(appBaseUrl);
   startGCCredentialNotifier(appBaseUrl);
   startSubmittalOverdueNotifier();
+  startMorningEmailer();
   startDemoSeeder();
 
   app.listen(port, () => {

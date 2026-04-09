@@ -21,13 +21,15 @@ import { TabDemoManagement } from "./admin/tab-demo-management";
 import { TabFeatureFlags } from "./admin/tab-feature-flags";
 import { AdminStripePaymentsTab } from "./admin/tab-stripe-payments";
 import { TabPushNotifications } from "./admin/tab-push-notifications";
+import { TabCallList } from "./admin/tab-call-list";
+import { Phone, Download, ExternalLink } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
 
 const api = (path: string, opts?: RequestInit) =>
   fetch(`${BASE}api/admin${path}`, { credentials: "include", ...opts });
 
-type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit" | "payments" | "push";
+type Tab = "summary" | "overview" | "accounts" | "revenue" | "trials" | "churn" | "upgrades" | "usage" | "support" | "email" | "demo" | "flags" | "activity" | "audit" | "payments" | "push" | "call-list";
 
 interface Metrics {
   totalGCs: number; activePaying: number; onTrial: number; churned: number;
@@ -110,7 +112,11 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
-  const [tab, setTab] = React.useState<Tab>("summary");
+  const [tab, setTab] = React.useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab") as Tab | null;
+    return t ?? "summary";
+  });
   const [adminEmail, setAdminEmail] = React.useState<string | null>(null);
   const [authChecking, setAuthChecking] = React.useState(true);
 
@@ -119,6 +125,7 @@ export default function AdminDashboard() {
   const [trials, setTrials] = React.useState<TrialAccount[]>([]);
   const [activity, setActivity] = React.useState<{ items: any[]; total: number; page: number; pageSize: number } | null>(null);
   const [activityFilter, setActivityFilter] = React.useState<string>("all");
+  const [activitySearch, setActivitySearch] = React.useState("");
   const [activityPage, setActivityPage] = React.useState(1);
   const [auditLogs, setAuditLogs] = React.useState<ImpersonationLog[]>([]);
   const [revenueData, setRevenueData] = React.useState<any>(null);
@@ -389,7 +396,8 @@ export default function AdminDashboard() {
     { id: "activity",  label: "Activity",            icon: <Activity className="h-4 w-4" />,    group: "ops" },
     { id: "audit",     label: "Audit Log",           icon: <Shield className="h-4 w-4" />,      group: "ops" },
     { id: "payments",  label: "Stripe Payments",      icon: <CreditCard className="h-4 w-4" />,   group: "ops" },
-    { id: "push",      label: "Push Notifications",   icon: <Bell className="h-4 w-4" />,          group: "ops" },
+    { id: "push",        label: "Push Notifications",   icon: <Bell className="h-4 w-4" />,   group: "ops" },
+    { id: "call-list",   label: "Call List",            icon: <Phone className="h-4 w-4" />, group: "intelligence" },
   ];
 
   return (
@@ -562,6 +570,13 @@ export default function AdminDashboard() {
                 >
                   <RefreshCw className="h-4 w-4 text-muted-foreground" />
                 </button>
+                <a
+                  href={`${BASE}api/admin/gc-accounts/export`}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-card border border-border rounded-xl text-sm hover:bg-muted transition-colors text-muted-foreground"
+                  download
+                >
+                  <Download className="h-4 w-4" /> CSV
+                </a>
               </div>
             </div>
 
@@ -588,7 +603,7 @@ export default function AdminDashboard() {
                       ) : filteredAccounts.map(account => {
                         const badge = STATUS_BADGE[account.status] ?? STATUS_BADGE.cancelled;
                         return (
-                          <tr key={account.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                          <tr key={account.id} onClick={() => setLocation(`/admin/accounts/${account.id}`)} className="border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer">
                             <td className="px-4 py-3">
                               <div className="font-medium">{account.companyName}</div>
                               <div className="text-muted-foreground text-xs">{account.email}</div>
@@ -627,7 +642,7 @@ export default function AdminDashboard() {
                                 : "Never"}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                                 <button
                                   onClick={() => handleImpersonate(account)}
                                   title="Impersonate"
@@ -826,11 +841,28 @@ export default function AdminDashboard() {
         {/* ── Activity Tab ── */}
         {tab === "activity" && (
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <h1 className="text-xl font-bold">Platform Activity</h1>
-              <button onClick={() => { setActivity(null); setActivityPage(1); loadActivity(activityFilter, 1); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-                <RefreshCw className="h-4 w-4" /> Refresh
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    value={activitySearch} onChange={e => setActivitySearch(e.target.value)}
+                    placeholder="Search activity..."
+                    className="bg-card border border-border text-foreground rounded-xl pl-9 pr-4 py-2 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <button onClick={() => { setActivity(null); setActivityPage(1); loadActivity(activityFilter, 1); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                  <RefreshCw className="h-4 w-4" /> Refresh
+                </button>
+                <a
+                  href={`${BASE}api/admin/activity/export${activityFilter !== "all" ? `?filter=${activityFilter}` : ""}`}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-card border border-border rounded-xl text-sm hover:bg-muted transition-colors text-muted-foreground"
+                  download
+                >
+                  <Download className="h-4 w-4" /> CSV
+                </a>
+              </div>
             </div>
             {/* Filter row */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -879,7 +911,7 @@ export default function AdminDashboard() {
                     <tbody>
                       {(!activity || activity.items.length === 0) ? (
                         <tr><td colSpan={4} className="text-center py-12 text-muted-foreground">No activity found</td></tr>
-                      ) : activity.items.map((a, i) => (
+                      ) : activity.items.filter(a => !activitySearch || (a.entity ?? "").toLowerCase().includes(activitySearch.toLowerCase()) || (a.action ?? "").toLowerCase().includes(activitySearch.toLowerCase()) || (a.actor ?? "").toLowerCase().includes(activitySearch.toLowerCase())).map((a, i) => (
                         <tr key={a.id ?? i} className="border-b border-border/50 hover:bg-muted/30">
                           <td className="px-4 py-3 min-w-[140px]">
                             <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-foreground/70 whitespace-nowrap">{a.action}</span>
@@ -1031,6 +1063,15 @@ export default function AdminDashboard() {
           </div>
         )}
         {tab === "push" && <TabPushNotifications />}
+        {tab === "call-list" && (
+          <TabCallList onNavigate={(t, extra) => {
+            if (t === "accounts" && extra) {
+              setLocation(`/admin/accounts/${extra}`);
+            } else {
+              setTab(t as Tab);
+            }
+          }} />
+        )}
       </div>
 
       {/* ── Modals ── */}

@@ -31,6 +31,7 @@ import Team from "./pages/team";
 import BidComparison from "./pages/bid-comparison";
 import AdminLogin from "./pages/admin-login";
 import AdminDashboard from "./pages/admin-dashboard";
+import AdminAccountDetail from "./pages/admin-account-detail";
 import SubmittalDetail from "./pages/submittal-detail";
 import PaymentSuccess from "./pages/payment-success";
 import PaymentSetupRefresh from "./pages/payment-setup-refresh";
@@ -129,6 +130,7 @@ function Router() {
       <Switch>
       <Route path="/admin" component={AdminLogin} />
       <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/accounts/:userId" component={AdminAccountDetail} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/signup" component={Register} />

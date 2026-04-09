@@ -1140,3 +1140,52 @@ export async function sendSubmittalAcknowledgedEmail(opts: {
   `);
   await send(opts.toEmail, `Submittal acknowledged: ${opts.submittalName}`, html);
 }
+
+export async function sendAdminDailySummaryEmail(opts: {
+  toEmail: string;
+  date: string;
+  mrr: number;
+  newTrialsYesterday: number;
+  trialsExpiring3d: Array<{ companyName: string; email: string; daysLeft: number }>;
+  activatedYesterday: number;
+  newPayingYesterday: number;
+  failedPayments: number;
+  invoicesFlaggedYesterday: number;
+  paymentsYesterday: number;
+  adminDashboardUrl: string;
+}) {
+  const expiringRows = opts.trialsExpiring3d.length > 0
+    ? opts.trialsExpiring3d.map(t =>
+        `<tr><td style="padding:6px 12px;font-size:13px;color:#64748b;">${t.companyName}</td><td style="padding:6px 12px;font-size:13px;color:#64748b;">${t.email}</td><td style="padding:6px 12px;font-size:13px;color:#dc2626;font-weight:600;">${t.daysLeft}d left</td></tr>`
+      ).join("")
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:#94a3b8;text-align:center;">No trials expiring in 3 days</td></tr>`;
+
+  const html = layout(`
+    ${heading(`SubTracker Daily — ${opts.date}`)}
+    ${subtext("Here is what needs your attention today.")}
+    ${infoBox([
+      { label: "Current MRR", value: formatCurrency(opts.mrr) },
+      { label: "New Trials Yesterday", value: String(opts.newTrialsYesterday) },
+      { label: "Paying Customers", value: String(opts.newPayingYesterday) + " new" },
+      { label: "Activation Completed", value: String(opts.activatedYesterday) + " yesterday" },
+      { label: "Failed Payments", value: String(opts.failedPayments) },
+    ])}
+    <h3 style="margin:0 0 8px;font-size:16px;font-weight:700;color:#0f172a;">⚠ Trials Expiring in 3 Days</h3>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef9f0;border:1px solid #fed7aa;border-radius:8px;margin-bottom:24px;">
+      <tr>
+        <th style="padding:8px 12px;font-size:12px;color:#92400e;text-align:left;">Company</th>
+        <th style="padding:8px 12px;font-size:12px;color:#92400e;text-align:left;">Email</th>
+        <th style="padding:8px 12px;font-size:12px;color:#92400e;text-align:left;">Days Left</th>
+      </tr>
+      ${expiringRows}
+    </table>
+    ${infoBox([
+      { label: "Invoices Flagged Yesterday", value: String(opts.invoicesFlaggedYesterday) },
+      { label: "Payments Processed Yesterday", value: String(opts.paymentsYesterday) },
+    ])}
+    <div style="margin-top:24px;">
+      ${ctaButton("Open Call List", opts.adminDashboardUrl + "?tab=call-list")}
+    </div>
+  `);
+  await send(opts.toEmail, `SubTracker Daily — ${opts.date} — here is what needs your attention today`, html);
+}

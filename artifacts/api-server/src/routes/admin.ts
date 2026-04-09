@@ -12,8 +12,9 @@ import {
   demoClicksTable, pageViewsTable,
   submittalsTable, submittalMessagesTable,
   pushSubscriptionsTable, notificationPreferencesTable,
+  adminCallLogsTable,
 } from "@workspace/db/schema";
-import { eq, and, isNull, sql, inArray, desc, or } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, sql, inArray, desc, or, gte, lte, lt } from "drizzle-orm";
 import {
   generateAdminToken, setAdminCookie, clearAdminCookie, getAdminUser,
   generateToken, setAuthCookie, clearAuthCookie, verifyToken,
@@ -906,10 +907,91 @@ router.get("/morning-summary", requireAdmin, async (req, res) => {
     }
   }
 
+  // Add account counts
+  const totalGCs = gcOwners.length;
+  const totalSubsResult = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'SUB' AND is_demo = false`);
+  const totalSubs = parseInt((totalSubsResult.rows[0] as any)?.c ?? "0", 10);
+  const totalProjectsResult = await db.execute(sql`SELECT COUNT(*) as c FROM projects WHERE status != 'DELETED'`);
+  const totalProjects = parseInt((totalProjectsResult.rows[0] as any)?.c ?? "0", 10);
+
+  // New this week
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const newTrialsThisWeek = gcOwners.filter(u => (u.trialStartedAt ?? u.createdAt) >= oneWeekAgo).length;
+  const newTrialsYesterday = gcOwners.filter(u => (u.trialStartedAt ?? u.createdAt) >= oneDayAgo).length;
+
+  // Accounts activated this week (have at least 1 project, 1 subcontract, 1 invoice)
+  let activatedThisWeek = 0;
+  const activationResults = await db.execute(sql`
+    SELECT u.id FROM users u
+    WHERE u.role = 'GC' AND u.is_demo = false AND u.gc_parent_id IS NULL
+      AND EXISTS (SELECT 1 FROM projects p WHERE p.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM subcontracts s JOIN projects p2 ON p2.id = s.project_id WHERE p2.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM invoices i JOIN subcontracts s2 ON s2.id = i.subcontract_id JOIN projects p3 ON p3.id = s2.project_id WHERE p3.gc_id = u.id)
+  `);
+  activatedThisWeek = (activationResults.rows as any[]).filter(r => {
+    const gc = gcOwners.find(u => u.id === r.id);
+    return gc && gc.createdAt >= oneWeekAgo;
+  }).length;
+
+  // Platform health this week
+  const invoicesFlaggedResult = await db.execute(sql`
+    SELECT COUNT(*) as c FROM subcontract_activity_logs WHERE type = 'INVOICE_FLAGGED' AND created_at >= ${oneWeekAgo}
+  `);
+  const invoicesFlaggedThisWeek = parseInt((invoicesFlaggedResult.rows[0] as any)?.c ?? "0", 10);
+
+  const invoicesFlaggedYesterday = await db.execute(sql`
+    SELECT COUNT(*) as c FROM subcontract_activity_logs WHERE type = 'INVOICE_FLAGGED' AND created_at >= ${oneDayAgo}
+  `).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+
+  const paymentsThisWeekResult = await db.execute(sql`
+    SELECT COUNT(*) as c FROM invoices WHERE payment_confirmed_at >= ${oneWeekAgo}
+  `);
+  const paymentsThisWeek = parseInt((paymentsThisWeekResult.rows[0] as any)?.c ?? "0", 10);
+
+  const paymentsYesterdayResult = await db.execute(sql`
+    SELECT COUNT(*) as c FROM invoices WHERE payment_confirmed_at >= ${oneDayAgo}
+  `).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+
+  const lienWaiversThisWeekResult = await db.execute(sql`
+    SELECT COUNT(*) as c FROM lien_waivers WHERE signed_at >= ${oneWeekAgo}
+  `);
+  const lienWaiversThisWeek = parseInt((lienWaiversThisWeekResult.rows[0] as any)?.c ?? "0", 10);
+
+  const newSubStripeThisWeekResult = await db.execute(sql`
+    SELECT COUNT(*) as c FROM users WHERE role = 'SUB' AND stripe_connect_account_id IS NOT NULL AND updated_at >= ${oneWeekAgo}
+  `);
+  const newSubStripeThisWeek = parseInt((newSubStripeThisWeekResult.rows[0] as any)?.c ?? "0", 10);
+
+  // Demo performance this week
+  const gcDemoClicks = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'GC_DEMO' AND created_at >= ${oneWeekAgo}`).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+  const subDemoClicks = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE event_type = 'SUB_DEMO' AND created_at >= ${oneWeekAgo}`).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+
+  // Trials expiring in 3 days (for morning email)
+  const trialsExpiring3d: Array<{ companyName: string; email: string; userId: string; daysLeft: number }> = [];
+  for (const user of gcOwners) {
+    if (!user.stripeSubscriptionId && !user.adminPlanOverride) {
+      const trialEnd = new Date((user.trialStartedAt ?? user.createdAt).getTime() + TRIAL_MS);
+      const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft > 0 && daysLeft <= 3) {
+        trialsExpiring3d.push({ companyName: user.companyName, email: user.email, userId: user.id, daysLeft });
+      }
+    }
+  }
+
+  // Demo clicks last 30 days
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const demoClicks30d = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE created_at >= ${thirtyDaysAgo}`).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+
   res.json({
     mrr: Math.round(mrr), totalPaying, activeTrials, trialsExpiring7d,
     churnedThisMonth, mrrLostToChurn: Math.round(mrrLostToChurn),
     nearLimitCount, churnRiskCount, failedPaymentsCount,
+    totalGCs, totalSubs, totalProjects,
+    newTrialsThisWeek, newTrialsYesterday, activatedThisWeek,
+    invoicesFlaggedThisWeek, invoicesFlaggedYesterday, paymentsThisWeek, paymentsYesterdayResult: paymentsYesterdayResult,
+    lienWaiversThisWeek, newSubStripeThisWeek, gcDemoClicks, subDemoClicks,
+    trialsExpiring3d, demoClicks30d,
   });
 });
 
@@ -1330,6 +1412,444 @@ router.patch("/feature-flags/:flagId", requireAdmin, async (req, res) => {
 
   if (!updated) { res.status(404).json({ error: "Flag not found" }); return; }
   res.json(updated);
+});
+
+// ── Call List ─────────────────────────────────────────────────────────────────
+// In-memory 24-hour dismissals
+const callListDismissals = new Map<string, number>(); // userId -> timestamp
+
+router.get("/call-list", requireAdmin, async (req, res) => {
+  const now = Date.now();
+  // Clean up expired dismissals
+  for (const [uid, ts] of callListDismissals.entries()) {
+    if (now - ts > 24 * 60 * 60 * 1000) callListDismissals.delete(uid);
+  }
+
+  const gcOwners = await getGCOwners();
+  const nowDate = new Date();
+  const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+
+  // Get recent call log for each user
+  const callLogs = await db.select().from(adminCallLogsTable).where(gte(adminCallLogsTable.createdAt, new Date(now - 30 * 24 * 60 * 60 * 1000)));
+  const lastCalledMap = new Map<string, Date>();
+  for (const log of callLogs) {
+    if (log.action === "called") {
+      const existing = lastCalledMap.get(log.gcUserId);
+      if (!existing || log.createdAt > existing) lastCalledMap.set(log.gcUserId, log.createdAt);
+    }
+  }
+
+  // Activation check (batch query)
+  const activatedIds = new Set<string>();
+  const activationRes = await db.execute(sql`
+    SELECT u.id FROM users u
+    WHERE u.role = 'GC' AND u.is_demo = false AND u.gc_parent_id IS NULL
+      AND EXISTS (SELECT 1 FROM projects p WHERE p.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM subcontracts s JOIN projects p2 ON p2.id = s.project_id WHERE p2.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM invoices i JOIN subcontracts s2 ON s2.id = i.subcontract_id JOIN projects p3 ON p3.id = s2.project_id WHERE p3.gc_id = u.id)
+  `);
+  for (const r of activationRes.rows as any[]) activatedIds.add(r.id);
+
+  // Project count for each GC
+  const projectsRes = await db.execute(sql`SELECT p.gc_id, COUNT(*) as c FROM projects p GROUP BY p.gc_id`);
+  const projectCounts = new Map<string, number>();
+  for (const r of projectsRes.rows as any[]) projectCounts.set(r.gc_id, parseInt(r.c, 10));
+
+  const items: any[] = [];
+
+  for (const user of gcOwners) {
+    if (callListDismissals.has(user.id)) continue; // Dismissed
+
+    const trialStart = user.trialStartedAt ?? user.createdAt;
+    const trialEnd = new Date(trialStart.getTime() + TRIAL_MS);
+    const daysLeft = Math.ceil((trialEnd.getTime() - nowDate.getTime()) / (1000 * 60 * 60 * 24));
+    const isOnTrial = nowDate < trialEnd && !user.stripeSubscriptionId && !user.adminPlanOverride;
+    const isPaying = !!(user.stripeSubscriptionId || user.adminPlanOverride);
+    const activated = activatedIds.has(user.id);
+    const projects = projectCounts.get(user.id) ?? 0;
+    const ageMs = nowDate.getTime() - user.createdAt.getTime();
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    const daysSinceLogin = user.lastLoginAt ? (nowDate.getTime() - user.lastLoginAt.getTime()) / (1000 * 60 * 60 * 24) : 999;
+    const lastCalled = lastCalledMap.get(user.id)?.toISOString() ?? null;
+
+    let priority: "urgent" | "high" | "medium" | "low" | null = null;
+    let reason = "";
+
+    if (isOnTrial && daysLeft >= 1 && daysLeft <= 3) {
+      priority = "urgent";
+      reason = `Trial expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — hasn't upgraded`;
+    } else if (!isPaying && activated) {
+      priority = "high";
+      reason = "Completed activation checklist but hasn't upgraded";
+    } else if (isOnTrial && daysLeft >= 4 && daysLeft <= 7) {
+      priority = "medium";
+      reason = `Trial expires in ${daysLeft} days`;
+    } else if (isOnTrial && ageDays > 5 && projects === 0) {
+      priority = "medium";
+      reason = `Signed up ${Math.floor(ageDays)} days ago but hasn't created a project`;
+    } else if (isPaying && daysSinceLogin > 14) {
+      priority = "low";
+      reason = `Paying customer — no login in ${Math.floor(daysSinceLogin)} days`;
+    } else if (isOnTrial && daysSinceLogin > 5) {
+      priority = "low";
+      reason = `Trial user — no activity in ${Math.floor(daysSinceLogin)} days`;
+    }
+
+    if (!priority) continue;
+
+    items.push({
+      id: user.id,
+      companyName: user.companyName,
+      email: user.email,
+      priority,
+      reason,
+      daysLeft: isOnTrial ? daysLeft : null,
+      projects,
+      activated,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      createdAt: user.createdAt.toISOString(),
+      ageDays: Math.floor(ageDays),
+      lastCalled,
+    });
+  }
+
+  // Sort by priority
+  const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+  items.sort((a, b) => priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]);
+
+  res.json({ items, total: items.length });
+});
+
+router.post("/call-list/dismiss/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  callListDismissals.set(userId, Date.now());
+  res.json({ success: true });
+});
+
+router.post("/call-list/mark-called/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { reason } = req.body;
+  const admin = getAdminUser(req);
+  await db.insert(adminCallLogsTable).values({
+    gcUserId: userId,
+    action: "called",
+    reason: reason ?? null,
+    adminEmail: admin?.adminEmail ?? "admin",
+  });
+  res.json({ success: true });
+});
+
+// ── Funnel ────────────────────────────────────────────────────────────────────
+
+router.get("/funnel", requireAdmin, async (req, res) => {
+  const { start, end } = req.query as { start?: string; end?: string };
+  const now = new Date();
+  const startDate = start ? new Date(start) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const endDate = end ? new Date(end) : now;
+
+  const demoClicks = await db.execute(sql`SELECT COUNT(*) as c FROM demo_clicks WHERE created_at >= ${startDate} AND created_at <= ${endDate}`).then(r => parseInt((r.rows[0] as any)?.c ?? "0", 10)).catch(() => 0);
+
+  const trialSignupsRes = await db.execute(sql`SELECT COUNT(*) as c FROM users WHERE role = 'GC' AND is_demo = false AND gc_parent_id IS NULL AND created_at >= ${startDate} AND created_at <= ${endDate}`);
+  const trialSignups = parseInt((trialSignupsRes.rows[0] as any)?.c ?? "0", 10);
+
+  const activatedRes = await db.execute(sql`
+    SELECT COUNT(*) as c FROM users u
+    WHERE u.role = 'GC' AND u.is_demo = false AND u.gc_parent_id IS NULL
+      AND u.created_at >= ${startDate} AND u.created_at <= ${endDate}
+      AND EXISTS (SELECT 1 FROM projects p WHERE p.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM subcontracts s JOIN projects p2 ON p2.id = s.project_id WHERE p2.gc_id = u.id)
+      AND EXISTS (SELECT 1 FROM invoices i JOIN subcontracts s2 ON s2.id = i.subcontract_id JOIN projects p3 ON p3.id = s2.project_id WHERE p3.gc_id = u.id)
+  `);
+  const activationCompleted = parseInt((activatedRes.rows[0] as any)?.c ?? "0", 10);
+
+  let upgradedToPaid = 0;
+  try {
+    const upgradedRes = await db.execute(sql`
+      SELECT COUNT(*) as c FROM stripe.subscriptions s
+      JOIN users u ON u.stripe_subscription_id = s.id
+      WHERE u.role = 'GC' AND u.is_demo = false AND s.status IN ('active', 'trialing')
+        AND TO_TIMESTAMP(s.created) >= ${startDate} AND TO_TIMESTAMP(s.created) <= ${endDate}
+    `);
+    upgradedToPaid = parseInt((upgradedRes.rows[0] as any)?.c ?? "0", 10);
+  } catch {}
+
+  let stillActive90d = 0;
+  try {
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const active90Res = await db.execute(sql`
+      SELECT COUNT(*) as c FROM stripe.subscriptions s
+      JOIN users u ON u.stripe_subscription_id = s.id
+      WHERE u.role = 'GC' AND u.is_demo = false AND s.status = 'active'
+        AND TO_TIMESTAMP(s.created) <= ${ninetyDaysAgo}
+    `);
+    stillActive90d = parseInt((active90Res.rows[0] as any)?.c ?? "0", 10);
+  } catch {}
+
+  const stages = [
+    { label: "Demo Clicks", count: demoClicks },
+    { label: "Trial Signups", count: trialSignups },
+    { label: "Activation Completed", count: activationCompleted },
+    { label: "Upgraded to Paid", count: upgradedToPaid },
+    { label: "Still Active @ 90d", count: stillActive90d },
+  ];
+
+  res.json({ stages });
+});
+
+// ── Account Detail ────────────────────────────────────────────────────────────
+
+router.get("/accounts/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const user = (await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1))[0];
+  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+
+  const now = new Date();
+  const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  const trialEnd = new Date((user.trialStartedAt ?? user.createdAt).getTime() + TRIAL_MS);
+  const trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const isOnTrial = now < trialEnd && !user.stripeSubscriptionId && !user.adminPlanOverride;
+
+  // Stripe plan info
+  let planLabel: string | null = null;
+  let planName: string | null = null;
+  let status: string = isOnTrial ? "trial" : "cancelled";
+  let monthlyRevenue = 0;
+  let nextBillingDate: string | null = null;
+  let billingInterval: string | null = null;
+  let totalRevenuePaid = 0;
+
+  if (user.adminPlanOverride) {
+    const overrideExpired = user.adminPlanOverrideExpiresAt && user.adminPlanOverrideExpiresAt < now;
+    if (!overrideExpired) {
+      planName = user.adminPlanOverride;
+      const plan = getPlanByName(user.adminPlanOverride);
+      planLabel = plan?.label ?? null;
+      monthlyRevenue = plan ? plan.monthlyUsd / 100 : 0;
+      status = "active";
+    }
+  } else if (user.stripeSubscriptionId) {
+    const subInfo = await getStripeSubscriptionInfo(user.stripeSubscriptionId);
+    if (subInfo) {
+      planName = subInfo.product_name?.replace(/ Annual$/, "") ?? null;
+      const plan = getPlanByName(planName ?? "");
+      planLabel = plan?.label ?? null;
+      billingInterval = subInfo.billing_interval ?? "month";
+      const amount = subInfo.unit_amount ?? 0;
+      monthlyRevenue = billingInterval === "year" ? amount / 100 / 12 : amount / 100;
+      if (subInfo.status === "active" || subInfo.status === "trialing") status = "active";
+      else if (subInfo.status === "past_due") status = "past_due";
+      else status = "cancelled";
+      if (subInfo.current_period_end) {
+        nextBillingDate = new Date(Number(subInfo.current_period_end) * 1000).toISOString();
+      }
+    }
+    // Total revenue from Stripe invoices
+    try {
+      const revRes = await db.execute(sql`SELECT COALESCE(SUM(i.amount_paid), 0) as total FROM stripe.invoices i WHERE i.customer = ${user.stripeCustomerId} AND i.status = 'paid'`);
+      totalRevenuePaid = parseInt((revRes.rows[0] as any)?.total ?? "0", 10) / 100;
+    } catch {}
+  }
+
+  // Usage stats
+  const projRes = await db.execute(sql`SELECT COUNT(*) as c FROM projects WHERE gc_id = ${userId}`);
+  const totalProjects = parseInt((projRes.rows[0] as any)?.c ?? "0", 10);
+  const scRes = await db.execute(sql`SELECT COUNT(*) as c FROM subcontracts s JOIN projects p ON p.id = s.project_id WHERE p.gc_id = ${userId}`);
+  const totalSubcontracts = parseInt((scRes.rows[0] as any)?.c ?? "0", 10);
+  const invRes = await db.execute(sql`SELECT COUNT(*) as c FROM invoices i JOIN subcontracts s ON s.id = i.subcontract_id JOIN projects p ON p.id = s.project_id WHERE p.gc_id = ${userId}`);
+  const totalInvoices = parseInt((invRes.rows[0] as any)?.c ?? "0", 10);
+  const invFlaggedRes = await db.execute(sql`SELECT COUNT(*) as c FROM invoices i JOIN subcontracts s ON s.id = i.subcontract_id JOIN projects p ON p.id = s.project_id WHERE p.gc_id = ${userId} AND i.flagged = true`);
+  const totalInvoicesFlagged = parseInt((invFlaggedRes.rows[0] as any)?.c ?? "0", 10);
+  const coRes = await db.execute(sql`SELECT COUNT(*) as c FROM change_orders co JOIN subcontracts s ON s.id = co.subcontract_id JOIN projects p ON p.id = s.project_id WHERE p.gc_id = ${userId}`);
+  const totalChangeOrders = parseInt((coRes.rows[0] as any)?.c ?? "0", 10);
+  const lwRes = await db.execute(sql`SELECT COUNT(*) as c FROM lien_waivers WHERE project_id IN (SELECT id FROM projects WHERE gc_id = ${userId})`);
+  const totalLienWaivers = parseInt((lwRes.rows[0] as any)?.c ?? "0", 10);
+  const stripeVolRes = await db.execute(sql`SELECT COALESCE(SUM(i.amount), 0) as total FROM invoices i JOIN subcontracts s ON s.id = i.subcontract_id JOIN projects p ON p.id = s.project_id WHERE p.gc_id = ${userId} AND i.stripe_payment_intent_id IS NOT NULL`);
+  const stripePaymentVolume = parseFloat((stripeVolRes.rows[0] as any)?.total ?? "0");
+
+  // Activation checklist
+  const hasProject = totalProjects > 0;
+  const hasSubcontract = totalSubcontracts > 0;
+  const hasInvoice = totalInvoices > 0;
+  const activationComplete = hasProject && hasSubcontract && hasInvoice;
+
+  // Activity timeline (last 20 actions)
+  const timeline = await db.execute(sql`
+    SELECT sal.type, sal.description, sal.actor_name, sal.actor_role, sal.created_at
+    FROM subcontract_activity_logs sal
+    JOIN subcontracts sc ON sc.id = sal.subcontract_id
+    JOIN projects p ON p.id = sc.project_id
+    WHERE p.gc_id = ${userId}
+    ORDER BY sal.created_at DESC
+    LIMIT 20
+  `);
+
+  // Last call log
+  const lastCall = await db.select().from(adminCallLogsTable).where(and(eq(adminCallLogsTable.gcUserId, userId), eq(adminCallLogsTable.action, "called"))).orderBy(desc(adminCallLogsTable.createdAt)).limit(1);
+
+  res.json({
+    id: user.id,
+    companyName: user.companyName,
+    email: user.email,
+    role: user.role,
+    planName,
+    planLabel,
+    billingInterval,
+    status,
+    createdAt: user.createdAt.toISOString(),
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    trialDaysLeft: isOnTrial ? trialDaysLeft : null,
+    trialEndsAt: trialEnd.toISOString(),
+    adminNotes: user.adminNotes,
+    adminPlanOverride: user.adminPlanOverride,
+    // Revenue
+    monthlyRevenue: Math.round(monthlyRevenue),
+    totalRevenuePaid: Math.round(totalRevenuePaid),
+    nextBillingDate,
+    // Usage
+    totalProjects, totalSubcontracts, totalInvoices, totalInvoicesFlagged,
+    totalChangeOrders, totalLienWaivers, stripePaymentVolume,
+    // Activation
+    activationComplete,
+    activationSteps: { hasProject, hasSubcontract, hasInvoice },
+    // Timeline
+    timeline: (timeline.rows as any[]).map(r => ({
+      type: r.type,
+      description: r.description,
+      actorName: r.actor_name,
+      actorRole: r.actor_role,
+      createdAt: r.created_at,
+    })),
+    lastCallAt: lastCall[0]?.createdAt?.toISOString() ?? null,
+  });
+});
+
+router.patch("/accounts/:userId/notes", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { notes } = req.body;
+  await db.update(usersTable).set({ adminNotes: notes, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+  res.json({ success: true });
+});
+
+// ── CSV Export: GC Accounts ───────────────────────────────────────────────────
+
+router.get("/gc-accounts/export", requireAdmin, async (req, res) => {
+  const accounts = await getGCOwners();
+  const now = new Date();
+  const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+
+  const rows = accounts.map(user => {
+    const trialEnd = new Date((user.trialStartedAt ?? user.createdAt).getTime() + TRIAL_MS);
+    const isOnTrial = now < trialEnd && !user.stripeSubscriptionId;
+    const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    return [
+      user.companyName,
+      user.email,
+      isOnTrial ? "Trial" : user.stripeSubscriptionId ? "Active" : "Churned",
+      user.adminPlanOverride ?? "",
+      isOnTrial ? daysLeft : "",
+      user.createdAt.toISOString(),
+      user.lastLoginAt?.toISOString() ?? "",
+    ];
+  });
+
+  const csv = [
+    ["Company Name", "Email", "Status", "Plan Override", "Trial Days Left", "Signup Date", "Last Login"],
+    ...rows,
+  ].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=\"gc-accounts.csv\"");
+  res.send(csv);
+});
+
+// ── CSV Export: Activity Log ──────────────────────────────────────────────────
+
+router.get("/activity/export", requireAdmin, async (req, res) => {
+  const { start, end, filter } = req.query as { start?: string; end?: string; filter?: string };
+
+  let logs = await db.select().from(activityLogsTable)
+    .orderBy(desc(activityLogsTable.createdAt))
+    .limit(10000);
+
+  if (start) logs = logs.filter(l => l.createdAt >= new Date(start));
+  if (end) logs = logs.filter(l => l.createdAt <= new Date(end));
+  if (filter && FILTER_PREFIXES[filter]) {
+    const prefixes = FILTER_PREFIXES[filter];
+    logs = logs.filter(l => prefixes.some(p => l.type.startsWith(p)));
+  }
+
+  const csv = [
+    ["Date", "Action", "Description", "Actor", "Role"],
+    ...logs.map(l => [
+      l.createdAt.toISOString(),
+      ACTION_LABEL[l.type] ?? l.type,
+      l.description,
+      l.actorName,
+      l.actorRole,
+    ]),
+  ].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=\"activity-log.csv\"");
+  res.send(csv);
+});
+
+// ── CSV Export: Stripe Transactions ──────────────────────────────────────────
+
+router.get("/transactions/export", requireAdmin, async (req, res) => {
+  const { start, end } = req.query as { start?: string; end?: string };
+
+  let query = db
+    .select({
+      initiatedAt: invoicesTable.stripePaymentInitiatedAt,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      amount: invoicesTable.amount,
+      intentId: invoicesTable.stripePaymentIntentId,
+      method: invoicesTable.stripePaymentMethod,
+      subcontractId: invoicesTable.subcontractId,
+    })
+    .from(invoicesTable)
+    .where(isNotNull(invoicesTable.stripePaymentIntentId))
+    .orderBy(desc(invoicesTable.stripePaymentInitiatedAt));
+
+  const all = await query;
+  const filtered = all.filter(r => {
+    if (!r.initiatedAt) return false;
+    const d = new Date(r.initiatedAt);
+    if (start && d < new Date(start)) return false;
+    if (end && d > new Date(end)) return false;
+    return true;
+  });
+
+  const enriched = await Promise.all(filtered.slice(0, 5000).map(async inv => {
+    const [sc] = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, inv.subcontractId));
+    let gcName = "", subName = "";
+    if (sc) {
+      const [gcUser] = await db.select({ c: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, (await db.select({ gcId: projectsTable.gcId }).from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1))[0]?.gcId ?? ""));
+      const [subUser] = await db.select({ c: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, sc.subId));
+      gcName = gcUser?.c ?? "";
+      subName = subUser?.c ?? "";
+    }
+    return { ...inv, gcName, subName };
+  }));
+
+  const csv = [
+    ["Date", "GC Company", "Sub Company", "Invoice #", "Amount", "PaymentIntent ID", "Method", "Status"],
+    ...enriched.map(r => [
+      r.initiatedAt?.toISOString() ?? "",
+      r.gcName,
+      r.subName,
+      r.invoiceNumber,
+      r.amount,
+      r.intentId ?? "",
+      r.method ?? "",
+      "succeeded",
+    ]),
+  ].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=\"stripe-transactions.csv\"");
+  res.send(csv);
 });
 
 // ── Admin: Push Notification Stats ────────────────────────────────────────────
