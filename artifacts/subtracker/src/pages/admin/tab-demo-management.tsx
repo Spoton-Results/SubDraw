@@ -1,7 +1,7 @@
 import * as React from "react";
-import { Monitor, RefreshCw, Users, TrendingUp, Trash2, AlertTriangle, MousePointerClick, Globe, BarChart2, ArrowUpRight } from "lucide-react";
+import { Monitor, RefreshCw, Users, TrendingUp, Trash2, AlertTriangle, MousePointerClick, Globe, BarChart2, ArrowUpRight, Mail, Download } from "lucide-react";
 import toast from "react-hot-toast";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL;
 const api = (path: string, opts?: RequestInit) =>
@@ -17,6 +17,16 @@ interface DemoSession {
 interface TopPage {
   path: string;
   views: number;
+}
+
+interface DemoLead {
+  id: string;
+  firstName: string;
+  email: string;
+  role: string;
+  capturedAt: string;
+  sessionId: string | null;
+  referrer: string | null;
 }
 
 interface DemoStats {
@@ -53,13 +63,28 @@ export function TabDemoManagement() {
   const [loading, setLoading] = React.useState(true);
   const [resetting, setResetting] = React.useState<string | null>(null);
   const [confirm, setConfirm] = React.useState<string | null>(null);
+  const [leads, setLeads] = React.useState<DemoLead[]>([]);
+  const [leadsLoading, setLeadsLoading] = React.useState(true);
+
+  const loadLeads = React.useCallback(() => {
+    setLeadsLoading(true);
+    api("/demo-leads").then(r => r.json()).then(setLeads).catch(() => toast.error("Failed to load demo leads")).finally(() => setLeadsLoading(false));
+  }, []);
+
+  const exportLeadsCSV = () => {
+    window.open(`${BASE}api/admin/demo-leads/export`, "_blank");
+  };
+
+  const emailLead = (lead: DemoLead) => {
+    window.open(`mailto:${lead.email}?subject=SubTracker Demo Follow-Up&body=Hi ${lead.firstName},`, "_blank");
+  };
 
   const load = React.useCallback(() => {
     setLoading(true);
     api("/demo/stats").then(r => r.json()).then(setStats).catch(() => toast.error("Failed to load demo stats")).finally(() => setLoading(false));
   }, []);
 
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { load(); loadLeads(); }, [load, loadLeads]);
 
   const resetDemo = async (type: "gc" | "sub" | "all") => {
     if (confirm !== type) {
@@ -315,6 +340,86 @@ export function TabDemoManagement() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Demo Gate Leads ─────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h3 className="font-semibold text-sm">Demo Gate Leads</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Emails captured when a demo user clicks the flagged invoice</p>
+          </div>
+          <button
+            onClick={exportLeadsCSV}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 border border-border rounded-lg transition-colors font-medium"
+          >
+            <Download className="h-3 w-3" />
+            Export CSV
+          </button>
+        </div>
+
+        {/* Lead stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 border-b border-border">
+          {[
+            { label: "Total Leads", value: leadsLoading ? "…" : leads.length },
+            { label: "Today", value: leadsLoading ? "…" : leads.filter(l => isToday(new Date(l.capturedAt))).length },
+            { label: "This Week", value: leadsLoading ? "…" : leads.filter(l => isThisWeek(new Date(l.capturedAt))).length },
+            { label: "This Month", value: leadsLoading ? "…" : leads.filter(l => isThisMonth(new Date(l.capturedAt))).length },
+          ].map(c => (
+            <div key={c.label} className="bg-muted/40 rounded-lg p-3">
+              <div className="text-xs text-muted-foreground mb-1">{c.label}</div>
+              <div className="text-xl font-bold">{c.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        {leadsLoading ? (
+          <div className="p-6 text-center text-sm text-muted-foreground animate-pulse">Loading leads…</div>
+        ) : leads.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No demo leads yet — they'll appear here once someone fills out the gate form.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Name</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Email</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Role</th>
+                  <th className="text-right px-4 py-2 text-muted-foreground font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead, i) => (
+                  <tr key={lead.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      <span title={format(new Date(lead.capturedAt), "PPp")}>
+                        {formatDistanceToNow(new Date(lead.capturedAt), { addSuffix: true })}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 font-medium">{lead.firstName}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{lead.email}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${lead.role === "GC" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"}`}>
+                        {lead.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => emailLead(lead)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/70 border border-border text-xs font-medium transition-colors"
+                      >
+                        <Mail className="h-3 w-3" />
+                        Email
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useGetProjects, useCreateProject, getGetProjectsQueryKey, useGetMe, useGetGcDisputedInvoices, useGetContacts, useInviteSubcontractor, useInviteContactToProject } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -18,6 +18,7 @@ import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
 import { TrialBanner } from "@/components/trial-banner";
 import toast from "react-hot-toast";
+import { DemoGateModal, isDemoGatePassed } from "@/components/demo-gate-modal";
 
 // ── Action Required types ──────────────────────────────────────────────────────
 type ActionItem = {
@@ -82,7 +83,11 @@ function getItemIcon(type: string) {
   }
 }
 
-function ActionRequired({ items, isLoading }: { items: ActionItem[]; isLoading: boolean }) {
+function ActionRequired({ items, isLoading, onFlaggedInvoiceClick }: {
+  items: ActionItem[];
+  isLoading: boolean;
+  onFlaggedInvoiceClick?: (href: string) => void;
+}) {
   const totalCount = items.length;
 
   if (isLoading) {
@@ -131,8 +136,10 @@ function ActionRequired({ items, isLoading }: { items: ActionItem[]; isLoading: 
                   </span>
                 </div>
                 {/* Items */}
-                {group.map((item, idx) => (
-                  <Link key={item.id} href={item.href}>
+                {group.map((item, idx) => {
+                  const isFlaggedInvoice = item.type === "FLAGGED_INVOICE";
+                  const interceptClick = isFlaggedInvoice && !!onFlaggedInvoiceClick;
+                  const innerEl = (
                     <div className={cn(
                       "flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors",
                       cfg.rowHover,
@@ -180,8 +187,17 @@ function ActionRequired({ items, isLoading }: { items: ActionItem[]; isLoading: 
                       {/* Arrow */}
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
                     </div>
-                  </Link>
-                ))}
+                  );
+                  return interceptClick ? (
+                    <div key={item.id} onClick={() => onFlaggedInvoiceClick!(item.href)}>
+                      {innerEl}
+                    </div>
+                  ) : (
+                    <Link key={item.id} href={item.href}>
+                      {innerEl}
+                    </Link>
+                  );
+                })}
               </div>
             );
           })}
@@ -192,12 +208,37 @@ function ActionRequired({ items, isLoading }: { items: ActionItem[]; isLoading: 
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const { data: user } = useGetMe();
   const { data: projects, isLoading } = useGetProjects();
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
   const isGC = user?.role === "GC";
+  const isDemoGC = (user as any)?.isDemo === true && isGC;
   const gcTeamRole = (user as any)?.gcTeamRole as string | null | undefined;
+
+  // Demo gate state
+  const [showGate, setShowGate] = React.useState(false);
+  const [gatedHref, setGatedHref] = React.useState<string | null>(null);
+
+  const handleFlaggedInvoiceClick = React.useCallback((href: string) => {
+    if (isDemoGatePassed()) {
+      setLocation(href);
+      return;
+    }
+    setGatedHref(href);
+    setShowGate(true);
+  }, [setLocation]);
+
+  const handleGateComplete = React.useCallback(() => {
+    setShowGate(false);
+    if (gatedHref) setLocation(gatedHref);
+  }, [gatedHref, setLocation]);
+
+  const handleGateSkip = React.useCallback(() => {
+    setShowGate(false);
+    if (gatedHref) setLocation(gatedHref);
+  }, [gatedHref, setLocation]);
   const isOwner = isGC && (gcTeamRole === "owner" || gcTeamRole == null);
   const { data: gcDisputedInvoices = [] } = useGetGcDisputedInvoices({ query: { enabled: isGC } });
 
@@ -641,7 +682,11 @@ export default function Dashboard() {
       {/* ── GC: Action Required Dashboard ─────────────────────────────────── */}
       {isGC && (
         <div data-demo-target="action-required">
-          <ActionRequired items={actionItems} isLoading={actionItemsLoading} />
+          <ActionRequired
+            items={actionItems}
+            isLoading={actionItemsLoading}
+            onFlaggedInvoiceClick={isDemoGC ? handleFlaggedInvoiceClick : undefined}
+          />
         </div>
       )}
 
@@ -1313,6 +1358,12 @@ export default function Dashboard() {
           </div>
         </form>
       </Dialog>
+      {showGate && (
+        <DemoGateModal
+          onComplete={handleGateComplete}
+          onSkip={handleGateSkip}
+        />
+      )}
     </Layout>
   );
 }

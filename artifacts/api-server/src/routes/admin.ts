@@ -1913,4 +1913,33 @@ router.post("/push/broadcast", requireAdmin, async (req, res) => {
   res.json({ sent, failed, total: subscriptions.length });
 });
 
+// ── Admin: Demo Leads ─────────────────────────────────────────────────────────
+
+router.get("/demo-leads", requireAdmin, async (req, res) => {
+  const { getDemoLeads } = await import("./demo-leads.js");
+  const leads = await getDemoLeads();
+  res.json(leads);
+});
+
+router.get("/demo-leads/export", requireAdmin, async (req, res) => {
+  const { getDemoLeads } = await import("./demo-leads.js");
+  const leads = await getDemoLeads();
+
+  const csv = [
+    ["Date", "First Name", "Email", "Role", "Session ID", "Referrer"],
+    ...leads.map(l => [
+      l.capturedAt.toISOString(),
+      l.firstName,
+      l.email,
+      l.role,
+      l.sessionId ?? "",
+      l.referrer ?? "",
+    ]),
+  ].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=\"demo-leads.csv\"");
+  res.send(csv);
+});
+
 export default router;
