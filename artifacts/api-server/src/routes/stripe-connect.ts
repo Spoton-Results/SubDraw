@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
+import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { getUncachableStripeClient } from "../lib/stripeClient.js";
 import { db } from "@workspace/db";
 import { usersTable, invoicesTable, subcontractsTable, notificationsTable, activityLogsTable } from "@workspace/db/schema";
@@ -262,13 +263,7 @@ router.post("/send-reminder/:subcontractId", requireAuth, requireGC, async (req,
 });
 
 // GET /api/stripe/connect/admin-stats — admin Stripe Connect stats
-router.get("/admin-stats", async (req, res) => {
-  const adminToken = req.cookies?.admin_token;
-  if (!adminToken || adminToken !== process.env.ADMIN_PASSWORD) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-
+router.get("/admin-stats", requireAdmin, async (req, res) => {
   try {
     const allSubs = await db
       .select({

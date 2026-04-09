@@ -1348,8 +1348,8 @@ router.get("/push/stats", requireAdmin, async (_req, res) => {
   for (const row of rows) {
     totalSubscriptions += row.count;
     uniqueUsers += row.uniqueUsers;
-    if (row.role === "gc") gcSubscriptions += row.count;
-    else if (row.role === "sub") subSubscriptions += row.count;
+    if (row.role === "GC") gcSubscriptions += row.count;
+    else if (row.role === "SUB") subSubscriptions += row.count;
   }
   res.json({ totalSubscriptions, gcSubscriptions, subSubscriptions, uniqueUsers });
 });
@@ -1373,7 +1373,7 @@ router.post("/push/broadcast", requireAdmin, async (req, res) => {
 
   const subscriptions = target === "all"
     ? await query
-    : await query.where(eq(usersTable.role, target === "gc" ? "gc" : "sub"));
+    : await query.where(eq(usersTable.role, target === "gc" ? "GC" : "SUB"));
 
   let sent = 0, failed = 0;
   await Promise.all(subscriptions.map(async (sub) => {
