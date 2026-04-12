@@ -42,7 +42,7 @@ export default function Home() {
               <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "hsl(221 83% 53%)" }}>
                 <HardHat className="h-4 w-4 text-white" strokeWidth={2.5} />
               </div>
-              SubTracker
+              SubDraw
             </a>
             <div className="hidden md:flex items-center gap-8">
               <a href="#what-it-does" onClick={scrollTo("what-it-does")} className="text-slate-300 hover:text-white text-sm font-medium transition-colors cursor-pointer">Features</a>
@@ -96,13 +96,13 @@ export default function Home() {
 
           {/* Subheadline */}
           <p className="mt-7 text-lg sm:text-xl text-slate-300 leading-relaxed max-w-3xl">
-            Most GCs only see overruns after the money is gone. SubTracker sits between you and your subs and flags every over-invoice the second it's submitted, with a written override reason required if you still want to approve it.
+            Most GCs only see overruns after the money is gone. SubDraw sits between you and your subs and flags every over-invoice the second it's submitted, with a written override reason required if you still want to approve it.
           </p>
 
           {/* Social proof quote */}
           <div className="mt-8 max-w-2xl border-l-4 pl-5 py-1" style={{ borderColor: "hsl(221 83% 53%)" }}>
             <p className="text-slate-200 text-base italic leading-relaxed">
-              "SubTracker caught a $12,000 overrun in week one. That paid for years of subscription in a single click."
+              "SubDraw caught a $12,000 overrun in week one. That paid for years of subscription in a single click."
             </p>
             <p className="mt-2 text-slate-500 text-sm not-italic">— GC Owner, St George Utah</p>
           </div>
@@ -167,7 +167,7 @@ export default function Home() {
           </ul>
 
           <p className="mt-10 text-slate-600 text-lg leading-relaxed">
-            SubTracker turns all of that into one live scoreboard per subcontract so those mistakes have nowhere to hide.
+            SubDraw turns all of that into one live scoreboard per subcontract so those mistakes have nowhere to hide.
           </p>
 
           <div className="mt-8">
@@ -189,13 +189,13 @@ export default function Home() {
       </section>
 
       {/* ══════════════════════════════════════════
-          SECTION 3 — WHAT SUBTRACKER DOES
+          SECTION 3 — WHAT SUBDRAW DOES
       ══════════════════════════════════════════ */}
       <section id="what-it-does" className="bg-slate-50 py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight mb-14 max-w-2xl">
-            Exactly what SubTracker does — no feature soup
+            Exactly what SubDraw does — no feature soup
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -236,7 +236,7 @@ export default function Home() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
 
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">
-            Watch SubTracker catch a bad invoice on a real project
+            Watch SubDraw catch a bad invoice on a real project
           </h2>
 
           <p className="mt-6 text-lg text-slate-600 leading-relaxed">
@@ -246,7 +246,7 @@ export default function Home() {
           <ul className="mt-6 space-y-4 text-left max-w-md mx-auto">
             {[
               "A sub invoice come in over the approved total.",
-              "SubTracker flag it automatically before approval.",
+              "SubDraw flag it automatically before approval.",
               "The exact override note your PM would have to type to let it slide.",
             ].map((item, i) => (
               <li key={i} className="flex items-start gap-3">
@@ -387,7 +387,7 @@ export default function Home() {
                 <div className="h-7 w-7 rounded-md flex items-center justify-center" style={{ backgroundColor: "hsl(221 83% 53%)" }}>
                   <HardHat className="h-4 w-4 text-white" strokeWidth={2.5} />
                 </div>
-                SubTracker
+                SubDraw
               </div>
               <p className="text-slate-400 text-sm leading-relaxed">
                 The financial control layer between GCs and their subcontractors. Built by people who've been on job sites.
@@ -427,7 +427,7 @@ export default function Home() {
             </div>
           </div>
           <div className="border-t border-white/10 pt-7 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-            <p>© {new Date().getFullYear()} SubTracker. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} SubDraw. All rights reserved.</p>
             <p>Built for General Contractors · Subs always free</p>
           </div>
         </div>

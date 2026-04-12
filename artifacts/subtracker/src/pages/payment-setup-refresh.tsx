@@ -141,7 +141,7 @@ export default function PaymentSetupPage() {
                 </div>
                 <div>
                   <p className="font-bold text-sm">Bank-Level Security</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Your bank details are handled entirely by Stripe. SubTracker never sees or stores them.</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Your bank details are handled entirely by Stripe. SubDraw never sees or stores them.</p>
                 </div>
               </div>
             </div>
@@ -164,7 +164,7 @@ export default function PaymentSetupPage() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground text-center pt-1">
-                All three steps happen on the secure Stripe page — not on SubTracker.
+                All three steps happen on the secure Stripe page — not on SubDraw.
               </p>
             </div>
 

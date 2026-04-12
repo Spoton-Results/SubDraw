@@ -760,7 +760,7 @@ function GetPaidSetupSection({ onStatusChange }: { onStatusChange?: (status: str
             <Button className="w-full min-h-[44px] gap-2" isLoading={setupLoading} onClick={handleSetup}>
               <CreditCard className="h-4 w-4" /> Set Up Payment Account
             </Button>
-            <p className="text-xs text-muted-foreground text-center">Powered by Stripe — your bank details are encrypted and never stored by SubTracker.</p>
+            <p className="text-xs text-muted-foreground text-center">Powered by Stripe — your bank details are encrypted and never stored by SubDraw.</p>
           </div>
         )}
 

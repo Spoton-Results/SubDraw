@@ -7,10 +7,10 @@ import { getUncachableStripeClient } from "./stripeClient.js";
 // ── Plan definitions ──────────────────────────────────────────────────────────
 
 export const PLANS = [
-  { name: "SubTracker Starter",    limit: 10,   monthlyUsd: 19900,  annualUsd: 218900,  label: "Starter",    planLabel: "Just Getting Started" },
-  { name: "SubTracker Growth",     limit: 20,   monthlyUsd: 29900,  annualUsd: 328900,  label: "Growth",     planLabel: "One Job at a Time"     },
-  { name: "SubTracker Scale",      limit: 40,   monthlyUsd: 39900,  annualUsd: 438900,  label: "Scale",      planLabel: "Most Popular"          },
-  { name: "SubTracker Enterprise", limit: null, monthlyUsd: 69900,  annualUsd: 768900,  label: "Enterprise", planLabel: "Multiple Crews Multiple Jobs" },
+  { name: "SubDraw Starter",    limit: 10,   monthlyUsd: 19900,  annualUsd: 218900,  label: "Starter",    planLabel: "Just Getting Started" },
+  { name: "SubDraw Growth",     limit: 20,   monthlyUsd: 29900,  annualUsd: 328900,  label: "Growth",     planLabel: "One Job at a Time"     },
+  { name: "SubDraw Scale",      limit: 40,   monthlyUsd: 39900,  annualUsd: 438900,  label: "Scale",      planLabel: "Most Popular"          },
+  { name: "SubDraw Enterprise", limit: null, monthlyUsd: 69900,  annualUsd: 768900,  label: "Enterprise", planLabel: "Multiple Crews Multiple Jobs" },
 ] as const;
 
 export type PlanName = (typeof PLANS)[number]["name"];
@@ -79,7 +79,7 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
   return price.id;
 }
 
-/** Annual variant — product name is e.g. "SubTracker Scale Annual" */
+/** Annual variant — product name is e.g. "SubDraw Scale Annual" */
 export async function getOrCreateAnnualPlanPrice(planName: PlanName): Promise<string> {
   const stripe = await getUncachableStripeClient();
   const plan = getPlanByName(planName)!;
@@ -376,7 +376,7 @@ export async function getGCPlanInfo(userId: string): Promise<GCPlanInfo> {
 
   const subscribed = sub.status === "active" || sub.status === "trialing" || (isPastDue && isInGrace);
 
-  // planName might be "SubTracker Scale Annual" for annual — strip " Annual" suffix for lookup
+  // planName might be "SubDraw Scale Annual" for annual — strip " Annual" suffix for lookup
   const rawPlanName = await getSubscriptionPlanName(user.stripeSubscriptionId);
   const planName = rawPlanName?.replace(/ Annual$/, "") ?? null;
   const plan = planName ? getPlanByName(planName) : null;
@@ -413,7 +413,7 @@ export async function getProPlanPrice() {
              p.id as product_id, p.name as product_name
       FROM stripe.prices pr
       JOIN stripe.products p ON p.id = pr.product
-      WHERE p.name = 'SubTracker Pro' AND pr.active = true AND p.active = true
+      WHERE p.name = 'SubDraw Pro' AND pr.active = true AND p.active = true
       LIMIT 1
     `
   );

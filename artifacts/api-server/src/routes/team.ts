@@ -118,7 +118,7 @@ router.post("/invite", requireAuth, requireGCOwner, async (req, res) => {
     })
     .returning();
 
-  const appUrl = process.env.APP_URL || "https://subtrackers.replit.app";
+  const appUrl = process.env.APP_URL || "https://subdraw.com";
 
   // Generate a magic link for the new team member
   const magicToken = crypto.randomBytes(32).toString("hex");

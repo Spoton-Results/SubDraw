@@ -1271,8 +1271,8 @@ router.post("/gc/:userId/send-followup", requireAdmin, async (req, res) => {
   const trialEndsAt = new Date((user.trialStartedAt ?? user.createdAt).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 
-  const subject = `Following up on your SubTracker trial — ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`;
-  const body = message || `Hi ${user.companyName},\n\nWe noticed you're in your SubTracker trial with ${trialDaysLeft} days remaining. We'd love to help you get the most out of the platform.\n\nIf you have any questions, just reply to this email.\n\nThe SubTracker Team`;
+  const subject = `Following up on your SubDraw trial — ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`;
+  const body = message || `Hi ${user.companyName},\n\nWe noticed you're in your SubDraw trial with ${trialDaysLeft} days remaining. We'd love to help you get the most out of the platform.\n\nIf you have any questions, just reply to this email.\n\nThe SubDraw Team`;
 
   await sendAdminMessageEmail({ toEmail: user.email, subject, message: body });
   res.json({ success: true });
@@ -1287,8 +1287,8 @@ router.post("/gc/:userId/offer-upgrade", requireAdmin, async (req, res) => {
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
   const plan = nextPlanName ? getPlanByName(nextPlanName) : null;
-  const subject = `Upgrade your SubTracker plan${plan ? ` — ${plan.label} unlocks more capacity` : ""}`;
-  const body = `Hi ${user.companyName},\n\nYou're approaching your subcontract limit on SubTracker. To keep growing without interruption, consider upgrading to ${plan?.label ?? "a higher plan"}.\n\nYou can upgrade instantly from your billing page: visit Settings → Billing in your dashboard.\n\nThe SubTracker Team`;
+  const subject = `Upgrade your SubDraw plan${plan ? ` — ${plan.label} unlocks more capacity` : ""}`;
+  const body = `Hi ${user.companyName},\n\nYou're approaching your subcontract limit on SubDraw. To keep growing without interruption, consider upgrading to ${plan?.label ?? "a higher plan"}.\n\nYou can upgrade instantly from your billing page: visit Settings → Billing in your dashboard.\n\nThe SubDraw Team`;
 
   await sendAdminMessageEmail({ toEmail: user.email, subject, message: body });
   res.json({ success: true });

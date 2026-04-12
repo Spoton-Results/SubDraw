@@ -1,6 +1,6 @@
 # Overview
 
-SubTracker is a subcontract management platform for the construction industry, designed to streamline workflows, enhance financial transparency, and improve project management for General Contractors (GCs) and subcontractors. It allows GCs to manage projects, bids, change orders, and invoices, while subcontractors can submit bids and invoices. The platform offers a demo system with seeded data and a 14-day free trial, aiming to provide a comprehensive solution for subcontracting needs.
+SubDraw is a subcontract management platform for the construction industry, designed to streamline workflows, enhance financial transparency, and improve project management for General Contractors (GCs) and subcontractors. It allows GCs to manage projects, bids, change orders, and invoices, while subcontractors can submit bids and invoices. The platform offers a demo system with seeded data and a 14-day free trial, aiming to provide a comprehensive solution for subcontracting needs.
 
 # User Preferences
 

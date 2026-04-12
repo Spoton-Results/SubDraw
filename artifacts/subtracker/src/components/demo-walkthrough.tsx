@@ -107,7 +107,7 @@ export function DemoProgressBar() {
       : step >= 4
       ? "You saw the live financial scoreboard both sides trust."
       : step >= 2
-      ? "You saw how SubTracker catches over-invoices automatically."
+      ? "You saw how SubDraw catches over-invoices automatically."
       : step === 1
       ? "Step 1 of 3 — See a Flagged Invoice"
       : step === 3
@@ -130,7 +130,7 @@ export function DemoProgressBar() {
       <div className="flex items-center gap-1.5 shrink-0">
         <HardHat className="h-4 w-4 text-white/80" />
         <span className="hidden sm:inline text-white/90 font-bold text-xs tracking-tight">
-          SubTracker Demo
+          SubDraw Demo
         </span>
       </div>
 
@@ -312,7 +312,7 @@ function getStepCfg(step: number, location: string): StepCfg | null {
     return {
       selector: '[data-demo-target="action-required"]',
       title: "Your Action Required Dashboard",
-      body: "Right now there is a flagged invoice — your electrical sub invoiced $6,500 over their approved contract amount. SubTracker caught it automatically before anyone approved it. Tap the item or click below to see it.",
+      body: "Right now there is a flagged invoice — your electrical sub invoiced $6,500 over their approved contract amount. SubDraw caught it automatically before anyone approved it. Tap the item or click below to see it.",
       nextLabel: "View Flagged Invoice →",
       stepNum: 1,
     };
@@ -339,7 +339,7 @@ function getStepCfg(step: number, location: string): StepCfg | null {
     return {
       selector: '[data-demo-target="insurance-badges"]',
       title: "Insurance & License Tracking",
-      body: 'SubTracker tracks insurance and license certificates for every sub. Red means expired — this sub cannot be paid until their certificate is updated. Green means valid. You get alerts 30 days before anything expires so you\'re never caught off guard.',
+      body: 'SubDraw tracks insurance and license certificates for every sub. Red means expired — this sub cannot be paid until their certificate is updated. Green means valid. You get alerts 30 days before anything expires so you\'re never caught off guard.',
       nextLabel: "See the Full Summary →",
       stepNum: 3,
     };
@@ -348,7 +348,7 @@ function getStepCfg(step: number, location: string): StepCfg | null {
     return {
       selector: null,
       title: "You Just Saw What Protects GCs",
-      body: "Flagged invoices caught before approval. Live scoreboards both sides trust. Insurance tracked automatically. This is SubTracker on a real project. Ready to use it on your own jobs?",
+      body: "Flagged invoices caught before approval. Live scoreboards both sides trust. Insurance tracked automatically. This is SubDraw on a real project. Ready to use it on your own jobs?",
       nextLabel: "Sign Up Free — No Credit Card Required",
       stepNum: 3,
       isFinal: true,
@@ -449,7 +449,7 @@ function FinalCTAContent({ onSkip }: { onSkip: () => void }) {
         ))}
       </div>
       <p className="text-sm text-muted-foreground text-center">
-        This is SubTracker on a real project. Ready to use it on your own jobs?
+        This is SubDraw on a real project. Ready to use it on your own jobs?
       </p>
       <a
         href={SIGNUP_PATH}

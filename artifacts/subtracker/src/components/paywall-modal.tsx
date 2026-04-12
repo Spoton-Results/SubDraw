@@ -16,7 +16,7 @@ interface PaywallModalProps {
 
 const PLANS = [
   {
-    name: "SubTracker Starter" as const,
+    name: "SubDraw Starter" as const,
     label: "Starter",
     monthlyUsd: 19900,
     limit: 10,
@@ -27,7 +27,7 @@ const PLANS = [
     buttonVariant: "outline" as const,
   },
   {
-    name: "SubTracker Growth" as const,
+    name: "SubDraw Growth" as const,
     label: "Growth",
     monthlyUsd: 29900,
     limit: 20,
@@ -39,7 +39,7 @@ const PLANS = [
     popular: true,
   },
   {
-    name: "SubTracker Scale" as const,
+    name: "SubDraw Scale" as const,
     label: "Scale",
     monthlyUsd: 39900,
     limit: 40,
@@ -50,7 +50,7 @@ const PLANS = [
     buttonVariant: "outline" as const,
   },
   {
-    name: "SubTracker Enterprise" as const,
+    name: "SubDraw Enterprise" as const,
     label: "Enterprise",
     monthlyUsd: 69900,
     limit: null,

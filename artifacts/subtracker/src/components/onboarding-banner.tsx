@@ -22,8 +22,8 @@ const SUB_STEPS = [
 export function OnboardingBanner({ role, onDismiss }: OnboardingBannerProps) {
   const steps = role === "GC" ? GC_STEPS : SUB_STEPS;
   const title = role === "GC"
-    ? "Welcome to SubTracker — here's how to get started"
-    : "Welcome to SubTracker — here's how it works";
+    ? "Welcome to SubDraw — here's how to get started"
+    : "Welcome to SubDraw — here's how it works";
 
   return (
     <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-5 mb-6 relative">

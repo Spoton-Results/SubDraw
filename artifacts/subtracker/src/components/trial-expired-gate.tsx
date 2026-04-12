@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 
 const PLANS = [
   {
-    name: "SubTracker Starter" as const,
+    name: "SubDraw Starter" as const,
     label: "Starter",
     monthlyUsd: 19900,
     limit: 10 as number | null,
@@ -16,7 +16,7 @@ const PLANS = [
     buttonVariant: "outline" as const,
   },
   {
-    name: "SubTracker Growth" as const,
+    name: "SubDraw Growth" as const,
     label: "Growth",
     monthlyUsd: 29900,
     limit: 20 as number | null,
@@ -27,7 +27,7 @@ const PLANS = [
     popular: true,
   },
   {
-    name: "SubTracker Scale" as const,
+    name: "SubDraw Scale" as const,
     label: "Scale",
     monthlyUsd: 39900,
     limit: 40 as number | null,
@@ -37,7 +37,7 @@ const PLANS = [
     buttonVariant: "outline" as const,
   },
   {
-    name: "SubTracker Enterprise" as const,
+    name: "SubDraw Enterprise" as const,
     label: "Enterprise",
     monthlyUsd: 69900,
     limit: null as number | null,
@@ -82,7 +82,7 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
       <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 shadow-sm">
         <div className="flex items-center gap-2 text-xl font-bold font-display text-primary">
           <HardHat className="h-6 w-6" />
-          SubTracker
+          SubDraw
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground hidden sm:block">{companyName}</span>

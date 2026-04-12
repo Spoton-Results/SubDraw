@@ -113,7 +113,7 @@ export function DemoGateModal({ onComplete, onSkip }: DemoGateModalProps) {
 
           {/* Heading */}
           <h2 className="text-xl font-extrabold text-gray-900 dark:text-white leading-snug mb-2">
-            SubTracker just caught a $6,500 overrun before anyone approved it.
+            SubDraw just caught a $6,500 overrun before anyone approved it.
           </h2>
 
           {/* Body */}

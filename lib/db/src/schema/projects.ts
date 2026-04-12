@@ -12,7 +12,7 @@ export const projectsTable = pgTable("projects", {
   description: text("description"),
   estimatedStartDate: text("estimated_start_date"),
   notes: text("notes"),
-  // Project owner (property owner / developer — email-only, no SubTracker account needed)
+  // Project owner (property owner / developer — email-only, no SubDraw account needed)
   ownerName: text("owner_name"),
   ownerEmail: text("owner_email"),
   ownerCoThreshold: doublePrecision("owner_co_threshold"),

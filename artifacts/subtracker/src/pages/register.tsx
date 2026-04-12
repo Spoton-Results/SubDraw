@@ -56,7 +56,7 @@ export default function Register() {
             <div className="bg-primary text-white p-3 rounded-2xl shadow-lg shadow-primary/30">
               <HardHat className="h-8 w-8" />
             </div>
-            <h1 className="text-3xl font-bold font-display text-foreground">SubTracker</h1>
+            <h1 className="text-3xl font-bold font-display text-foreground">SubDraw</h1>
           </div>
 
           <h2 className="text-2xl font-bold mb-2">Create an account</h2>

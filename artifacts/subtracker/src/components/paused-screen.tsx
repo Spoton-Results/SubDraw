@@ -11,7 +11,7 @@ export function PausedScreen({ companyName, onLogout }: PausedScreenProps) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       <div className="flex items-center gap-2 text-2xl font-bold font-display text-primary mb-12">
         <HardHat className="h-7 w-7" />
-        SubTracker
+        SubDraw
       </div>
       <div className="w-full max-w-md bg-card border border-border rounded-2xl p-8 shadow-lg text-center">
         <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-orange-100 dark:bg-orange-900/30 mb-6">

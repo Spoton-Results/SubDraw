@@ -58,7 +58,7 @@ export default function AdminLogin() {
             <HardHat className="h-7 w-7 text-primary-foreground" />
           </div>
           <div className="flex items-center justify-center gap-2 text-foreground font-bold text-xl mb-1">
-            SubTracker
+            SubDraw
           </div>
           <p className="text-muted-foreground text-sm flex items-center justify-center gap-1.5">
             <Shield className="h-3.5 w-3.5" />

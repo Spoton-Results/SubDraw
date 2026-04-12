@@ -155,7 +155,7 @@ export function TabEmailTools() {
       <div className="text-xs text-muted-foreground space-y-1.5 bg-muted/30 border border-border rounded-xl p-4">
         <p className="font-medium text-foreground">Tips</p>
         <ul className="space-y-1 list-disc list-inside">
-          <li>Emails come from your configured email address and reference SubTracker.</li>
+          <li>Emails come from your configured email address and reference SubDraw.</li>
           <li>Keep messages concise — plain text works best for deliverability.</li>
           <li>Always review the recipient segment before sending.</li>
           <li>Use the "All Active Trials" segment for trial-to-paid conversion campaigns.</li>

@@ -14,10 +14,10 @@ const api = (path: string, opts?: RequestInit) =>
 
 const PLAN_OPTIONS = [
   { value: "", label: "Clear override (use Stripe)" },
-  { value: "SubTracker Starter", label: "Starter ($149/mo)" },
-  { value: "SubTracker Growth", label: "Growth ($299/mo)" },
-  { value: "SubTracker Scale", label: "Scale ($499/mo)" },
-  { value: "SubTracker Enterprise", label: "Enterprise ($999/mo)" },
+  { value: "SubDraw Starter", label: "Starter ($149/mo)" },
+  { value: "SubDraw Growth", label: "Growth ($299/mo)" },
+  { value: "SubDraw Scale", label: "Scale ($499/mo)" },
+  { value: "SubDraw Enterprise", label: "Enterprise ($999/mo)" },
 ];
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {

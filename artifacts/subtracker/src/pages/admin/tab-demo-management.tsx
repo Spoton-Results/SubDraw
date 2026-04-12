@@ -76,7 +76,7 @@ export function TabDemoManagement() {
   };
 
   const emailLead = (lead: DemoLead) => {
-    window.open(`mailto:${lead.email}?subject=SubTracker Demo Follow-Up&body=Hi ${lead.firstName},`, "_blank");
+    window.open(`mailto:${lead.email}?subject=SubDraw Demo Follow-Up&body=Hi ${lead.firstName},`, "_blank");
   };
 
   const load = React.useCallback(() => {

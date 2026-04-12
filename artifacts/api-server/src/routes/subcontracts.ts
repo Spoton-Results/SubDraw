@@ -1272,7 +1272,7 @@ router.post("/:subcontractId/invoices/:invoiceId/pay-stripe", requireAuth, requi
       amount: amountCents,
       currency: "usd",
       destination: subUser.stripeConnectAccountId,
-      description: `SubTracker: Invoice #${existing.invoiceNumber} — ${sc.tradeCategory ?? "Subcontract"}`,
+      description: `SubDraw: Invoice #${existing.invoiceNumber} — ${sc.tradeCategory ?? "Subcontract"}`,
       metadata: {
         invoiceId: existing.id,
         subcontractId: sc.id,

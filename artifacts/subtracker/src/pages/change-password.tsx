@@ -31,7 +31,7 @@ export default function ChangePassword({ onSuccess }: ChangePasswordProps) {
     }
     try {
       await changePassword.mutateAsync({ data: { currentPassword: current, newPassword: next } });
-      toast.success("Password updated! Welcome to SubTracker.");
+      toast.success("Password updated! Welcome to SubDraw.");
       onSuccess();
     } catch (err: any) {
       const msg = err?.data?.error || err?.message || "Failed to change password";

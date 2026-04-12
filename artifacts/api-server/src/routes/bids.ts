@@ -90,7 +90,7 @@ router.post("/", requireAuth, async (req, res) => {
         }
       }
 
-      const appUrl = process.env.APP_URL || "https://subtracker.app";
+      const appUrl = process.env.APP_URL || "https://subdraw.com";
       await sendNewBidEmail({
         toEmail: gc.email,
         gcCompanyName: gc.companyName,

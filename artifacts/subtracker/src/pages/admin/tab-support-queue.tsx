@@ -40,11 +40,11 @@ export function TabSupportQueue() {
     setSendingId(item.id);
     try {
       const subject = type === "payment"
-        ? "Action needed: Update your SubTracker payment method"
-        : `Welcome to SubTracker — let's get you started`;
+        ? "Action needed: Update your SubDraw payment method"
+        : `Welcome to SubDraw — let's get you started`;
       const message = type === "payment"
-        ? `Hi ${item.companyName},\n\nWe weren't able to process your most recent payment. To keep your SubTracker access uninterrupted, please update your payment method in Settings → Billing.\n\nIf you need help, just reply to this email.\n\nThe SubTracker Team`
-        : `Hi ${item.companyName},\n\nWelcome to SubTracker! We noticed you haven't logged in yet. We'd love to help you get set up.\n\nYou can log in at: ${window.location.origin}\n\nIf you have any questions, just reply — we're happy to help.\n\nThe SubTracker Team`;
+        ? `Hi ${item.companyName},\n\nWe weren't able to process your most recent payment. To keep your SubDraw access uninterrupted, please update your payment method in Settings → Billing.\n\nIf you need help, just reply to this email.\n\nThe SubDraw Team`
+        : `Hi ${item.companyName},\n\nWelcome to SubDraw! We noticed you haven't logged in yet. We'd love to help you get set up.\n\nYou can log in at: ${window.location.origin}\n\nIf you have any questions, just reply — we're happy to help.\n\nThe SubDraw Team`;
 
       const r = await api(`/gc/${item.id}/send-message`, {
         method: "POST",

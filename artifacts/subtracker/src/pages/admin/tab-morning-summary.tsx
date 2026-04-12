@@ -161,7 +161,7 @@ export function TabMorningSummary({ onNavigate }: { onNavigate?: (tab: string) =
                   </div>
                 </div>
                 <a
-                  href={`mailto:${t.email}?subject=Upgrade your SubTracker trial before it expires&body=Hi ${t.companyName},%0A%0A`}
+                  href={`mailto:${t.email}?subject=Upgrade your SubDraw trial before it expires&body=Hi ${t.companyName},%0A%0A`}
                   className="flex-shrink-0 px-3 py-1.5 rounded-lg border border-orange-300 dark:border-orange-700 text-xs font-medium hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
                 >
                   Email

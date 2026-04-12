@@ -1,6 +1,6 @@
 {
-  "name": "SubTracker",
-  "short_name": "SubTracker",
+  "name": "SubDraw",
+  "short_name": "SubDraw",
   "description": "Subcontract management built for modern GCs",
   "start_url": "/",
   "display": "standalone",

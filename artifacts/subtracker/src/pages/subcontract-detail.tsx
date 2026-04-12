@@ -3919,7 +3919,7 @@ export default function SubcontractDetail() {
         description={`Invoice #${payChooserDialog.invoiceNumber} — ${formatCurrency(payChooserDialog.amount)}`}
       >
         <div className="space-y-3 mt-2">
-          {/* Option 1: Pay via SubTracker */}
+          {/* Option 1: Pay via SubDraw */}
           <div
             className={`rounded-xl border-2 p-4 transition-colors ${subPaymentStatus?.status === "ACTIVE" ? "border-primary/40 bg-primary/5 cursor-pointer hover:border-primary/70 hover:bg-primary/10" : "border-border bg-muted/30 opacity-60"}`}
             onClick={() => {
@@ -3934,7 +3934,7 @@ export default function SubcontractDetail() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-sm">Pay via SubTracker</span>
+                  <span className="font-semibold text-sm">Pay via SubDraw</span>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#635bff" }}>PRIMARY</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">Stripe processes payment directly to sub's bank account in 2 business days.</p>
@@ -3988,7 +3988,7 @@ export default function SubcontractDetail() {
       <Dialog
         open={stripeFlowState === "element" || stripeFlowState === "creating" || stripeFlowState === "paying" || stripeFlowState === "done"}
         onOpenChange={(open) => { if (!open && stripeFlowState !== "paying") { setStripeFlowState("idle"); setStripeClientSecret(""); setStripeAccountId(""); } }}
-        title="Pay via SubTracker"
+        title="Pay via SubDraw"
         description={`Invoice #${stripeFlowInvoice.number} — ${formatCurrency(stripeFlowInvoice.amount)}`}
       >
         <div className="space-y-4 mt-2">

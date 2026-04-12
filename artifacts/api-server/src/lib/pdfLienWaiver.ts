@@ -198,7 +198,7 @@ export async function generateLienWaiverPDF(data: LienWaiverPDFData): Promise<Bu
     doc.rect(0, PAGE_H - 36, PAGE_W, 36).fill(PRIMARY);
     doc.fontSize(8).font("Helvetica").fillColor("rgba(200,220,255,0.7)")
       .text(
-        `SubTracker · Lien Waiver Document · Invoice #${waiver.invoiceNumber} · Generated ${formatDate(new Date())}`,
+        `SubDraw · Lien Waiver Document · Invoice #${waiver.invoiceNumber} · Generated ${formatDate(new Date())}`,
         MARGIN, PAGE_H - 22, { width: CONTENT_W, align: "center" }
       );
 

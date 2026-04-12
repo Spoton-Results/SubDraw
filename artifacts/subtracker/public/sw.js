@@ -18,10 +18,10 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: "SubTracker", body: event.data.text(), url: "/" };
+    payload = { title: "SubDraw", body: event.data.text(), url: "/" };
   }
 
-  const title = payload.title || "SubTracker";
+  const title = payload.title || "SubDraw";
   const options = {
     body: payload.body || "",
     icon: "/images/logo-192.png",

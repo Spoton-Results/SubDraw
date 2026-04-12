@@ -123,7 +123,7 @@ export function TabPushNotifications() {
               value={body}
               onChange={e => setBody(e.target.value)}
               rows={3}
-              placeholder="e.g. We've added new features to SubTracker…"
+              placeholder="e.g. We've added new features to SubDraw…"
               className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
             />
           </div>

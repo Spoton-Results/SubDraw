@@ -71,7 +71,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <HardHat className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold font-display text-primary">SubTracker</span>
+            <span className="text-2xl font-bold font-display text-primary">SubDraw</span>
           </div>
           <h1 className="text-xl font-bold mb-1">Set up your trade profile</h1>
           <p className="text-sm text-muted-foreground">Help GCs find you by completing your profile before continuing.</p>

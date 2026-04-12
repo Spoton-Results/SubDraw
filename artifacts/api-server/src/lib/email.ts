@@ -6,11 +6,11 @@ const RAW_FROM = (process.env.RESEND_FROM_EMAIL || "").trim();
 // Ensure FROM_EMAIL is a valid Resend "from" address.
 // If the env var is just a domain like "reply.spotonresults.com", construct a default address.
 function buildFromEmail(raw: string): string {
-  if (!raw) return "SubTracker <noreply@reply.spotonresults.com>";
+  if (!raw) return "SubDraw <noreply@reply.spotonresults.com>";
   // Already looks like a valid email or "Name <email>" form
   if (raw.includes("@")) return raw;
   // Raw value is just a domain — prepend a default localpart
-  return `SubTracker <noreply@${raw}>`;
+  return `SubDraw <noreply@${raw}>`;
 }
 
 const FROM_EMAIL = buildFromEmail(RAW_FROM);
@@ -64,13 +64,13 @@ function layout(content: string) {
       <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
         <tr>
           <td style="background:#1e3a5f;padding:24px 32px;">
-            <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">⚙ SubTracker</span>
+            <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">⚙ SubDraw</span>
           </td>
         </tr>
         <tr><td style="padding:32px;">${content}</td></tr>
         <tr>
           <td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;">
-            <p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message from SubTracker. Please do not reply.</p>
+            <p style="margin:0;font-size:12px;color:#94a3b8;">This is an automated message from SubDraw. Please do not reply.</p>
           </td>
         </tr>
       </table>
@@ -150,10 +150,10 @@ export async function sendMagicLinkEmail(opts: {
     <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#1e40af;">This link expires in <strong>72 hours</strong> and can only be used once. If you didn't request this, you can safely ignore this email.</p>
     </div>
-    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
+    ${ctaButton("Log in to SubDraw", opts.magicUrl)}
     <p style="margin-top:20px;font-size:12px;color:#94a3b8;">Or copy this link: <span style="color:#1e3a5f;">${opts.magicUrl}</span></p>
   `);
-  await send(opts.toEmail, "Your SubTracker login link — click to enter", html);
+  await send(opts.toEmail, "Your SubDraw login link — click to enter", html);
 }
 
 // ─── 1. Sub invited to project ────────────────────────────────────────────────
@@ -190,12 +190,12 @@ export async function sendInviteEmail(opts: {
     <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
     </div>
-    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
+    ${ctaButton("Log in to SubDraw", opts.magicUrl)}
     <div style="margin-top:20px;padding:16px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
       <p style="margin:0;font-size:13px;color:#166534;">Want to get paid faster? <a href="${opts.appUrl}/account/payment-setup" style="color:#15803d;font-weight:600;">Set up your payment account</a> to receive payments directly to your bank.</p>
     </div>
   `);
-  await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
+  await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubDraw`, html);
 }
 
 // ─── 2a. GC notified of new bid submission ────────────────────────────────────
@@ -463,9 +463,9 @@ export async function sendSubRemovedEmail(opts: {
       { label: "General Contractor", value: opts.gcCompanyName },
     ])}
     <p style="font-size:13px;color:#64748b;margin-bottom:24px;">Any pending bids you had on this project have been cancelled. If you believe this was a mistake, please contact the GC directly.</p>
-    ${ctaButton("Log in to SubTracker", opts.appUrl)}
+    ${ctaButton("Log in to SubDraw", opts.appUrl)}
   `);
-  await send(opts.toEmail, `You've been removed from ${opts.projectName} on SubTracker`, html);
+  await send(opts.toEmail, `You've been removed from ${opts.projectName} on SubDraw`, html);
 }
 
 // ─── 9. Existing sub added to a new project ───────────────────────────────────
@@ -489,7 +489,7 @@ export async function sendAddedToProjectEmail(opts: {
     : "You've been added to a new project";
   const bodyText = opts.isConstructionPhase
     ? `<strong>${opts.subCompanyName}</strong>, you've been invited to submit a bid for additional scope on <strong>${opts.projectName}</strong>${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}. This project is currently under construction — please review the scope and submit your proposed amount.`
-    : `<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubTracker${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}.`;
+    : `<strong>${opts.subCompanyName}</strong>, you have been invited to join the project <strong>${opts.projectName}</strong> on SubDraw${opts.tradeCategory ? ` for the <strong>${opts.tradeCategory}</strong> trade` : ""}.`;
   const html = layout(`
     ${heading(headingText)}
     ${subtext(bodyText)}
@@ -500,7 +500,7 @@ export async function sendAddedToProjectEmail(opts: {
     ${scopeBlock}
     ${ctaButton(opts.isConstructionPhase ? "View Project & Submit Bid" : "View Project", opts.appUrl)}
   `);
-  await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubTracker`, html);
+  await send(opts.toEmail, `You've been invited to ${opts.projectName} on SubDraw`, html);
 }
 
 // ─── 10. Sub created a change order (notify GC) ───────────────────────────────
@@ -733,7 +733,7 @@ export async function sendTeamMemberInviteEmail(opts: {
 }) {
   const html = layout(`
     ${heading(`You've been added to the ${opts.companyName} team`)}
-    ${subtext(`Hi <strong>${opts.fullName}</strong>, you have been added to the <strong>${opts.companyName}</strong> team on SubTracker. Click below to log in instantly — no password needed.`)}
+    ${subtext(`Hi <strong>${opts.fullName}</strong>, you have been added to the <strong>${opts.companyName}</strong> team on SubDraw. Click below to log in instantly — no password needed.`)}
     ${infoBox([
       { label: "Login Email", value: opts.toEmail },
       { label: "Company", value: opts.companyName },
@@ -741,9 +741,9 @@ export async function sendTeamMemberInviteEmail(opts: {
     <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#1e40af;">Your login link expires in <strong>72 hours</strong>. You can always request a new one from the login page.</p>
     </div>
-    ${ctaButton("Log in to SubTracker", opts.magicUrl)}
+    ${ctaButton("Log in to SubDraw", opts.magicUrl)}
   `);
-  await send(opts.toEmail, `You have been added to ${opts.companyName} team on SubTracker`, html);
+  await send(opts.toEmail, `You have been added to ${opts.companyName} team on SubDraw`, html);
 }
 
 export async function sendPasswordResetEmail(opts: {
@@ -753,12 +753,12 @@ export async function sendPasswordResetEmail(opts: {
 }) {
   const html = layout(`
     ${heading("Reset your password")}
-    ${subtext(`Hi <strong>${opts.companyName}</strong>, we received a request to reset your SubTracker password.`)}
+    ${subtext(`Hi <strong>${opts.companyName}</strong>, we received a request to reset your SubDraw password.`)}
     ${subtext("Click the button below to set a new password. This link expires in <strong>1 hour</strong>.")}
     ${ctaButton("Reset Password", opts.resetUrl)}
     ${subtext("If you didn't request this, you can safely ignore this email. Your password will not change.")}
   `);
-  await send(opts.toEmail, "Reset your SubTracker password", html);
+  await send(opts.toEmail, "Reset your SubDraw password", html);
 }
 
 export async function sendContractReadyEmail(opts: {
@@ -889,7 +889,7 @@ export function buildOwnerReplyPage(opts: {
       <tr><td align="center">
         <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);">
           <tr><td style="background:#1e3a5f;padding:24px 32px;">
-            <span style="color:#ffffff;font-size:20px;font-weight:700;">⚙ SubTracker</span>
+            <span style="color:#ffffff;font-size:20px;font-weight:700;">⚙ SubDraw</span>
           </td></tr>
           <tr><td style="padding:40px 32px;text-align:center;">
             <div style="width:64px;height:64px;border-radius:50%;background:${color};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;">
@@ -900,7 +900,7 @@ export function buildOwnerReplyPage(opts: {
             <p style="margin:0;font-size:14px;color:#64748b;">Your response has been recorded and the General Contractor has been notified. You may close this window.</p>
           </td></tr>
           <tr><td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#94a3b8;">Powered by SubTracker — Construction Project Management</p>
+            <p style="margin:0;font-size:12px;color:#94a3b8;">Powered by SubDraw — Construction Project Management</p>
           </td></tr>
         </table>
       </td></tr>
@@ -1040,7 +1040,7 @@ export async function sendAdminMessageEmail(opts: {
   const html = layout(`
     ${heading(opts.subject)}
     ${subtext(opts.message)}
-    <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">This message was sent by the SubTracker admin team.</p>
+    <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">This message was sent by the SubDraw admin team.</p>
   `);
   await send(opts.toEmail, opts.subject, html);
 }
@@ -1051,12 +1051,12 @@ export async function sendAccountCancelledEmail(opts: {
   companyName: string;
 }) {
   const html = layout(`
-    ${heading("Your SubTracker subscription has been cancelled")}
+    ${heading("Your SubDraw subscription has been cancelled")}
     ${subtext(`Hi ${opts.companyName},`)}
-    ${subtext("Your SubTracker subscription has been cancelled. Your account data will be preserved in read-only mode for 90 days, after which it will be permanently deleted.")}
+    ${subtext("Your SubDraw subscription has been cancelled. Your account data will be preserved in read-only mode for 90 days, after which it will be permanently deleted.")}
     ${subtext("If you believe this is in error or have any questions, please contact support.")}
   `);
-  await send(opts.toEmail, "Your SubTracker subscription has been cancelled", html);
+  await send(opts.toEmail, "Your SubDraw subscription has been cancelled", html);
 }
 
 // ─── Submittal: GC sends a submittal to sub ────────────────────────────────────
@@ -1161,7 +1161,7 @@ export async function sendAdminDailySummaryEmail(opts: {
     : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:#94a3b8;text-align:center;">No trials expiring in 3 days</td></tr>`;
 
   const html = layout(`
-    ${heading(`SubTracker Daily — ${opts.date}`)}
+    ${heading(`SubDraw Daily — ${opts.date}`)}
     ${subtext("Here is what needs your attention today.")}
     ${infoBox([
       { label: "Current MRR", value: formatCurrency(opts.mrr) },
@@ -1187,5 +1187,5 @@ export async function sendAdminDailySummaryEmail(opts: {
       ${ctaButton("Open Call List", opts.adminDashboardUrl + "?tab=call-list")}
     </div>
   `);
-  await send(opts.toEmail, `SubTracker Daily — ${opts.date} — here is what needs your attention today`, html);
+  await send(opts.toEmail, `SubDraw Daily — ${opts.date} — here is what needs your attention today`, html);
 }

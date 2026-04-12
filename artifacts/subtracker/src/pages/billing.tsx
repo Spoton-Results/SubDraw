@@ -49,7 +49,7 @@ function formatDateStr(iso: string) {
 
 const PLANS = [
   {
-    name: "SubTracker Starter",
+    name: "SubDraw Starter",
     label: "Starter",
     tagline: "Just Getting Started",
     monthlyUsd: 19900,
@@ -64,7 +64,7 @@ const PLANS = [
     popular: false,
   },
   {
-    name: "SubTracker Growth",
+    name: "SubDraw Growth",
     label: "Growth",
     tagline: "One Job at a Time",
     monthlyUsd: 29900,
@@ -79,7 +79,7 @@ const PLANS = [
     popular: false,
   },
   {
-    name: "SubTracker Scale",
+    name: "SubDraw Scale",
     label: "Scale",
     tagline: "Most Popular",
     monthlyUsd: 39900,
@@ -94,7 +94,7 @@ const PLANS = [
     popular: true,
   },
   {
-    name: "SubTracker Enterprise",
+    name: "SubDraw Enterprise",
     label: "Enterprise",
     tagline: "Multiple Crews Multiple Jobs",
     monthlyUsd: 69900,
@@ -148,7 +148,7 @@ export default function Billing() {
 
   React.useEffect(() => {
     if (checkoutSuccess) {
-      toast.success("Subscription activated! Welcome to SubTracker.");
+      toast.success("Subscription activated! Welcome to SubDraw.");
       window.history.replaceState({}, "", window.location.pathname);
       queryClient.invalidateQueries({ queryKey: ["billing"] });
     }
@@ -191,7 +191,7 @@ export default function Billing() {
     setUpgradeLoading(true);
     try {
       await upgradePlan(nextPlanName);
-      toast.success(`Upgraded to ${nextPlanName.replace("SubTracker ", "")}!`);
+      toast.success(`Upgraded to ${nextPlanName.replace("SubDraw ", "")}!`);
       queryClient.invalidateQueries({ queryKey: ["billing"] });
     } catch (err: any) {
       toast.error(err.message || "Upgrade failed");
@@ -233,10 +233,10 @@ export default function Billing() {
     return p * s;
   })();
   const recommendedPlan = calcTotal === 0 ? null
-    : calcTotal <= 10 ? "SubTracker Starter"
-    : calcTotal <= 20 ? "SubTracker Growth"
-    : calcTotal <= 40 ? "SubTracker Scale"
-    : "SubTracker Enterprise";
+    : calcTotal <= 10 ? "SubDraw Starter"
+    : calcTotal <= 20 ? "SubDraw Growth"
+    : calcTotal <= 40 ? "SubDraw Scale"
+    : "SubDraw Enterprise";
 
   if (user?.role !== "GC") {
     return (
@@ -287,7 +287,7 @@ export default function Billing() {
         </div>
         {billingMode === "annual" && (
           <p className="text-xs text-muted-foreground text-center">
-            Pay annually and get one month completely free — same as getting SubTracker free every December.
+            Pay annually and get one month completely free — same as getting SubDraw free every December.
           </p>
         )}
       </div>
@@ -418,7 +418,7 @@ export default function Billing() {
       <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 px-5 py-4 text-center">
         <p className="text-sm text-foreground font-medium">
           Most GCs pick Scale. At $399 a month you get up to 40 active subcontracts — enough for one to two full jobs running at the same time.{" "}
-          <span className="font-semibold text-primary">If SubTracker catches one invoice overrun this month it pays for itself.</span>
+          <span className="font-semibold text-primary">If SubDraw catches one invoice overrun this month it pays for itself.</span>
         </p>
       </div>
 
@@ -475,7 +475,7 @@ export default function Billing() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Billing</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Manage your SubTracker subscription</p>
+          <p className="text-muted-foreground mt-1 text-sm">Manage your SubDraw subscription</p>
         </div>
 
         {/* One-time pricing model change banner for existing customers */}
@@ -484,7 +484,7 @@ export default function Billing() {
             <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
             <div className="flex-1 text-sm text-blue-800 dark:text-blue-300">
               <span className="font-semibold">We updated our pricing model.</span>{" "}
-              SubTracker now tracks active subcontracts instead of projects. Your plan includes the subcontract limits shown below. Archive completed projects at any time to free up slots. No action needed unless you exceed your new limit.
+              SubDraw now tracks active subcontracts instead of projects. Your plan includes the subcontract limits shown below. Archive completed projects at any time to free up slots. No action needed unless you exceed your new limit.
             </div>
             <button onClick={dismissModelBanner} className="text-blue-600 hover:text-blue-800 text-xs font-semibold shrink-0">Dismiss</button>
           </div>
@@ -578,13 +578,13 @@ export default function Billing() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        {planName === "SubTracker Enterprise" ? <Building2 className="h-5 w-5 text-violet-600" />
-                          : planName === "SubTracker Scale" ? <Rocket className="h-5 w-5 text-primary" />
-                          : planName === "SubTracker Growth" ? <TrendingUp className="h-5 w-5 text-primary" />
+                        {planName === "SubDraw Enterprise" ? <Building2 className="h-5 w-5 text-violet-600" />
+                          : planName === "SubDraw Scale" ? <Rocket className="h-5 w-5 text-primary" />
+                          : planName === "SubDraw Growth" ? <TrendingUp className="h-5 w-5 text-primary" />
                           : <Zap className="h-5 w-5 text-blue-600" />}
                       </div>
                       <div>
-                        <div className="font-semibold text-foreground">{planLabel ?? "SubTracker"} Plan</div>
+                        <div className="font-semibold text-foreground">{planLabel ?? "SubDraw"} Plan</div>
                         <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
                           <span>
                             {billingInterval === "year"
@@ -837,7 +837,7 @@ export default function Billing() {
                       <div key={inv.id} className="py-3 flex items-center gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-foreground">
-                            {inv.description || (planLabel ? `SubTracker ${planLabel}` : "SubTracker")}
+                            {inv.description || (planLabel ? `SubDraw ${planLabel}` : "SubDraw")}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {formatDate(inv.created)}

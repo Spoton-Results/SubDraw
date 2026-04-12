@@ -159,7 +159,7 @@ export async function generateDrawSchedulePDF(data: DrawSchedulePDFData): Promis
 
     curY += 50;
     doc.fill(MUTED).fontSize(8).font("Helvetica")
-      .text("This draw schedule is generated from SubTracker and reflects committed contract values including approved change orders.", 50, curY, { width: pageW, align: "center" });
+      .text("This draw schedule is generated from SubDraw and reflects committed contract values including approved change orders.", 50, curY, { width: pageW, align: "center" });
 
     doc.end();
   });

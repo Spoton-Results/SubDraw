@@ -48,8 +48,8 @@ export function TabChurnRisk() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subject: `Checking in — how's SubTracker working for you?`,
-          message: `Hi ${account.companyName},\n\nI wanted to personally reach out and see how things are going with SubTracker. Is there anything we can help with or improve for your team?\n\nJust reply to this email — we'd love to hear from you.\n\nBest,\nThe SubTracker Team`,
+          subject: `Checking in — how's SubDraw working for you?`,
+          message: `Hi ${account.companyName},\n\nI wanted to personally reach out and see how things are going with SubDraw. Is there anything we can help with or improve for your team?\n\nJust reply to this email — we'd love to hear from you.\n\nBest,\nThe SubDraw Team`,
         }),
       });
       if (!r.ok) throw new Error();

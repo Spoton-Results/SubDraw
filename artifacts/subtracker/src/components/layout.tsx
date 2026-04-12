@@ -218,7 +218,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="h-16 flex items-center px-6 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
             <HardHat className="h-6 w-6" />
-            SubTracker
+            SubDraw
           </Link>
         </div>
 
@@ -266,7 +266,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <header className="h-16 bg-card border-b border-border flex items-center px-4 md:px-8 shadow-sm justify-between">
           <div className="md:hidden flex items-center gap-2">
             <HardHat className="h-6 w-6 text-primary" />
-            <span className="font-bold font-display">SubTracker</span>
+            <span className="font-bold font-display">SubDraw</span>
           </div>
           <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm">
             {/* Breadcrumb or empty, handled per-page */}
@@ -413,7 +413,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm text-foreground leading-tight">Add to your home screen</p>
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-              Install SubTracker for quick access. On iOS: tap <strong>Share → Add to Home Screen</strong>. On Android: tap <strong>Menu → Add to Home Screen</strong>.
+              Install SubDraw for quick access. On iOS: tap <strong>Share → Add to Home Screen</strong>. On Android: tap <strong>Menu → Add to Home Screen</strong>.
             </p>
           </div>
           <button

@@ -255,7 +255,7 @@ router.post("/send-reminder/:subcontractId", requireAuth, requireGC, async (req,
     userId: subcontract.subId,
     type: "STRIPE_SETUP_REMINDER",
     title: "Set up your payment account",
-    body: `${gcUser?.companyName ?? "Your GC"} wants to pay you via SubTracker. Set up your bank account now to receive payments directly — it only takes 5 minutes.`,
+    body: `${gcUser?.companyName ?? "Your GC"} wants to pay you via SubDraw. Set up your bank account now to receive payments directly — it only takes 5 minutes.`,
     data: { subcontractId },
   }).catch(err => console.error("[stripe-connect] reminder notification failed:", err));
 

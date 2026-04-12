@@ -124,7 +124,7 @@ export function TabCallList({ onNavigate }: { onNavigate?: (tab: string, extra?:
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                   <a
-                    href={`mailto:${item.email}?subject=Following up on your SubTracker trial&body=Hi ${item.companyName},%0A%0A`}
+                    href={`mailto:${item.email}?subject=Following up on your SubDraw trial&body=Hi ${item.companyName},%0A%0A`}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border hover:bg-muted transition-colors"
                   >
                     <Mail className="h-3.5 w-3.5" /> Email

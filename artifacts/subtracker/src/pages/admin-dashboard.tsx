@@ -59,10 +59,10 @@ interface ImpersonationLog {
 
 const PLAN_OPTIONS = [
   { value: "", label: "Clear override (use Stripe)" },
-  { value: "SubTracker Starter", label: "Starter" },
-  { value: "SubTracker Growth", label: "Growth" },
-  { value: "SubTracker Scale", label: "Scale" },
-  { value: "SubTracker Enterprise", label: "Enterprise" },
+  { value: "SubDraw Starter", label: "Starter" },
+  { value: "SubDraw Growth", label: "Growth" },
+  { value: "SubDraw Scale", label: "Scale" },
+  { value: "SubDraw Enterprise", label: "Enterprise" },
 ];
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -406,7 +406,7 @@ export default function AdminDashboard() {
       <header className="h-14 bg-card border-b border-border flex items-center px-6 gap-4 shrink-0">
         <div className="flex items-center gap-2 font-bold text-base">
           <HardHat className="h-5 w-5 text-primary" />
-          SubTracker
+          SubDraw
           <span className="text-red-500 text-xs font-semibold border border-red-500/50 rounded px-1.5 py-0.5 ml-1">ADMIN</span>
         </div>
         <div className="flex-1" />
