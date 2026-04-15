@@ -10,7 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { gcProjectAssignmentsTable } from "@workspace/db/schema";
 import { ownerCoNotificationsTable } from "@workspace/db/schema";
-import { planFilesTable } from "@workspace/db/schema";
+import { planFilesTable, planFileViewsTable } from "@workspace/db/schema";
 import { tradeScopesTable } from "@workspace/db/schema";
 import {
   subcontractsTable,
@@ -102,6 +102,11 @@ async function wipeDemoData(gcId: string) {
   await db.delete(drawScheduleItemsTable).where(inArray(drawScheduleItemsTable.projectId, projectIds));
   await db.delete(gcProjectAssignmentsTable).where(inArray(gcProjectAssignmentsTable.projectId, projectIds));
   await db.delete(ownerCoNotificationsTable).where(inArray(ownerCoNotificationsTable.projectId, projectIds));
+  const planFileRows = await db.select({ id: planFilesTable.id }).from(planFilesTable)
+    .where(inArray(planFilesTable.projectId, projectIds));
+  if (planFileRows.length > 0) {
+    await db.delete(planFileViewsTable).where(inArray(planFileViewsTable.planFileId, planFileRows.map(p => p.id)));
+  }
   await db.delete(planFilesTable).where(inArray(planFilesTable.projectId, projectIds));
   await db.delete(tradeScopesTable).where(inArray(tradeScopesTable.projectId, projectIds));
   await db.delete(projectMembersTable).where(inArray(projectMembersTable.projectId, projectIds));
@@ -430,6 +435,125 @@ async function seedDemoData(
       actorName: sub3.companyName,
       actorRole: "SUB",
       createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+    },
+  ]);
+
+  // ── Plan files with per-sub views ────────────────────────────────────────
+  const [pfArch] = await db
+    .insert(planFilesTable)
+    .values({
+      projectId: project.id,
+      fileName: "Architectural_Floor_Plans_Rev3.pdf",
+      objectPath: "demo/arch-floor-plans-rev3.pdf",
+      fileUrl: null,
+      fileSize: 4817920,
+      description: "Architectural Floor Plans — Rev 3",
+    })
+    .returning();
+
+  const [pfElec] = await db
+    .insert(planFilesTable)
+    .values({
+      projectId: project.id,
+      fileName: "Electrical_One-Line_Diagram.pdf",
+      objectPath: "demo/electrical-one-line.pdf",
+      fileUrl: null,
+      fileSize: 1572864,
+      description: "Electrical One-Line Diagram",
+    })
+    .returning();
+
+  const [pfPlumb] = await db
+    .insert(planFilesTable)
+    .values({
+      projectId: project.id,
+      fileName: "Plumbing_Riser_Diagram.pdf",
+      objectPath: "demo/plumbing-riser.pdf",
+      fileUrl: null,
+      fileSize: 1048576,
+      description: "Plumbing Riser Diagram",
+    })
+    .returning();
+
+  // All subs viewed the arch floor plans; only relevant subs viewed trade-specific plans
+  await db.insert(planFileViewsTable).values([
+    {
+      planFileId: pfArch.id,
+      subId: sub1.id,
+      subName: "Marcus Rivera",
+      companyName: sub1.companyName,
+      viewedAt: new Date(Date.now() - 48 * 24 * 60 * 60 * 1000),
+    },
+    {
+      planFileId: pfArch.id,
+      subId: sub2.id,
+      subName: "Jordan Reyes",
+      companyName: sub2.companyName,
+      viewedAt: new Date(Date.now() - 47 * 24 * 60 * 60 * 1000),
+    },
+    {
+      planFileId: pfArch.id,
+      subId: sub3.id,
+      subName: "Casey Nguyen",
+      companyName: sub3.companyName,
+      viewedAt: new Date(Date.now() - 46 * 24 * 60 * 60 * 1000),
+    },
+    {
+      planFileId: pfElec.id,
+      subId: sub1.id,
+      subName: "Marcus Rivera",
+      companyName: sub1.companyName,
+      viewedAt: new Date(Date.now() - 44 * 24 * 60 * 60 * 1000),
+    },
+    {
+      planFileId: pfPlumb.id,
+      subId: sub2.id,
+      subName: "Jordan Reyes",
+      companyName: sub2.companyName,
+      viewedAt: new Date(Date.now() - 43 * 24 * 60 * 60 * 1000),
+    },
+  ]);
+
+  // ── Demo submittal: Approved Panel Specification Sheet (Pacific Electric) ─
+  const [submittalElec] = await db
+    .insert(submittalsTable)
+    .values({
+      subcontractId: scElec.id,
+      name: "Panel Specification Sheet",
+      documentPath: "demo/panel-spec-sheet.pdf",
+      documentName: "Panel_Specification_Sheet.pdf",
+      openingMessage:
+        "Please review the attached panel specification sheet for the server room panel upgrade per the approved change order.",
+      requiredResponseDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
+      acknowledgedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      acknowledgedByName: gc.companyName,
+      acknowledgmentMessage:
+        "Approved. Specifications meet code requirements — proceed with panel installation as submitted.",
+    })
+    .returning();
+
+  await db.insert(submittalMessagesTable).values([
+    {
+      submittalId: submittalElec.id,
+      senderId: sub1.id,
+      senderName: "Marcus Rivera",
+      senderRole: "SUB",
+      message:
+        "Submitting the panel specification sheet for the server room upgrade. All specs are per the manufacturer's recommendations and comply with NEC 2023.",
+      documentPath: "demo/panel-spec-sheet.pdf",
+      documentName: "Panel_Specification_Sheet.pdf",
+      createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+    },
+    {
+      submittalId: submittalElec.id,
+      senderId: gc.id,
+      senderName: gc.companyName,
+      senderRole: "GC",
+      message:
+        "Approved. Specifications meet code requirements — proceed with panel installation as submitted.",
+      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
     },
   ]);
 

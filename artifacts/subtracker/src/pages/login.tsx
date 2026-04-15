@@ -79,16 +79,24 @@ export default function Login() {
         credentials: "include",
         body: JSON.stringify({ role }),
       });
-      const body = await res.json();
+      let body: any = null;
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        body = await res.json();
+      } else {
+        const text = await res.text();
+        console.error("[demo-login] Non-JSON response:", res.status, text.slice(0, 200));
+      }
       if (!res.ok) {
-        toast.error(body.error || "Demo login failed");
+        toast.error(body?.error || `Demo login failed (${res.status}). Please try again.`);
         return;
       }
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
       setLocation("/dashboard");
-    } catch {
-      toast.error("Demo login failed. Please try again.");
+    } catch (err: any) {
+      console.error("[demo-login] fetch error:", err?.message);
+      toast.error("Demo login failed. Check your connection and try again.");
     } finally {
       setDemoLoading(null);
     }
