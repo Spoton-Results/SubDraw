@@ -22,7 +22,7 @@ export function PausedScreen({ companyName, onLogout }: PausedScreenProps) {
           <span className="font-semibold text-foreground">{companyName}</span>'s account has been temporarily paused by our team.
         </p>
         <p className="text-muted-foreground text-sm mb-8">
-          Please contact <a href="mailto:support@subtrackers.com" className="text-primary hover:underline">support@subtrackers.com</a> for assistance.
+          Please contact <a href="mailto:support@subdraw.com" className="text-primary hover:underline">support@subdraw.com</a> for assistance.
         </p>
         <button
           onClick={onLogout}
