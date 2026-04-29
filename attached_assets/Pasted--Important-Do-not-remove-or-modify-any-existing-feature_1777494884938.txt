@@ -1,0 +1,14 @@
+
+
+Important: Do not remove or modify any existing features or functionality that is currently working. Only change the trial length from 14 days to 7 days as described below.
+Change the free trial length from 14 days to 7 days everywhere in the application. Specifically update the following:
+DATABASE: Change the default trial period from 14 days to 7 days for all new accounts created after this change. Do not change the trial end date for any existing trial accounts — only new signups going forward get 7 days.
+TRIAL COUNTDOWN BADGE: Update the trial countdown badge in the navigation bar so it starts at 7 days and counts down correctly. Update the color logic — gray from 7 to 4 days remaining, yellow at 3 days remaining, red at 1 to 2 days remaining with pulse animation.
+PRE-EXPIRY MODALS: Update the pre-expiry warning modals to fire at the correct times for a 7 day trial. Show the first warning modal at 3 days remaining. Show the final warning modal at 1 day remaining. The modal copy should reference 7 days not 14 days.
+HARD PAYWALL: The hard paywall that freezes new actions fires at day 7 instead of day 14 for all new accounts.
+EMAIL SEQUENCE: Update all trial email sequences to fire at the correct intervals for a 7 day trial. Day 0 email fires immediately on signup. Day 3 email fires 3 days after signup. Day 5 email fires 5 days after signup referencing 2 days remaining. Day 6 email fires 6 days after signup referencing trial ends tomorrow. Update all email copy that mentions 14 days to say 7 days instead.
+MARKETING HOMEPAGE: Update any mention of 14-day free trial on the marketing homepage, hero section, pricing section, and any other page to say 7-day free trial instead.
+SIGNUP PAGE: Update any mention of 14-day free trial on the signup page to say 7-day free trial.
+UPGRADE MODAL: Update the upgrade moment modal copy that references trial days remaining to correctly reflect 7 days total instead of 14 days.
+IN-APP MESSAGING: Search the entire codebase for any hardcoded reference to 14 days or 14-day trial and replace with 7 days or 7-day trial. This includes tooltips, banners, checklist descriptions, and any other user-facing text.
+After making all changes confirm that a new test account created today shows 7 days remaining in the trial badge and that the trial end date is exactly 7 days from today.

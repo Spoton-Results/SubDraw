@@ -8,8 +8,8 @@ interface TrialBannerProps {
 }
 
 export function TrialBanner({ daysLeft, trialEndsAt }: TrialBannerProps) {
-  const isRed = daysLeft < 3;
-  const isYellow = !isRed && daysLeft < 7;
+  const isRed = daysLeft <= 2;
+  const isYellow = !isRed && daysLeft === 3;
 
   const bgColor = isRed
     ? "bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-700"
@@ -35,7 +35,7 @@ export function TrialBanner({ daysLeft, trialEndsAt }: TrialBannerProps) {
       : `Your free trial ends in ${daysLeft} days — choose a plan to keep access`;
 
   return (
-    <div className={`mb-4 rounded-xl border px-4 py-3 flex items-center gap-3 ${bgColor}`}>
+    <div className={`mb-4 rounded-xl border px-4 py-3 flex items-center gap-3 ${bgColor} ${isRed ? "animate-pulse" : ""}`}>
       <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
       <div className="flex-1 min-w-0">
         <span className={`text-sm font-semibold ${textColor}`}>{message}</span>
