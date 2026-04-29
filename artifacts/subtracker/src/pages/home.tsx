@@ -1,20 +1,44 @@
 import * as React from "react";
 import { Link } from "wouter";
 import {
-  Menu, X, HardHat, ArrowRight, Check, AlertTriangle, BarChart2,
+  Menu, X, HardHat, ArrowRight, Check,
 } from "lucide-react";
 
 const PLANS = [
-  { name: "Starter", monthly: 199, annual: 2189, limit: "Up to 10 subcontracts", popular: false },
-  { name: "Growth", monthly: 299, annual: 3289, limit: "Up to 20 subcontracts", popular: false },
-  { name: "Scale", monthly: 399, annual: 4389, limit: "Up to 40 subcontracts", popular: true },
-  { name: "Enterprise", monthly: 699, annual: 7689, limit: "Unlimited subcontracts", popular: false },
+  {
+    name: "Starter",
+    monthly: 149,
+    annual: 1639,
+    limit: "Up to 10 active subcontracts",
+    description: "Perfect for remodelers and small GCs getting started",
+    roi: "If SubTracker catches one invoice overrun this year it paid for itself completely.",
+    popular: false,
+  },
+  {
+    name: "Professional",
+    monthly: 299,
+    annual: 3289,
+    limit: "Up to 30 active subcontracts",
+    description: "For GCs running two to four active jobs simultaneously",
+    roi: "One caught overrun on a single job covers your entire year of SubTracker.",
+    popular: true,
+  },
+  {
+    name: "Scale",
+    monthly: 599,
+    annual: 6589,
+    limit: "Unlimited active subcontracts",
+    description: "For serious GCs running multiple crews with no limits",
+    roi: "Unlimited protection across every job every sub every invoice all year.",
+    popular: false,
+  },
 ];
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [pastHero, setPastHero] = React.useState(false);
+  const [billingAnnual, setBillingAnnual] = React.useState(false);
 
   React.useEffect(() => {
     const onScroll = () => {
@@ -277,63 +301,135 @@ export default function Home() {
       </section>
 
       {/* ══════════════════════════════════════════
-          SECTION 5 — PRICING (unchanged)
+          SECTION 5 — PRICING
       ══════════════════════════════════════════ */}
       <section id="pricing" className="bg-slate-50 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+
+          {/* Heading */}
           <div className="text-center mb-3">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">If it catches one overrun, it pays for itself</h2>
           </div>
-          <p className="text-center text-slate-500 mb-2 text-sm max-w-xl mx-auto">
-            Average overrun our customers catch: <strong className="text-slate-700">$6,500</strong>. Starter plan: <strong className="text-slate-700">$199/mo</strong>. Do the math.
+          <p className="text-center text-slate-500 mb-10 text-sm max-w-xl mx-auto">
+            Priced by active subcontracts — not seats, not projects. Subcontractors always free.
           </p>
-          <p className="text-center text-slate-400 mb-12 text-xs">Priced by active subcontracts — not seats or projects. Subs always free.</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
-            {PLANS.map((plan) => (
-              <div
-                key={plan.name}
-                className={`relative rounded-2xl bg-white border p-6 flex flex-col ${
-                  plan.popular ? "border-blue-500 shadow-xl scale-[1.02] z-10 ring-2 ring-blue-500/20" : "border-slate-200 shadow-sm"
-                }`}
+          {/* Monthly / Annual toggle */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex items-center gap-1 rounded-xl p-1" style={{ backgroundColor: "rgba(15,23,42,0.07)" }}>
+              <button
+                onClick={() => setBillingAnnual(false)}
+                className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all ${!billingAnnual ? "bg-white shadow text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
               >
-                {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-xs font-bold text-white shadow" style={{ backgroundColor: "hsl(221 83% 53%)" }}>
-                    Most Popular
-                  </div>
-                )}
-                <div className="mb-4">
-                  <h3 className="text-base font-bold text-slate-900">{plan.name}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{plan.limit}</p>
-                </div>
-                <div className="mb-1">
-                  <span className="text-3xl font-extrabold text-slate-900">${plan.monthly}</span>
-                  <span className="text-slate-400 text-sm">/mo</span>
-                </div>
-                <div className="flex items-center gap-2 mb-6">
-                  <span className="text-xs text-slate-400">${plan.annual.toLocaleString()}/yr</span>
-                  <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">1 Month Free</span>
-                </div>
-                <Link
-                  href="/signup"
-                  className={`w-full rounded-xl py-2.5 text-sm font-bold text-center block transition-colors ${
-                    plan.popular ? "text-white hover:opacity-90" : "border border-slate-200 text-slate-700 hover:bg-slate-50"
-                  }`}
-                  style={plan.popular ? { backgroundColor: "hsl(221 83% 53%)" } : {}}
-                >
-                  Start Free Trial
-                </Link>
-              </div>
-            ))}
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingAnnual(true)}
+                className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${billingAnnual ? "bg-white shadow text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                Annual
+                <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Save one month free</span>
+              </button>
+            </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-slate-400">
+          {/* Plan cards — Professional first on mobile via CSS order */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+            {PLANS.map((plan) => {
+              const orderClass = plan.name === "Professional"
+                ? "order-first md:order-none"
+                : plan.name === "Starter"
+                ? "order-2 md:order-none"
+                : "order-3 md:order-none";
+
+              return (
+                <div
+                  key={plan.name}
+                  className={`relative rounded-2xl bg-white flex flex-col ${orderClass} ${
+                    plan.popular
+                      ? "border-2 shadow-2xl z-10 scale-[1.03] ring-4 ring-blue-500/15"
+                      : "border border-slate-200 shadow-sm opacity-95"
+                  }`}
+                  style={plan.popular ? { borderColor: "hsl(221 83% 53%)" } : {}}
+                >
+                  {/* Most Popular badge */}
+                  {plan.popular && (
+                    <div
+                      className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-xs font-bold text-white shadow-lg"
+                      style={{ backgroundColor: "hsl(221 83% 53%)" }}
+                    >
+                      MOST POPULAR
+                    </div>
+                  )}
+
+                  <div className={`p-7 flex flex-col flex-1 ${plan.popular ? "pt-9" : ""}`}>
+                    {/* Plan name + description */}
+                    <h3 className={`font-extrabold text-slate-900 mb-1 ${plan.popular ? "text-xl" : "text-base"}`}>{plan.name}</h3>
+                    <p className="text-xs text-slate-500 mb-1">{plan.limit}</p>
+                    <p className="text-sm text-slate-600 mb-1">{plan.description}</p>
+                    <p className="text-xs text-slate-400 italic mb-5">{plan.roi}</p>
+
+                    {/* Price */}
+                    <div className="mb-1">
+                      <span className={`font-extrabold text-slate-900 ${plan.popular ? "text-5xl" : "text-4xl"}`}>
+                        ${billingAnnual ? plan.annual.toLocaleString() : plan.monthly}
+                      </span>
+                      <span className="text-slate-400 text-sm ml-1">{billingAnnual ? "/yr" : "/mo"}</span>
+                    </div>
+                    {billingAnnual ? (
+                      <div className="flex items-center gap-2 mb-6">
+                        <span className="text-xs text-slate-400">${plan.monthly}/mo equivalent</span>
+                        <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Save one month free</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 mb-6">${plan.annual.toLocaleString()}/yr if billed annually</p>
+                    )}
+
+                    {/* Inclusions */}
+                    <ul className="space-y-2 mb-7">
+                      {[
+                        "Unlimited team members — no per seat fees ever",
+                        "All features included — nothing locked behind higher plans",
+                        "Subcontractors always free",
+                        "Cancel anytime",
+                      ].map((item) => (
+                        <li key={item} className="flex items-start gap-2 text-sm text-slate-700">
+                          <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" strokeWidth={2.5} />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA */}
+                    <Link
+                      href="/signup"
+                      className={`mt-auto w-full rounded-xl py-3 text-sm font-bold text-center block transition-all hover:opacity-90 hover:scale-[1.02] ${
+                        plan.popular ? "text-white shadow-lg" : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                      style={plan.popular ? { backgroundColor: "hsl(221 83% 53%)" } : {}}
+                    >
+                      Start 14-Day Free Trial
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Trust badges */}
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-slate-400">
             {["14-day free trial · all plans", "No credit card to start", "Cancel anytime", "Subs always free"].map((item) => (
               <span key={item} className="flex items-center gap-1.5">
                 <Check className="h-3.5 w-3.5 text-green-500" /> {item}
               </span>
             ))}
           </div>
+
+          {/* Processing fee disclosure */}
+          <p className="mt-6 text-center text-slate-400 text-xs">
+            Payments processed through SubTracker include a 1% payment processing fee — less than half the cost of a credit card terminal. Subcontractors are always free on every plan.
+          </p>
+
         </div>
       </section>
 

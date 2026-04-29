@@ -7,10 +7,9 @@ import { getUncachableStripeClient } from "./stripeClient.js";
 // ── Plan definitions ──────────────────────────────────────────────────────────
 
 export const PLANS = [
-  { name: "SubDraw Starter",    limit: 10,   monthlyUsd: 19900,  annualUsd: 218900,  label: "Starter",    planLabel: "Just Getting Started" },
-  { name: "SubDraw Growth",     limit: 20,   monthlyUsd: 29900,  annualUsd: 328900,  label: "Growth",     planLabel: "One Job at a Time"     },
-  { name: "SubDraw Scale",      limit: 40,   monthlyUsd: 39900,  annualUsd: 438900,  label: "Scale",      planLabel: "Most Popular"          },
-  { name: "SubDraw Enterprise", limit: null, monthlyUsd: 69900,  annualUsd: 768900,  label: "Enterprise", planLabel: "Multiple Crews Multiple Jobs" },
+  { name: "SubDraw Starter",      limit: 10,   monthlyUsd: 14900,  annualUsd: 163900,  label: "Starter",      planLabel: "Perfect for Small GCs"        },
+  { name: "SubDraw Professional", limit: 30,   monthlyUsd: 29900,  annualUsd: 328900,  label: "Professional", planLabel: "Most Popular"                  },
+  { name: "SubDraw Scale",        limit: null, monthlyUsd: 59900,  annualUsd: 658900,  label: "Scale",        planLabel: "Unlimited Everything"          },
 ] as const;
 
 export type PlanName = (typeof PLANS)[number]["name"];

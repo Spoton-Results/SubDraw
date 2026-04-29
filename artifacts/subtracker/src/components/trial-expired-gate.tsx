@@ -1,14 +1,14 @@
 import * as React from "react";
 import { startCheckout, formatPlanPrice } from "@/lib/stripe";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket, HardHat, LogOut, Building2 } from "lucide-react";
+import { CheckCircle2, Loader2, Zap, TrendingUp, Rocket, HardHat, LogOut } from "lucide-react";
 import toast from "react-hot-toast";
 
 const PLANS = [
   {
     name: "SubDraw Starter" as const,
     label: "Starter",
-    monthlyUsd: 19900,
+    monthlyUsd: 14900,
     limit: 10 as number | null,
     icon: Zap,
     color: "border-blue-200",
@@ -16,10 +16,10 @@ const PLANS = [
     buttonVariant: "outline" as const,
   },
   {
-    name: "SubDraw Growth" as const,
-    label: "Growth",
+    name: "SubDraw Professional" as const,
+    label: "Professional",
     monthlyUsd: 29900,
-    limit: 20 as number | null,
+    limit: 30 as number | null,
     icon: TrendingUp,
     color: "border-primary ring-2 ring-primary",
     headerColor: "text-primary",
@@ -29,21 +29,11 @@ const PLANS = [
   {
     name: "SubDraw Scale" as const,
     label: "Scale",
-    monthlyUsd: 39900,
-    limit: 40 as number | null,
+    monthlyUsd: 59900,
+    limit: null as number | null,
     icon: Rocket,
     color: "border-violet-200",
     headerColor: "text-violet-700",
-    buttonVariant: "outline" as const,
-  },
-  {
-    name: "SubDraw Enterprise" as const,
-    label: "Enterprise",
-    monthlyUsd: 69900,
-    limit: null as number | null,
-    icon: Building2,
-    color: "border-border",
-    headerColor: "text-foreground",
     buttonVariant: "outline" as const,
   },
 ];
@@ -113,7 +103,7 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
           </div>
 
           {/* Plan cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             {PLANS.map((plan) => {
               const Icon = plan.icon;
               const isLoading = loadingPlan === plan.name;

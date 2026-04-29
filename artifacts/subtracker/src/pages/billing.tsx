@@ -21,7 +21,7 @@ import toast from "react-hot-toast";
 import {
   CreditCard, Calendar, CheckCircle2, AlertCircle, Loader2, Info,
   Receipt, Zap, RefreshCw, XCircle, ArrowUpRight, TrendingUp, Rocket, BarChart3,
-  Building2, Star, Infinity, ChevronDown, ChevronUp,
+  Star, Infinity, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -51,11 +51,11 @@ const PLANS = [
   {
     name: "SubDraw Starter",
     label: "Starter",
-    tagline: "Just Getting Started",
-    monthlyUsd: 19900,
-    annualUsd: 218900,
-    annualMonthlyEquiv: 18242, // 218900 / 12 rounded
-    annualSavings: 19900,
+    tagline: "Perfect for small GCs getting started",
+    monthlyUsd: 14900,
+    annualUsd: 163900,
+    annualMonthlyEquiv: 13658,
+    annualSavings: 14900,
     limit: 10,
     icon: Zap,
     color: "border-border",
@@ -64,45 +64,30 @@ const PLANS = [
     popular: false,
   },
   {
-    name: "SubDraw Growth",
-    label: "Growth",
-    tagline: "One Job at a Time",
+    name: "SubDraw Professional",
+    label: "Professional",
+    tagline: "For GCs running two to four active jobs",
     monthlyUsd: 29900,
     annualUsd: 328900,
     annualMonthlyEquiv: 27408,
     annualSavings: 29900,
-    limit: 20,
+    limit: 30,
     icon: TrendingUp,
-    color: "border-border",
-    headerColor: "text-primary",
-    bgColor: "",
-    popular: false,
-  },
-  {
-    name: "SubDraw Scale",
-    label: "Scale",
-    tagline: "Most Popular",
-    monthlyUsd: 39900,
-    annualUsd: 438900,
-    annualMonthlyEquiv: 36575,
-    annualSavings: 39900,
-    limit: 40,
-    icon: Rocket,
     color: "border-primary ring-2 ring-primary",
     headerColor: "text-primary",
     bgColor: "bg-primary/5",
     popular: true,
   },
   {
-    name: "SubDraw Enterprise",
-    label: "Enterprise",
-    tagline: "Multiple Crews Multiple Jobs",
-    monthlyUsd: 69900,
-    annualUsd: 768900,
-    annualMonthlyEquiv: 64075,
-    annualSavings: 69900,
+    name: "SubDraw Scale",
+    label: "Scale",
+    tagline: "For serious GCs running multiple crews",
+    monthlyUsd: 59900,
+    annualUsd: 658900,
+    annualMonthlyEquiv: 54908,
+    annualSavings: 59900,
     limit: null,
-    icon: Building2,
+    icon: Rocket,
     color: "border-border",
     headerColor: "text-violet-600",
     bgColor: "",
@@ -111,14 +96,14 @@ const PLANS = [
 ];
 
 const COMPARISON_FEATURES = [
-  { label: "Active Subcontracts", values: ["10", "20", "40", "Unlimited"] },
-  { label: "Projects", values: ["Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
-  { label: "Invoice Management", values: [true, true, true, true] },
-  { label: "Change Orders", values: [true, true, true, true] },
-  { label: "Lien Waivers", values: [true, true, true, true] },
-  { label: "Compliance Tracking", values: [true, true, true, true] },
-  { label: "AI Bid Intelligence", values: [true, true, true, true] },
-  { label: "Subcontractors", values: ["Free", "Free", "Free", "Free"] },
+  { label: "Active Subcontracts", values: ["10", "30", "Unlimited"] },
+  { label: "Projects", values: ["Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Invoice Management", values: [true, true, true] },
+  { label: "Change Orders", values: [true, true, true] },
+  { label: "Lien Waivers", values: [true, true, true] },
+  { label: "Compliance Tracking", values: [true, true, true] },
+  { label: "AI Bid Intelligence", values: [true, true, true] },
+  { label: "Subcontractors", values: ["Free", "Free", "Free"] },
 ];
 
 const MODEL_CHANGE_BANNER_KEY = "subtracker_model_change_v1_dismissed";
@@ -234,9 +219,8 @@ export default function Billing() {
   })();
   const recommendedPlan = calcTotal === 0 ? null
     : calcTotal <= 10 ? "SubDraw Starter"
-    : calcTotal <= 20 ? "SubDraw Growth"
-    : calcTotal <= 40 ? "SubDraw Scale"
-    : "SubDraw Enterprise";
+    : calcTotal <= 30 ? "SubDraw Professional"
+    : "SubDraw Scale";
 
   if (user?.role !== "GC") {
     return (
@@ -335,7 +319,7 @@ export default function Billing() {
       </div>
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {PLANS.map((plan, idx) => {
           const Icon = plan.icon;
           const isPopular = plan.popular;
@@ -414,11 +398,11 @@ export default function Billing() {
         })}
       </div>
 
-      {/* Scale callout */}
+      {/* Professional callout */}
       <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 px-5 py-4 text-center">
         <p className="text-sm text-foreground font-medium">
-          Most GCs pick Scale. At $399 a month you get up to 40 active subcontracts — enough for one to two full jobs running at the same time.{" "}
-          <span className="font-semibold text-primary">If SubDraw catches one invoice overrun this month it pays for itself.</span>
+          Most GCs pick Professional. At $299 a month you get up to 30 active subcontracts — enough for two to four full jobs running at the same time.{" "}
+          <span className="font-semibold text-primary">One caught overrun on a single job covers your entire year of SubDraw.</span>
         </p>
       </div>
 
@@ -456,7 +440,7 @@ export default function Billing() {
                         ) : val === false ? (
                           <XCircle className="h-4 w-4 text-muted-foreground/40 mx-auto" />
                         ) : (
-                          <span className={cn("font-semibold", i === 2 ? "text-primary" : "")}>{val}</span>
+                          <span className={cn("font-semibold", PLANS[i]?.popular ? "text-primary" : "")}>{val}</span>
                         )}
                       </td>
                     ))}
@@ -578,9 +562,8 @@ export default function Billing() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        {planName === "SubDraw Enterprise" ? <Building2 className="h-5 w-5 text-violet-600" />
-                          : planName === "SubDraw Scale" ? <Rocket className="h-5 w-5 text-primary" />
-                          : planName === "SubDraw Growth" ? <TrendingUp className="h-5 w-5 text-primary" />
+                        {planName === "SubDraw Scale" ? <Rocket className="h-5 w-5 text-violet-600" />
+                          : planName === "SubDraw Professional" ? <TrendingUp className="h-5 w-5 text-primary" />
                           : <Zap className="h-5 w-5 text-blue-600" />}
                       </div>
                       <div>

@@ -1,0 +1,51 @@
+Important: Do not remove or modify any existing features or functionality that is currently working. Only update the pricing structure on the marketing homepage pricing section and inside the app billing page as described below. Keep all existing Stripe subscription logic, trial mechanics, upgrade flow, and billing settings exactly as they are — only change the plan names, prices, subcontract limits, and displayed copy.
+PRICING STRUCTURE UPDATE:
+Remove the existing four plan pricing structure completely. Replace it with exactly three plans as described below. Three plans only — not four. This is intentional and must not be changed back to four.
+PLAN 1 — STARTER:
+Name: Starter
+Monthly price: $149
+Annual price: $1,639 — show as save one month free
+Active subcontracts: 10
+Description: Perfect for remodelers and small GCs getting started
+Badge: none
+PLAN 2 — PROFESSIONAL:
+Name: Professional
+Monthly price: $299
+Annual price: $3,289 — show as save one month free
+Active subcontracts: 30
+Description: For GCs running two to four active jobs simultaneously
+Badge: MOST POPULAR — display prominently with a colored background that stands out from the other two plans. This plan must be visually dominant — larger card, highlighted border, or elevated appearance compared to Starter and Scale.
+PLAN 3 — SCALE:
+Name: Scale
+Monthly price: $599
+Annual price: $6,589 — show as save one month free
+Active subcontracts: Unlimited
+Description: For serious GCs running multiple crews with no limits
+Badge: none
+WHAT IS INCLUDED ON ALL THREE PLANS:
+Below each plan card show these four inclusion lines with checkmark icons:
+Unlimited team members — no per seat fees ever
+All features included — nothing locked behind higher plans
+Subcontractors always free
+Cancel anytime
+ANNUAL VS MONTHLY TOGGLE:
+Keep the existing monthly and annual billing toggle at the top of the pricing section. When annual is selected show the annual price on each card with a small green badge showing Save one month free. When monthly is selected show the monthly price. Default to showing monthly pricing first.
+ROI LINE UNDER EACH PLAN:
+Add one italicized gray line under the description on each plan card showing the return on investment context:
+Starter ROI line: If SubTracker catches one invoice overrun this year it paid for itself completely.
+Professional ROI line: One caught overrun on a single job covers your entire year of SubTracker.
+Scale ROI line: Unlimited protection across every job every sub every invoice all year.
+PROCESSING FEE DISCLOSURE:
+At the very bottom of the entire pricing section below all three plan cards add one line in small gray text — minimum readable font size — that says exactly: Payments processed through SubTracker include a 1% payment processing fee — less than half the cost of a credit card terminal. Subcontractors are always free on every plan.
+This line must not be bold, must not be in a colored box, must not have an icon, and must not appear anywhere else on the pricing page. It appears once at the very bottom of the pricing section only.
+DO NOT show the processing fee on the plan cards themselves. Do not show it in the plan descriptions. Do not show it anywhere in the hero section or features section of the homepage. Only the single gray disclosure line at the bottom of the pricing section.
+STRIPE PRODUCTS:
+Update the Stripe subscription products to match the new pricing. Create new Stripe products and price objects for all three plans at both monthly and annual billing intervals. The new prices are: Starter monthly $149, Starter annual $1,639, Professional monthly $299, Professional annual $3,289, Scale monthly $599, Scale annual $6,589. Make sure the upgrade and downgrade flows inside the app work correctly with the new plan structure. Make sure the trial expiry flow and the hard paywall correctly reference the new plan names and prices.
+TRIAL EXPIRY MESSAGING UPDATE:
+Update any trial expiry messages that reference old plan names or prices to use the new plan names and prices. The upgrade modal that fires on first flagged invoice view must show the three new plans at the new prices. The hard paywall modal that fires at trial expiry must show the three new plans at the new prices.
+GRANDFATHERING:
+Any user account that is currently on a trial or has existing billing data must not be affected by this pricing change. Existing trial users continue their trial normally and see the new pricing when they go to upgrade. No existing subscription data should be modified. Only new subscriptions going forward use the new pricing.
+VISUAL HIERARCHY REQUIREMENT:
+The three plan cards must follow this visual hierarchy on both desktop and mobile. Starter is on the left — normal appearance. Professional is in the center — visually elevated with Most Popular badge, colored border, and slightly larger card. Scale is on the right — normal appearance but with slightly muted styling to make Professional stand out more. On mobile all three cards stack vertically with Professional appearing first at the top.
+After making all changes confirm the pricing page shows exactly three plans at the correct prices with the Most Popular badge on Professional, the ROI lines under each plan, the processing fee disclosure at the bottom only, and the annual toggle working correctly on both desktop and mobile before reporting complete.
+
