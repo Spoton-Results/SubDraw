@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, conditionalLienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable, submittalsTable, submittalMessagesTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, conditionalLienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable, submittalsTable, submittalMessagesTable, drawPackagesTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -11,6 +11,10 @@ import { getGCPlanInfo, getActiveSubcontractCount } from "../lib/stripeStorage.j
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
 import { generateConditionalLienWaiverPDF } from "../lib/pdfConditionalLienWaiver.js";
 import { generateDrawSchedulePDF } from "../lib/pdfDrawSchedule.js";
+import { generateInvoicePDF } from "../lib/pdfInvoice.js";
+import { generateDrawPackageSummaryPDF } from "../lib/pdfDrawPackageSummary.js";
+import { uploadBufferToR2, generateR2Key, makeR2Path, extractR2Key, downloadBufferFromR2, getPresignedGetUrl } from "../lib/r2.js";
+import { createNotification } from "./notifications.js";
 
 const router = Router();
 
@@ -1690,6 +1694,379 @@ router.get("/:projectId/draw-schedule/pdf", requireAuth, requireGC, async (req, 
   res.set("Content-Type", "application/pdf");
   res.set("Content-Disposition", `attachment; filename="draw-schedule-${safeName}.pdf"`);
   res.send(pdf);
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DRAW PACKAGE ROUTES
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Helper: collect all sub invoice data for a draw period
+async function getDrawPeriodData(projectId: string, startDate: string, endDate: string) {
+  const startDt = new Date(startDate + "T00:00:00.000Z");
+  const endDt = new Date(endDate + "T23:59:59.999Z");
+
+  // Fetch all subcontracts for the project with their sub user info
+  const scs = await db
+    .select({
+      sc: subcontractsTable,
+      sub: usersTable,
+    })
+    .from(subcontractsTable)
+    .innerJoin(usersTable, eq(usersTable.id, subcontractsTable.subId))
+    .where(eq(subcontractsTable.projectId, projectId));
+
+  const results = [];
+  for (const { sc, sub } of scs) {
+    // All invoices for this subcontract (used for scoreboard)
+    const allInvoices = await db.select().from(invoicesTable)
+      .where(eq(invoicesTable.subcontractId, sc.id));
+
+    // Qualifying invoices: APPROVED/PAYMENT_UNCONFIRMED/PAYMENT_CONFIRMED, within date range
+    const drawInvoices = allInvoices.filter(inv => {
+      if (!["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(inv.status)) return false;
+      const refDate = inv.approvedAt ?? inv.updatedAt ?? inv.createdAt;
+      const d = new Date(refDate as Date | string);
+      return d >= startDt && d <= endDt;
+    });
+
+    if (drawInvoices.length === 0) continue;
+
+    // Fetch conditional lien waivers for these invoices
+    const waivers = await db.select().from(conditionalLienWaiversTable)
+      .where(eq(conditionalLienWaiversTable.subcontractId, sc.id));
+
+    const invoicesWithWaiver = drawInvoices.map(inv => {
+      const waiver = waivers.find(w => w.invoiceId === inv.id);
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        amount: inv.amount,
+        status: inv.status,
+        approvedAt: inv.approvedAt ?? inv.updatedAt ?? inv.createdAt,
+        waiverSigned: !!(waiver?.signedByName && waiver?.signedAt),
+        waiverId: waiver?.id ?? null,
+        waiverData: waiver ?? null,
+      };
+    });
+
+    const invoiceTotal = drawInvoices.reduce((s, i) => s + i.amount, 0);
+    const waiversSigned = invoicesWithWaiver.filter(i => i.waiverSigned).length;
+    const waiversTotal = invoicesWithWaiver.length;
+
+    // Fetch trade category from project_members
+    const [member] = await db.select().from(projectMembersTable)
+      .where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, sub.id)))
+      .limit(1);
+
+    results.push({
+      subId: sub.id,
+      subCompanyName: sub.companyName ?? sub.email,
+      tradeCategory: member?.tradeCategory ?? sc.tradeCategory,
+      subcontractId: sc.id,
+      sc,
+      sub,
+      allInvoices,
+      invoices: invoicesWithWaiver,
+      invoiceTotal,
+      allWaiversSigned: waiversSigned === waiversTotal,
+      waiversSigned,
+      waiversTotal,
+    });
+  }
+
+  return results;
+}
+
+// Helper: build invoice PDF data without importing subcontracts.ts
+async function buildDrawPackageInvoicePDF(
+  inv: any,
+  sc: any,
+  allInvs: any[],
+  sub: { companyName: string | null; email: string },
+  gc: { companyName: string | null },
+  project: { name: string; address?: string | null }
+): Promise<Buffer> {
+  // Approved COs for scoreboard
+  const cos = await db.select().from(changeOrdersTable)
+    .where(and(eq(changeOrdersTable.subcontractId, sc.id), eq(changeOrdersTable.status, "APPROVED")));
+  const coTotal = cos.reduce((s: number, c: any) => s + c.amount, 0);
+  const currentApprovedTotal = sc.baseContractAmount + coTotal;
+  const grossInvoiced = allInvs
+    .filter((i: any) => ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(i.status))
+    .reduce((s: number, i: any) => s + i.amount, 0);
+  const remaining = currentApprovedTotal - grossInvoiced;
+
+  // Contractor license
+  const [licRow] = await db.select().from(contractorLicensesTable)
+    .where(eq(contractorLicensesTable.userId, sc.subId))
+    .limit(1).catch(() => [null]);
+
+  return generateInvoicePDF({
+    invoice: {
+      invoiceNumber: inv.invoiceNumber,
+      amount: inv.amount,
+      description: inv.description ?? null,
+      status: inv.status,
+      flaggedOverAmount: 0,
+      overrideReason: null,
+      createdAt: inv.createdAt,
+      paymentDate: inv.paymentDate ?? null,
+      paymentMethod: inv.paymentMethod ?? null,
+      paymentReference: inv.paymentReference ?? null,
+      paymentNotes: inv.paymentNotes ?? null,
+      paymentConfirmedAt: inv.paymentConfirmedAt ?? null,
+      retentionAmount: inv.retentionAmount ?? null,
+      isRetentionRelease: inv.isRetentionRelease ?? false,
+      paymentTermsDays: sc.paymentTermsDays ?? 30,
+    },
+    subcontract: {
+      id: sc.id,
+      baseContractAmount: sc.baseContractAmount,
+      tradeCategory: sc.tradeCategory ?? null,
+      retentionPercentage: sc.retentionPercentage ?? 10,
+    },
+    project: { name: project.name, address: project.address ?? null },
+    sub: {
+      companyName: sub.companyName ?? sub.email,
+      email: sub.email,
+      licenseNumber: licRow?.licenseNumber ?? null,
+    },
+    gc: { companyName: gc.companyName ?? "General Contractor" },
+    scoreboard: {
+      base: sc.baseContractAmount,
+      coTotal,
+      currentApprovedTotal,
+      invoicedTotal: grossInvoiced,
+      remaining,
+    },
+  });
+}
+
+// POST /:projectId/draw-package/preview — returns preview data for the modal
+router.post("/:projectId/draw-package/preview", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const { startDate, endDate } = req.body;
+
+  if (!startDate || !endDate) { res.status(400).json({ error: "startDate and endDate are required" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const subsData = await getDrawPeriodData(projectId, startDate, endDate);
+
+  const totalAmount = subsData.reduce((s, d) => s + d.invoiceTotal, 0);
+  const unsignedCount = subsData.filter(d => !d.allWaiversSigned).length;
+
+  res.json({
+    subs: subsData.map(d => ({
+      subId: d.subId,
+      subCompanyName: d.subCompanyName,
+      tradeCategory: d.tradeCategory,
+      subcontractId: d.subcontractId,
+      invoices: d.invoices,
+      invoiceTotal: d.invoiceTotal,
+      allWaiversSigned: d.allWaiversSigned,
+      waiversSigned: d.waiversSigned,
+      waiversTotal: d.waiversTotal,
+    })),
+    totalAmount,
+    unsignedCount,
+  });
+});
+
+// POST /:projectId/draw-package/generate — build ZIP, upload to R2, stream to client, store DB record
+router.post("/:projectId/draw-package/generate", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const { drawNumber, startDate, endDate } = req.body;
+
+  if (!drawNumber || !startDate || !endDate) {
+    res.status(400).json({ error: "drawNumber, startDate, and endDate are required" });
+    return;
+  }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [gcUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+
+  const subsData = await getDrawPeriodData(projectId, startDate, endDate);
+  const totalAmount = subsData.reduce((s, d) => s + d.invoiceTotal, 0);
+
+  // Build summary PDF
+  const summaryPdf = await generateDrawPackageSummaryPDF({
+    project: { name: project.name, address: project.address },
+    gc: { companyName: gcUser?.companyName ?? "General Contractor" },
+    drawNumber,
+    startDate,
+    endDate,
+    generatedAt: new Date(),
+    subs: subsData.map(d => ({
+      subCompanyName: d.subCompanyName,
+      tradeCategory: d.tradeCategory,
+      invoices: d.invoices,
+      invoiceTotal: d.invoiceTotal,
+      allWaiversSigned: d.allWaiversSigned,
+      waiversSigned: d.waiversSigned,
+      waiversTotal: d.waiversTotal,
+    })),
+    totalAmount,
+  });
+
+  // Build ZIP in memory
+  const folderName = `${project.name.replace(/[^a-z0-9]/gi, " ").trim()} ${drawNumber}`.slice(0, 80);
+
+  const zipChunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const archive = archiver("zip", { zlib: { level: 6 } });
+    archive.on("data", (chunk: Buffer) => zipChunks.push(chunk));
+    archive.on("end", () => resolve());
+    archive.on("error", reject);
+
+    // Summary cover sheet
+    archive.append(summaryPdf, { name: `${folderName}/Summary.pdf` });
+
+    // Per-sub files — we use then-chaining inside the promise to handle async PDF generation
+    const subJobs = subsData.map(async (d) => {
+      const subFolder = `${folderName}/${d.subCompanyName.replace(/[^a-z0-9]/gi, " ").trim()}`;
+      for (const inv of d.invoices) {
+        // Invoice PDF
+        const invPdf = await buildDrawPackageInvoicePDF(
+          { ...d.allInvoices.find((i: any) => i.id === inv.id), ...inv },
+          d.sc,
+          d.allInvoices,
+          d.sub,
+          { companyName: gcUser?.companyName ?? null },
+          project
+        );
+        archive.append(invPdf, { name: `${subFolder}/Invoice_${inv.invoiceNumber}.pdf` });
+
+        // Conditional lien waiver PDF (only if signed)
+        if (inv.waiverSigned && inv.waiverData) {
+          const waiverPdf = await generateConditionalLienWaiverPDF({ waiver: inv.waiverData });
+          archive.append(waiverPdf, { name: `${subFolder}/ConditionalLienWaiver_${inv.invoiceNumber}.pdf` });
+        }
+      }
+    });
+
+    Promise.all(subJobs)
+      .then(() => archive.finalize())
+      .catch(reject);
+  });
+
+  const zipBuffer = Buffer.concat(zipChunks);
+
+  // Upload to R2
+  const safeDraw = drawNumber.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40);
+  const safeProject = project.name.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40);
+  const zipFileName = `DrawPackage_${safeProject}_${safeDraw}.zip`;
+  const r2Key = `draw-packages/${projectId}/${Date.now()}-${zipFileName}`;
+
+  let storedR2Key: string | null = null;
+  try {
+    await uploadBufferToR2(zipBuffer, r2Key, "application/zip");
+    storedR2Key = r2Key;
+  } catch (err) {
+    console.error("[draw-package] R2 upload failed:", err);
+    // Continue — still send the ZIP to the client even if storage fails
+  }
+
+  // Store in DB
+  const waiversSignedTotal = subsData.reduce((s, d) => s + d.waiversSigned, 0);
+  const waiversGrandTotal = subsData.reduce((s, d) => s + d.waiversTotal, 0);
+  await db.insert(drawPackagesTable).values({
+    projectId,
+    gcId: user.id,
+    drawNumber,
+    startDate,
+    endDate,
+    r2Key: storedR2Key,
+    zipFileName,
+    totalAmount,
+    subsCount: subsData.length,
+    waiversSigned: waiversSignedTotal,
+    waiversTotal: waiversGrandTotal,
+    generatedByName: gcUser?.companyName ?? gcUser?.email ?? "GC",
+  });
+
+  // Stream ZIP to client
+  res.set("Content-Type", "application/zip");
+  res.set("Content-Disposition", `attachment; filename="${zipFileName}"`);
+  res.set("Content-Length", String(zipBuffer.length));
+  res.send(zipBuffer);
+});
+
+// GET /:projectId/draw-packages — list past draw packages
+router.get("/:projectId/draw-packages", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const packages = await db.select().from(drawPackagesTable)
+    .where(eq(drawPackagesTable.projectId, projectId))
+    .orderBy(drawPackagesTable.createdAt);
+
+  res.json(packages.reverse());
+});
+
+// GET /:projectId/draw-packages/:drawId/download — re-download a stored ZIP
+router.get("/:projectId/draw-packages/:drawId/download", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId, drawId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [pkg] = await db.select().from(drawPackagesTable)
+    .where(and(eq(drawPackagesTable.id, drawId), eq(drawPackagesTable.projectId, projectId)))
+    .limit(1);
+  if (!pkg) { res.status(404).json({ error: "Draw package not found" }); return; }
+
+  if (!pkg.r2Key) {
+    res.status(404).json({ error: "This package was not stored in the cloud. Please regenerate it." });
+    return;
+  }
+
+  const zipBuffer = await downloadBufferFromR2(pkg.r2Key);
+  const filename = pkg.zipFileName ?? `DrawPackage_${drawId}.zip`;
+  res.set("Content-Type", "application/zip");
+  res.set("Content-Disposition", `attachment; filename="${filename}"`);
+  res.set("Content-Length", String(zipBuffer.length));
+  res.send(zipBuffer);
+});
+
+// POST /:projectId/draw-package/send-reminder — send reminder to a sub to sign their waiver
+router.post("/:projectId/draw-package/send-reminder", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+  const { subId } = req.body;
+
+  if (!subId) { res.status(400).json({ error: "subId is required" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [sub] = await db.select().from(usersTable).where(eq(usersTable.id, subId)).limit(1);
+  if (!sub) { res.status(404).json({ error: "Sub not found" }); return; }
+
+  await createNotification({
+    userId: subId,
+    type: "SUBMITTAL_CREATED",
+    title: "Lien Waiver Signature Required",
+    body: `${project.name}: The GC is requesting your signed conditional lien waiver(s) for an upcoming draw package.`,
+    link: `/projects/${projectId}`,
+    projectId,
+  });
+
+  res.json({ ok: true });
 });
 
 export default router;

@@ -34,6 +34,7 @@ import {
   Shield, ShieldCheck, ShieldX, TableProperties, Link2, Link2Off, Clipboard, LayoutGrid,
   Eye, BadgeCheck, ChevronDown, ChevronUp, Users, MessageSquare, ListChecks, SquareCheck,
   UserCog, Bell, BellRing, ThumbsUp, ThumbsDown, BellOff, Scale, BrainCircuit, RefreshCw,
+  PackageOpen, Send,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "wouter";
@@ -690,6 +691,43 @@ export default function ProjectDetail() {
   const [subAmounts, setSubAmounts] = React.useState<Record<string, string>>({});
   const [bulkCOLoading, setBulkCOLoading] = React.useState(false);
 
+  // ── Draw Package Modal state ────────────────────────────────────────────────
+  const [drawPkgOpen, setDrawPkgOpen] = React.useState(false);
+  const [drawPkgDrawNumber, setDrawPkgDrawNumber] = React.useState("");
+  const [drawPkgStartDate, setDrawPkgStartDate] = React.useState("");
+  const [drawPkgEndDate, setDrawPkgEndDate] = React.useState("");
+  const [drawPkgPreview, setDrawPkgPreview] = React.useState<any>(null);
+  const [drawPkgPreviewLoading, setDrawPkgPreviewLoading] = React.useState(false);
+  const [drawPkgGenerating, setDrawPkgGenerating] = React.useState(false);
+  const [drawPkgReminderSent, setDrawPkgReminderSent] = React.useState<Set<string>>(new Set());
+
+  const { data: pastDrawPackages = [], refetch: refetchDrawPackages } = useQuery<any[]>({
+    queryKey: ["draw-packages", projectId],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/projects/${projectId}/draw-packages`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch draw packages");
+      return res.json();
+    },
+    enabled: user?.role === "GC" && !!projectId,
+  });
+
+  React.useEffect(() => {
+    if (!drawPkgOpen || !drawPkgStartDate || !drawPkgEndDate || user?.role !== "GC") return;
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    setDrawPkgPreviewLoading(true);
+    setDrawPkgPreview(null);
+    fetch(`${base}/api/projects/${projectId}/draw-package/preview`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startDate: drawPkgStartDate, endDate: drawPkgEndDate }),
+    })
+      .then(r => r.json())
+      .then(data => { setDrawPkgPreview(data); setDrawPkgPreviewLoading(false); })
+      .catch(() => setDrawPkgPreviewLoading(false));
+  }, [drawPkgOpen, drawPkgStartDate, drawPkgEndDate, projectId, user?.role]);
+
   // Fetch all COs for this project (GC only) — must be before early return
   const { data: projectCOs = [] } = useQuery<any[]>({
     queryKey: ["project-cos", projectId],
@@ -1202,6 +1240,61 @@ export default function ProjectDetail() {
   };
 
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  const handleDrawPackageGenerate = async () => {
+    if (!drawPkgDrawNumber.trim() || !drawPkgStartDate || !drawPkgEndDate) {
+      toast.error("Please fill in draw number and date range");
+      return;
+    }
+    setDrawPkgGenerating(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/${projectId}/draw-package/generate`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ drawNumber: drawPkgDrawNumber.trim(), startDate: drawPkgStartDate, endDate: drawPkgEndDate }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error || "Failed to generate draw package");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `DrawPackage_${drawPkgDrawNumber.trim().replace(/[^a-z0-9]/gi, "-")}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Draw Package generated and downloaded!");
+      setDrawPkgOpen(false);
+      setDrawPkgDrawNumber("");
+      setDrawPkgStartDate("");
+      setDrawPkgEndDate("");
+      setDrawPkgPreview(null);
+      refetchDrawPackages();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate draw package");
+    } finally {
+      setDrawPkgGenerating(false);
+    }
+  };
+
+  const handleDrawPkgSendReminder = async (subId: string) => {
+    try {
+      await fetch(`${BASE}/api/projects/${projectId}/draw-package/send-reminder`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subId }),
+      });
+      setDrawPkgReminderSent(prev => new Set([...prev, subId]));
+      toast.success("Reminder sent!");
+    } catch {
+      toast.error("Failed to send reminder");
+    }
+  };
 
   const handleMarkComplete = async () => {
     if (!retentionReleased && !retentionWaived) {
@@ -2452,14 +2545,13 @@ export default function ProjectDetail() {
                         )}
                         <span className="text-xs font-normal text-muted-foreground hidden sm:inline">— Generated on invoice approval, signed before payment</span>
                       </CardTitle>
-                      {isGC && conditionalWaivers.filter((w: any) => w.signedByName && w.signedAt).length > 0 && (
-                        <a
-                          href={`${BASE}/api/projects/${projectId}/conditional-lien-waivers/zip`}
-                          download
+                      {isGC && (
+                        <button
+                          onClick={() => { setDrawPkgOpen(true); setDrawPkgPreview(null); setDrawPkgReminderSent(new Set()); }}
                           className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md border border-teal-600/40 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-950/30 dark:text-teal-300 dark:border-teal-700/50 dark:hover:bg-teal-950/50 transition-colors"
                         >
-                          <Download className="h-4 w-4" /> Draw Package (ZIP)
-                        </a>
+                          <PackageOpen className="h-4 w-4" /> Draw Package
+                        </button>
                       )}
                     </div>
                   </CardHeader>
@@ -2617,6 +2709,72 @@ export default function ProjectDetail() {
                         </table>
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* PAST DRAW PACKAGES */}
+              {isGC && pastDrawPackages.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <PackageOpen className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                      Past Draw Packages
+                      <span className="ml-1 text-sm font-normal text-muted-foreground">({pastDrawPackages.length})</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Draw #</th>
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden sm:table-cell">Period</th>
+                            <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Total</th>
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Subs</th>
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Waivers</th>
+                            <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Generated</th>
+                            <th className="px-4 py-3"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {pastDrawPackages.map((pkg: any) => (
+                            <tr key={pkg.id} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-3 font-semibold">{pkg.drawNumber}</td>
+                              <td className="px-4 py-3 text-muted-foreground text-xs hidden sm:table-cell whitespace-nowrap">
+                                {pkg.startDate} – {pkg.endDate}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(pkg.totalAmount)}</td>
+                              <td className="px-4 py-3 hidden md:table-cell">{pkg.subsCount}</td>
+                              <td className="px-4 py-3">
+                                <span className={cn(
+                                  "text-xs font-semibold",
+                                  pkg.waiversSigned === pkg.waiversTotal && pkg.waiversTotal > 0 ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400"
+                                )}>
+                                  {pkg.waiversSigned}/{pkg.waiversTotal}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
+                                {format(new Date(pkg.createdAt), "MMM d, yyyy")}
+                              </td>
+                              <td className="px-4 py-3">
+                                {pkg.r2Key ? (
+                                  <a
+                                    href={`${BASE}/api/projects/${projectId}/draw-packages/${pkg.id}/download`}
+                                    download
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 dark:text-teal-400 hover:underline"
+                                  >
+                                    <Download className="h-3.5 w-3.5" /> Download
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground italic">No file</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -4162,6 +4320,145 @@ export default function ProjectDetail() {
           )}
         </div>
       )}
+
+      {/* Draw Package Modal */}
+      <Dialog
+        open={drawPkgOpen}
+        onOpenChange={(open) => { if (!open) { setDrawPkgPreview(null); setDrawPkgReminderSent(new Set()); } setDrawPkgOpen(open); }}
+        title="Generate Draw Package"
+        description="Select a draw period to compile signed conditional lien waivers and invoices into a ZIP file for your bank."
+      >
+        <div className="space-y-5 mt-2">
+          {/* Draw Number */}
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Draw Number / Label *</label>
+            <Input
+              value={drawPkgDrawNumber}
+              onChange={e => setDrawPkgDrawNumber(e.target.value)}
+              placeholder="e.g. Draw 3 or Draw Period March 2026"
+            />
+          </div>
+
+          {/* Date Range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold mb-1 block">Period Start *</label>
+              <Input type="date" value={drawPkgStartDate} onChange={e => setDrawPkgStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm font-semibold mb-1 block">Period End *</label>
+              <Input type="date" value={drawPkgEndDate} onChange={e => setDrawPkgEndDate(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Preview Section */}
+          {(drawPkgPreviewLoading || drawPkgPreview) && (
+            <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+              <div className="px-4 py-2.5 bg-muted/60 border-b border-border">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Draw Period Preview</p>
+              </div>
+              {drawPkgPreviewLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading preview…</span>
+                </div>
+              ) : drawPkgPreview && drawPkgPreview.subs?.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  No approved invoices found in this date range.
+                </div>
+              ) : drawPkgPreview ? (
+                <>
+                  {/* Warning banner for unsigned waivers */}
+                  {drawPkgPreview.unsignedCount > 0 && (
+                    <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-start gap-3">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          {drawPkgPreview.unsignedCount} sub{drawPkgPreview.unsignedCount !== 1 ? "s have" : " has"} unsigned waivers
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                          The ZIP will still be generated. You can send reminders below.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sub rows */}
+                  <div className="divide-y divide-border">
+                    {drawPkgPreview.subs.map((sub: any) => (
+                      <div key={sub.subId} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{sub.subCompanyName}</span>
+                            {sub.tradeCategory && (
+                              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{sub.tradeCategory}</span>
+                            )}
+                            {sub.allWaiversSigned ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
+                                <Check className="h-3 w-3" /> Waiver Signed ({sub.waiversSigned}/{sub.waiversTotal})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-700 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-950/40 px-2 py-0.5 rounded-full">
+                                <Clock className="h-3 w-3" /> Waiver Pending ({sub.waiversSigned}/{sub.waiversTotal})
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {sub.invoices.length} invoice{sub.invoices.length !== 1 ? "s" : ""} · {formatCurrency(sub.invoiceTotal)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {!sub.allWaiversSigned && (
+                            drawPkgReminderSent.has(sub.subId) ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                <Check className="h-3 w-3" /> Reminded
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleDrawPkgSendReminder(sub.subId)}
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded border border-amber-400/50 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700/40 dark:hover:bg-amber-950/60 transition-colors"
+                              >
+                                <Send className="h-3 w-3" /> Send Reminder
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Totals */}
+                  <div className="px-4 py-3 bg-teal-50/60 dark:bg-teal-950/20 border-t border-teal-200/60 dark:border-teal-800/40 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">
+                      Total Draw Amount — {drawPkgPreview.subs.length} sub{drawPkgPreview.subs.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="font-mono font-bold text-teal-700 dark:text-teal-300">
+                      {formatCurrency(drawPkgPreview.totalAmount)}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setDrawPkgOpen(false)} className="min-h-[44px]">
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDrawPackageGenerate}
+              isLoading={drawPkgGenerating}
+              disabled={!drawPkgDrawNumber.trim() || !drawPkgStartDate || !drawPkgEndDate || drawPkgGenerating}
+              className="min-h-[44px] bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
+            >
+              <PackageOpen className="h-4 w-4 mr-1.5" />
+              Generate & Download ZIP
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* Edit Project Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen} title="Edit Project" description="Update the project details. Changes are visible to all members.">

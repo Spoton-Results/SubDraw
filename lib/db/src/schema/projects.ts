@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, doublePrecision, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, doublePrecision, boolean, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -47,3 +47,20 @@ export type Project = typeof projectsTable.$inferSelect;
 export const insertProjectMemberSchema = createInsertSchema(projectMembersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertProjectMember = z.infer<typeof insertProjectMemberSchema>;
 export type ProjectMember = typeof projectMembersTable.$inferSelect;
+
+export const drawPackagesTable = pgTable("draw_packages", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  projectId: text("project_id").notNull().references(() => projectsTable.id),
+  gcId: text("gc_id").notNull().references(() => usersTable.id),
+  drawNumber: text("draw_number").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  r2Key: text("r2_key"),
+  zipFileName: text("zip_file_name"),
+  totalAmount: doublePrecision("total_amount").notNull().default(0),
+  subsCount: integer("subs_count").notNull().default(0),
+  waiversSigned: integer("waivers_signed").notNull().default(0),
+  waiversTotal: integer("waivers_total").notNull().default(0),
+  generatedByName: text("generated_by_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
