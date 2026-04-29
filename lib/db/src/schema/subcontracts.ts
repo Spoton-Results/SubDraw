@@ -103,6 +103,26 @@ export const insertLienWaiverSchema = createInsertSchema(lienWaiversTable).omit(
 export type InsertLienWaiver = z.infer<typeof insertLienWaiverSchema>;
 export type LienWaiver = typeof lienWaiversTable.$inferSelect;
 
+export const conditionalLienWaiversTable = pgTable("conditional_lien_waivers", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),
+  invoiceId: text("invoice_id").notNull().references(() => invoicesTable.id),
+  projectId: text("project_id").notNull().references(() => projectsTable.id),
+  signedByName: text("signed_by_name"),
+  signedAt: timestamp("signed_at"),
+  approvedAt: timestamp("approved_at").notNull(),
+  invoiceNumber: text("invoice_number").notNull(),
+  amount: doublePrecision("amount").notNull(),
+  projectName: text("project_name").notNull(),
+  projectAddress: text("project_address"),
+  gcCompanyName: text("gc_company_name").notNull(),
+  subCompanyName: text("sub_company_name").notNull(),
+  subAddress: text("sub_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ConditionalLienWaiver = typeof conditionalLienWaiversTable.$inferSelect;
+
 export const subcontractCommentsTable = pgTable("subcontract_comments", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   subcontractId: text("subcontract_id").notNull().references(() => subcontractsTable.id),

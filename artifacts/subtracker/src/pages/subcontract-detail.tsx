@@ -319,6 +319,10 @@ export default function SubcontractDetail() {
   const [signedByName, setSignedByName] = React.useState("");
   const [waiverSigning, setWaiverSigning] = React.useState(false);
 
+  const [condWaiverDialog, setCondWaiverDialog] = React.useState<{ open: boolean; invoiceId: string; invoiceNumber: string; amount: number }>({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+  const [condWaiverName, setCondWaiverName] = React.useState("");
+  const [condWaiverSigning, setCondWaiverSigning] = React.useState(false);
+
   const [contractDocUploading, setContractDocUploading] = React.useState(false);
   const [signedDocUploading, setSignedDocUploading] = React.useState(false);
   const [waiverLoading, setWaiverLoading] = React.useState(false);
@@ -473,6 +477,20 @@ export default function SubcontractDetail() {
     queryKey: ["submittals", subcontractId],
     queryFn: async () => {
       const res = await fetch(`${BASE_URL_SUB}/api/submittals/subcontracts/${subcontractId}/submittals`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!subcontractId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const { data: conditionalLienWaivers = [], refetch: refetchConditionalWaivers } = useQuery<any[]>({
+    queryKey: ["conditional-lien-waivers", subcontractId],
+    queryFn: async () => {
+      if (!subcontractId) return [];
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/conditional-lien-waivers`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -763,6 +781,35 @@ export default function SubcontractDetail() {
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to confirm payment");
+    }
+  };
+
+  const handleSignConditionalWaiver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!condWaiverName.trim()) return toast.error("Please type your full legal name to sign");
+    setCondWaiverSigning(true);
+    try {
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/subcontracts/${subcontractId}/invoices/${condWaiverDialog.invoiceId}/conditional-lien-waiver/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signedByName: condWaiverName.trim() }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData?.error ?? "Failed to sign conditional lien waiver");
+        return;
+      }
+      toast.success("Conditional lien waiver signed!");
+      refetchConditionalWaivers();
+      invalidate();
+      setCondWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 });
+      setCondWaiverName("");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to sign conditional lien waiver");
+    } finally {
+      setCondWaiverSigning(false);
     }
   };
 
@@ -3300,6 +3347,63 @@ export default function SubcontractDetail() {
                       </div>
                     )}
 
+                    {/* Conditional Lien Waiver section — APPROVED and later invoices */}
+                    {["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"].includes(inv.status) && (() => {
+                      const condWaiver = conditionalLienWaivers.find((w: any) => w.invoiceId === inv.id);
+                      if (!condWaiver) return null;
+                      const isSigned = !!(condWaiver.signedByName && condWaiver.signedAt);
+                      if (!isGC && !isSigned && inv.status === "APPROVED") {
+                        return (
+                          <div className="mt-3 rounded-xl border border-teal-300 bg-teal-50/60 dark:bg-teal-950/20 p-3 space-y-2">
+                            <p className="text-sm font-semibold text-teal-800 dark:text-teal-300 flex items-start gap-2">
+                              <FileSignature className="h-4 w-4 shrink-0 mt-0.5" />
+                              Sign Conditional Lien Waiver
+                            </p>
+                            <p className="text-xs text-teal-700 dark:text-teal-400">
+                              Your GC has approved Invoice #{inv.invoiceNumber}. Please sign this conditional lien waiver to document the approved work.
+                            </p>
+                            <Button
+                              size="sm"
+                              className="bg-teal-600 hover:bg-teal-700 text-white min-h-[44px] w-full sm:w-auto gap-1.5"
+                              onClick={() => setCondWaiverDialog({ open: true, invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, amount: inv.amount })}
+                            >
+                              <Stamp className="h-4 w-4" /> Sign Conditional Waiver
+                            </Button>
+                          </div>
+                        );
+                      }
+                      if (isSigned) {
+                        const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+                        return (
+                          <div className="mt-3 rounded-xl border border-green-300 bg-green-50/60 dark:bg-green-950/20 p-3 flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <BadgeCheck className="h-4 w-4 text-green-700 dark:text-green-400 shrink-0" />
+                              <div>
+                                <p className="text-sm font-semibold text-green-700 dark:text-green-400">Conditional Waiver Signed</p>
+                                <p className="text-xs text-muted-foreground">by {condWaiver.signedByName} on {format(new Date(condWaiver.signedAt), "MMM d, yyyy")}</p>
+                              </div>
+                            </div>
+                            <a
+                              href={`${base}/api/subcontracts/${subcontractId}/invoices/${inv.id}/conditional-lien-waiver/pdf`}
+                              download={`ConditionalLienWaiver-${inv.invoiceNumber}.pdf`}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline px-2 py-1 rounded border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
+                            >
+                              <FileDown className="h-3.5 w-3.5" /> Download PDF
+                            </a>
+                          </div>
+                        );
+                      }
+                      if (isGC && !isSigned) {
+                        return (
+                          <div className="mt-3 rounded-xl border border-yellow-300 bg-yellow-50/60 dark:bg-yellow-950/20 p-2.5 flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300">Conditional Waiver Pending — awaiting sub signature</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
                     {/* Sub: yellow payment confirmation banner */}
                     {!isGC && inv.status === "PAYMENT_UNCONFIRMED" && (
                       <div className="mt-3 rounded-xl border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20 p-3 space-y-3">
@@ -3379,7 +3483,7 @@ export default function SubcontractDetail() {
                     <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Description</th>
                     <th className="hidden sm:table-cell text-left px-4 py-3 font-semibold text-muted-foreground">Date</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-center font-semibold text-muted-foreground hidden md:table-cell">Lien Waiver</th>
+                    <th className="px-4 py-3 text-center font-semibold text-muted-foreground hidden md:table-cell">Waivers</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -3387,6 +3491,9 @@ export default function SubcontractDetail() {
                   {sortedInvoices.map((inv, idx) => {
                     const invLienWaivers: any[] = (sub as any).lienWaivers ?? [];
                     const waiver = invLienWaivers.find((w: any) => w.invoiceId === inv.id);
+                    const condWaiver = conditionalLienWaivers.find((w: any) => w.invoiceId === inv.id);
+                    const condSigned = !!(condWaiver?.signedByName && condWaiver?.signedAt);
+                    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
                     return (
                     <tr key={inv.id} className={cn(
                       "hover:bg-muted/30 transition-colors",
@@ -3405,20 +3512,39 @@ export default function SubcontractDetail() {
                       <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground max-w-xs truncate">{inv.description || <span className="italic opacity-50">—</span>}</td>
                       <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</td>
                       <td className="px-4 py-3">{getInvStatusBadge(inv.status)}</td>
-                      <td className="px-4 py-3 text-center hidden md:table-cell">
-                        {waiver ? (
-                          <a
-                            href={`/api/subcontracts/${subcontractId}/invoices/${inv.id}/lien-waiver/pdf`}
-                            download={`LienWaiver-${inv.invoiceNumber}.pdf`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:underline"
-                            title="Download Lien Waiver PDF"
-                          >
-                            <Stamp className="h-3.5 w-3.5" />
-                            <span className="hidden lg:inline">Signed</span>
-                          </a>
-                        ) : (inv.status === "PAYMENT_CONFIRMED" || inv.status === "PAYMENT_UNCONFIRMED") ? (
-                          <span className="text-xs text-muted-foreground italic">—</span>
-                        ) : null}
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <div className="flex flex-col gap-1">
+                          {condWaiver ? (
+                            condSigned ? (
+                              <a
+                                href={`${base}/api/subcontracts/${subcontractId}/invoices/${inv.id}/conditional-lien-waiver/pdf`}
+                                download={`ConditionalLienWaiver-${inv.invoiceNumber}.pdf`}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline"
+                                title="Download Conditional Lien Waiver PDF"
+                              >
+                                <Stamp className="h-3 w-3" />
+                                <span>Cond. Signed</span>
+                              </a>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400">
+                                <Clock className="h-3 w-3" /> Cond. Pending
+                              </span>
+                            )
+                          ) : null}
+                          {waiver ? (
+                            <a
+                              href={`${base}/api/subcontracts/${subcontractId}/invoices/${inv.id}/lien-waiver/pdf`}
+                              download={`LienWaiver-${inv.invoiceNumber}.pdf`}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 hover:underline"
+                              title="Download Unconditional Lien Waiver PDF"
+                            >
+                              <Stamp className="h-3 w-3" />
+                              <span>Uncond. Signed</span>
+                            </a>
+                          ) : (inv.status === "PAYMENT_CONFIRMED" || inv.status === "PAYMENT_UNCONFIRMED") ? (
+                            <span className="text-xs text-muted-foreground/60">Uncond. Pending</span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <a
@@ -4049,6 +4175,53 @@ export default function SubcontractDetail() {
             <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => { setDisputeDialog({ open: false, id: "" }); setDisputeReasonText(""); }}>Cancel</Button>
             <Button type="submit" variant="destructive" className="min-h-[44px] gap-2" isLoading={disputePayment.isPending}>
               <ShieldAlert className="h-4 w-4" /> Submit Dispute
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* CONDITIONAL LIEN WAIVER SIGN DIALOG */}
+      <Dialog
+        open={condWaiverDialog.open}
+        onOpenChange={(open) => { if (!open && !condWaiverSigning) setCondWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 }); }}
+        title="Sign Conditional Lien Waiver"
+        description={`Invoice #${condWaiverDialog.invoiceNumber} — ${formatCurrency(condWaiverDialog.amount)}`}
+      >
+        <form onSubmit={handleSignConditionalWaiver} className="space-y-5">
+          <div className="rounded-xl border border-teal-200 bg-teal-50/60 dark:bg-teal-950/20 p-4">
+            <p className="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Stamp className="h-3.5 w-3.5" /> Conditional Lien Waiver Statement
+            </p>
+            <p className="text-xs text-teal-900 dark:text-teal-200 leading-relaxed">
+              This conditional waiver and release is effective when the claimant has been paid in full for labor, services, equipment, or materials provided through the date listed below. Until that time, this document does not affect the claimant's lien rights or bond rights, if any.
+            </p>
+            <p className="text-xs text-teal-800 dark:text-teal-300 mt-2 font-medium">
+              Invoice #{condWaiverDialog.invoiceNumber} — <strong>{formatCurrency(condWaiverDialog.amount)}</strong>
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold block">
+              Type your full legal name to sign <span className="text-red-500">*</span>
+            </label>
+            <p className="text-xs text-muted-foreground">By typing your name below, you are electronically signing this conditional lien waiver.</p>
+            <Input
+              required
+              autoFocus
+              placeholder="Full legal name (e.g. Jane Smith)"
+              value={condWaiverName}
+              onChange={e => setCondWaiverName(e.target.value)}
+              className="font-medium"
+            />
+            {condWaiverName.trim() && (
+              <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1 mt-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Signed as: <span className="font-bold italic">{condWaiverName.trim()}</span>
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" className="min-h-[44px]" disabled={condWaiverSigning} onClick={() => setCondWaiverDialog({ open: false, invoiceId: "", invoiceNumber: "", amount: 0 })}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px] gap-2 bg-teal-600 hover:bg-teal-700 text-white" isLoading={condWaiverSigning}>
+              <Stamp className="h-4 w-4" /> Sign Waiver
             </Button>
           </div>
         </form>

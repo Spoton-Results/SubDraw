@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { subcontractInsurancesTable, subcontractsTable, projectsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, isNotNull, isNull, or } from "drizzle-orm";
 import { sendInsuranceExpiryWarningEmail, sendInsuranceUrgentExpiryEmail } from "./email.js";
+import { createNotification } from "../routes/notifications.js";
 
 function daysUntilExpiry(expirationDate: string): number {
   const now = new Date();
@@ -48,6 +49,14 @@ export async function runInsuranceNotifications(appBaseUrl: string) {
           appUrl,
         }).catch(err => console.error("[insurance-notify] 7-day email failed:", err.message));
 
+        createNotification({
+          userId: gc.id,
+          type: "INSURANCE_EXPIRING",
+          title: `Insurance Expiring Soon — ${subName}`,
+          body: `${subName}'s insurance expires in ${days} day${days !== 1 ? "s" : ""} (${ins.expirationDate}) on ${project.name}.`,
+          url: `/subcontracts/${sc.id}`,
+        }).catch(err => console.error("[insurance-notify] 7-day push failed:", err.message));
+
         await db.update(subcontractInsurancesTable)
           .set({ notifiedAt7: new Date(), updatedAt: new Date() })
           .where(eq(subcontractInsurancesTable.id, ins.id));
@@ -63,6 +72,14 @@ export async function runInsuranceNotifications(appBaseUrl: string) {
           daysUntilExpiry: days,
           appUrl,
         }).catch(err => console.error("[insurance-notify] 30-day email failed:", err.message));
+
+        createNotification({
+          userId: gc.id,
+          type: "INSURANCE_EXPIRING",
+          title: `Insurance Expiring in ${days} Days — ${subName}`,
+          body: `${subName}'s insurance expires on ${ins.expirationDate}. Update required on ${project.name}.`,
+          url: `/subcontracts/${sc.id}`,
+        }).catch(err => console.error("[insurance-notify] 30-day push failed:", err.message));
 
         await db.update(subcontractInsurancesTable)
           .set({ notifiedAt30: new Date(), updatedAt: new Date() })

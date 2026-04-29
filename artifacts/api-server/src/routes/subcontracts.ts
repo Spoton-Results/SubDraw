@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable, complianceChecklistItemsTable, complianceCompletionsTable } from "@workspace/db/schema";
+import { subcontractsTable, changeOrdersTable, invoicesTable, projectsTable, usersTable, projectMembersTable, activityLogsTable, lienWaiversTable, conditionalLienWaiversTable, subProfilesTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, subcontractCommentsTable, subcontractCommentReadsTable, complianceChecklistItemsTable, complianceCompletionsTable } from "@workspace/db/schema";
 import { eq, inArray, desc, and, gt, count } from "drizzle-orm";
 import { requireAuth, requireGC, requireSub } from "../middlewares/requireAuth.js";
 import { getUncachableStripeClient } from "../lib/stripeClient.js";
@@ -24,6 +24,7 @@ import { createNotification } from "./notifications.js";
 import { triggerOwnerCoNotification } from "./projects.js";
 import { generateInvoicePDF, type InvoicePDFData } from "../lib/pdfInvoice.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
+import { generateConditionalLienWaiverPDF } from "../lib/pdfConditionalLienWaiver.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
 import { isR2Path, deleteFromR2 } from "../lib/r2.js";
 
@@ -1046,6 +1047,30 @@ router.post("/:subcontractId/invoices/:invoiceId/approve", requireAuth, requireG
     "GC"
   );
 
+  // Auto-generate conditional lien waiver record on invoice approval
+  try {
+    const [subProfile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, sc.sub.id)).limit(1);
+    const existing = await db.select({ id: conditionalLienWaiversTable.id })
+      .from(conditionalLienWaiversTable).where(eq(conditionalLienWaiversTable.invoiceId, invoiceId)).limit(1);
+    if (existing.length === 0) {
+      await db.insert(conditionalLienWaiversTable).values({
+        subcontractId,
+        invoiceId,
+        projectId: rawSc.projectId,
+        approvedAt: approvedAt,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: invoice.amount,
+        projectName: sc.project.name,
+        projectAddress: (sc.project as any).address ?? null,
+        gcCompanyName: sc.project.gc.companyName,
+        subCompanyName: sc.sub.companyName,
+        subAddress: subProfile?.businessAddress ?? null,
+      });
+    }
+  } catch (err) {
+    console.error("[conditional-waiver] Auto-create failed:", err);
+  }
+
   const appUrl = getAppUrl(req);
   (async () => {
     try {
@@ -1396,6 +1421,83 @@ router.get("/:subcontractId/invoices/:invoiceId/lien-waiver/pdf", requireAuth, a
   const pdfBuffer = await generateLienWaiverPDF({ waiver });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="LienWaiver-${waiver.invoiceNumber}.pdf"`);
+  res.setHeader("Content-Length", pdfBuffer.length);
+  res.send(pdfBuffer);
+});
+
+// Get all conditional lien waivers for a subcontract
+router.get("/:subcontractId/conditional-lien-waivers", requireAuth, async (req, res) => {
+  const { subcontractId } = req.params;
+  const user = (req as any).user;
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const waivers = await db.select().from(conditionalLienWaiversTable)
+    .where(eq(conditionalLienWaiversTable.subcontractId, subcontractId));
+  res.json(waivers);
+});
+
+// Sub signs the conditional lien waiver (APPROVED invoice only)
+router.post("/:subcontractId/invoices/:invoiceId/conditional-lien-waiver/sign", requireAuth, requireSub, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const subUser = (req as any).user;
+  const { signedByName } = req.body ?? {};
+
+  if (!signedByName?.trim()) {
+    res.status(400).json({ error: "signedByName is required — type your full legal name as your electronic signature" });
+    return;
+  }
+
+  const [invoice] = await db.select().from(invoicesTable)
+    .where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.subcontractId, subcontractId))).limit(1);
+  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  const eligibleStatuses = ["APPROVED", "PAYMENT_UNCONFIRMED", "PAYMENT_CONFIRMED"];
+  if (!eligibleStatuses.includes(invoice.status)) {
+    res.status(400).json({ error: "Conditional lien waiver can only be signed on approved invoices" });
+    return;
+  }
+
+  const [waiver] = await db.select().from(conditionalLienWaiversTable)
+    .where(eq(conditionalLienWaiversTable.invoiceId, invoiceId)).limit(1);
+  if (!waiver) { res.status(404).json({ error: "No conditional lien waiver found for this invoice" }); return; }
+  if (waiver.signedByName && waiver.signedAt) {
+    res.status(400).json({ error: "This conditional lien waiver has already been signed" });
+    return;
+  }
+
+  const sc = await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).then(r => r[0]);
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (sc.subId !== subUser.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [updated] = await db.update(conditionalLienWaiversTable)
+    .set({ signedByName: signedByName.trim(), signedAt: new Date() })
+    .where(eq(conditionalLienWaiversTable.id, waiver.id))
+    .returning();
+
+  await logActivity(subcontractId, "CONDITIONAL_LIEN_WAIVER_SIGNED",
+    `Conditional lien waiver signed by ${signedByName.trim()} for Invoice #${invoice.invoiceNumber}`,
+    subUser.companyName, "SUB");
+
+  res.status(200).json(updated);
+});
+
+// Download conditional lien waiver PDF (GC or owning sub)
+router.get("/:subcontractId/invoices/:invoiceId/conditional-lien-waiver/pdf", requireAuth, async (req, res) => {
+  const { subcontractId, invoiceId } = req.params;
+  const user = (req as any).user;
+
+  if (!await canAccessSubcontract(user, subcontractId)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+
+  const [waiver] = await db.select().from(conditionalLienWaiversTable)
+    .where(eq(conditionalLienWaiversTable.invoiceId, invoiceId)).limit(1);
+  if (!waiver) { res.status(404).json({ error: "No conditional lien waiver found for this invoice" }); return; }
+
+  const pdfBuffer = await generateConditionalLienWaiverPDF({ waiver });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="ConditionalLienWaiver-${waiver.invoiceNumber}.pdf"`);
   res.setHeader("Content-Length", pdfBuffer.length);
   res.send(pdfBuffer);
 });

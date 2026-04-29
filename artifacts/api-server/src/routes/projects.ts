@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable, submittalsTable, submittalMessagesTable } from "@workspace/db/schema";
+import { projectsTable, projectMembersTable, usersTable, bidsTable, subcontractsTable, changeOrdersTable, invoicesTable, gcContactsTable, activityLogsTable, lienWaiversTable, conditionalLienWaiversTable, subcontractInsurancesTable, contractorLicensesTable, gcProjectAssignmentsTable, magicLinkTokensTable, drawScheduleItemsTable, subcontractCommentsTable, subcontractCommentReadsTable, ownerCoNotificationsTable, projectCompletionDocumentsTable, tradeScopesTable, submittalsTable, submittalMessagesTable } from "@workspace/db/schema";
 import { eq, or, inArray, and, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import archiver from "archiver";
@@ -9,6 +9,7 @@ import { getEffectiveGcId, isProjectManager, getActorName, getActorRoleLabel, ca
 import { sendInviteEmail, sendAddedToProjectEmail, sendSubRemovedEmail, sendChangeOrderCreatedEmail, sendOwnerCoNotificationEmail, buildOwnerReplyPage } from "../lib/email.js";
 import { getGCPlanInfo, getActiveSubcontractCount } from "../lib/stripeStorage.js";
 import { generateLienWaiverPDF } from "../lib/pdfLienWaiver.js";
+import { generateConditionalLienWaiverPDF } from "../lib/pdfConditionalLienWaiver.js";
 import { generateDrawSchedulePDF } from "../lib/pdfDrawSchedule.js";
 
 const router = Router();
@@ -1294,6 +1295,67 @@ router.get("/:projectId/lien-waivers/zip", requireAuth, requireGC, async (req, r
   for (const waiver of waivers) {
     const pdfBuffer = await generateLienWaiverPDF({ waiver });
     const filename = `LienWaiver_${waiver.subCompanyName.replace(/[^a-z0-9]/gi, "_")}_Invoice_${waiver.invoiceNumber}.pdf`;
+    archive.append(pdfBuffer, { name: filename });
+  }
+
+  await archive.finalize();
+});
+
+// Get all conditional lien waivers for a project
+router.get("/:projectId/conditional-lien-waivers", requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  if (user.role === "GC") {
+    if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+    const waivers = await db.select().from(conditionalLienWaiversTable)
+      .where(eq(conditionalLienWaiversTable.projectId, projectId));
+    res.json(waivers);
+  } else {
+    const [member] = await db.select().from(projectMembersTable)
+      .where(and(eq(projectMembersTable.projectId, projectId), eq(projectMembersTable.userId, user.id))).limit(1);
+    if (!member) { res.status(403).json({ error: "Forbidden" }); return; }
+    const [sc] = await db.select().from(subcontractsTable)
+      .where(and(eq(subcontractsTable.projectId, projectId), eq(subcontractsTable.subId, user.id))).limit(1);
+    if (!sc) { res.json([]); return; }
+    const waivers = await db.select().from(conditionalLienWaiversTable)
+      .where(eq(conditionalLienWaiversTable.subcontractId, sc.id));
+    res.json(waivers);
+  }
+});
+
+// Download all signed conditional lien waivers for a project as a ZIP — Draw Package (GC only)
+router.get("/:projectId/conditional-lien-waivers/zip", requireAuth, requireGC, async (req, res) => {
+  const user = (req as any).user;
+  const { projectId } = req.params;
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (project.gcId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const allWaivers = await db.select().from(conditionalLienWaiversTable)
+    .where(eq(conditionalLienWaiversTable.projectId, projectId));
+
+  const signedWaivers = allWaivers.filter(w => w.signedByName && w.signedAt);
+  if (signedWaivers.length === 0) {
+    res.status(404).json({ error: "No signed conditional lien waivers found for this project" });
+    return;
+  }
+
+  const safeName = project.name.replace(/[^a-z0-9]/gi, "_").slice(0, 40);
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="DrawPackage_${safeName}.zip"`);
+
+  const archive = archiver("zip", { zlib: { level: 6 } });
+  archive.on("error", (err: Error) => { res.status(500).json({ error: err.message }); });
+  archive.pipe(res);
+
+  for (const waiver of signedWaivers) {
+    const pdfBuffer = await generateConditionalLienWaiverPDF({ waiver });
+    const filename = `ConditionalLienWaiver_${waiver.subCompanyName.replace(/[^a-z0-9]/gi, "_")}_Invoice_${waiver.invoiceNumber}.pdf`;
     archive.append(pdfBuffer, { name: filename });
   }
 

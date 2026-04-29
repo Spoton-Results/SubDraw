@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { contractorLicensesTable, subcontractsTable, projectsTable, usersTable } from "@workspace/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
 import { sendLicenseExpiryWarningEmail, sendLicenseUrgentExpiryEmail } from "./email.js";
+import { createNotification } from "../routes/notifications.js";
 
 function daysUntilExpiry(expirationDate: string): number {
   const now = new Date();
@@ -50,6 +51,14 @@ export async function runLicenseNotifications(appBaseUrl: string) {
           appUrl,
         }).catch(err => console.error("[license-notify] 7-day email failed:", err.message));
 
+        createNotification({
+          userId: gc.id,
+          type: "LICENSE_EXPIRING",
+          title: `License Expiring Soon — ${subName}`,
+          body: `${subName}'s ${licenseType} license expires in ${days} day${days !== 1 ? "s" : ""} (${lic.expirationDate}) on ${project.name}.`,
+          url: `/subcontracts/${sc.id}`,
+        }).catch(err => console.error("[license-notify] 7-day push failed:", err.message));
+
         await db.update(contractorLicensesTable)
           .set({ notifiedAt7: new Date(), updatedAt: new Date() })
           .where(eq(contractorLicensesTable.id, lic.id));
@@ -66,6 +75,14 @@ export async function runLicenseNotifications(appBaseUrl: string) {
           daysUntilExpiry: days,
           appUrl,
         }).catch(err => console.error("[license-notify] 30-day email failed:", err.message));
+
+        createNotification({
+          userId: gc.id,
+          type: "LICENSE_EXPIRING",
+          title: `License Expiring in ${days} Days — ${subName}`,
+          body: `${subName}'s ${licenseType} license expires on ${lic.expirationDate}. Update required on ${project.name}.`,
+          url: `/subcontracts/${sc.id}`,
+        }).catch(err => console.error("[license-notify] 30-day push failed:", err.message));
 
         await db.update(contractorLicensesTable)
           .set({ notifiedAt30: new Date(), updatedAt: new Date() })
