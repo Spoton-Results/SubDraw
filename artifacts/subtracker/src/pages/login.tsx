@@ -270,7 +270,7 @@ export default function Login() {
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
             <Link href="/register" className="text-primary font-semibold hover:underline">
-              Start your free 14-day trial
+              Start your free 7-day trial
             </Link>
           </p>
         </div>

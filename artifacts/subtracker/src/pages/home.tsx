@@ -418,7 +418,7 @@ export default function Home() {
 
           {/* Trust badges */}
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-slate-400">
-            {["14-day free trial · all plans", "No credit card to start", "Cancel anytime", "Subs always free"].map((item) => (
+            {["7-day free trial · all plans", "No credit card to start", "Cancel anytime", "Subs always free"].map((item) => (
               <span key={item} className="flex items-center gap-1.5">
                 <Check className="h-3.5 w-3.5 text-green-500" /> {item}
               </span>
@@ -460,7 +460,7 @@ export default function Home() {
           <p className="mt-4 text-sm text-slate-500">
             Or{" "}
             <Link href="/signup" className="underline hover:text-white transition-colors" style={{ color: "hsl(221 83% 70%)" }}>
-              start your free 14-day trial
+              start your free 7-day trial
             </Link>
             {" "}— no credit card required
           </p>

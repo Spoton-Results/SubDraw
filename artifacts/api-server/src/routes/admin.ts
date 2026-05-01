@@ -31,7 +31,7 @@ const router = Router();
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 7;
 
 // ── Admin Auth ─────────────────────────────────────────────────────────────────
 

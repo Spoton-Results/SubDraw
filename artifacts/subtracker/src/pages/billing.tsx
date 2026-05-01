@@ -499,7 +499,7 @@ export default function Billing() {
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">Demo Account</div>
-                        <div className="text-sm text-muted-foreground">Sign up for a free 14-day trial to create your own projects</div>
+                        <div className="text-sm text-muted-foreground">Sign up for a free 7-day trial to create your own projects</div>
                       </div>
                       <Badge variant="secondary" className="ml-auto bg-blue-100 text-blue-700">Demo</Badge>
                     </div>
@@ -507,7 +507,7 @@ export default function Billing() {
                       href="/register"
                       className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary text-primary-foreground font-semibold py-2.5 px-4 hover:opacity-90 transition-opacity text-sm"
                     >
-                      Start your free 14-day trial <ArrowUpRight className="h-4 w-4" />
+                      Start your free 7-day trial <ArrowUpRight className="h-4 w-4" />
                     </a>
                     <p className="text-sm text-muted-foreground">Available plans after sign-up:</p>
                     <PlanCards showCheckout={false} />

@@ -98,7 +98,7 @@ export function TrialExpiredGate({ companyName, onLogout }: TrialExpiredGateProp
               Choose a plan to continue
             </h1>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Your 14-day free trial has ended. All your data is safe — select a plan to pick up right where you left off.
+              Your 7-day free trial has ended. All your data is safe — select a plan to pick up right where you left off.
             </p>
           </div>
 

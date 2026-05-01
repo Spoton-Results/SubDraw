@@ -4,7 +4,7 @@ import { eq, and, isNull, sql } from "drizzle-orm";
 import { sendAdminDailySummaryEmail } from "./email.js";
 
 const ADMIN_EMAIL = "s.allen@spotonresults.com";
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 7;
 const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
 
 let lastSentDate = "";

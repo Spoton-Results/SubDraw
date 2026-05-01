@@ -333,7 +333,7 @@ router.get("/subscription-status", requireAuth, async (req, res) => {
     return;
   }
   if (user.isDemo) {
-    res.json({ subscribed: true, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, billingInterval: null, trialActive: false, trialExpired: false, trialDaysLeft: 14, trialEndsAt: null, subscription: null, annualRenewsAt: null });
+    res.json({ subscribed: true, planName: "Demo", planLabel: "Demo Account", limit: null, activeCount: 0, nextPlan: null, isPastDue: false, isInGrace: false, billingInterval: null, trialActive: false, trialExpired: false, trialDaysLeft: 7, trialEndsAt: null, subscription: null, annualRenewsAt: null });
     return;
   }
 
