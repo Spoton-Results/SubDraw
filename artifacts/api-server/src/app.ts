@@ -1,15 +1,12 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import path from "path";
-import { fileURLToPath } from "url";
 import router from "./routes/index.js";
 import { WebhookHandlers } from "./lib/webhookHandlers.js";
 import stripeConnectWebhookRouter from "./routes/stripe-connect-webhook.js";
 
 const app: Express = express();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.resolve(__dirname, "../../subtracker/dist/public");
+const publicDir = path.resolve(process.cwd(), "artifacts/subtracker/dist/public");
 
 app.post(
   "/api/stripe/webhook",
