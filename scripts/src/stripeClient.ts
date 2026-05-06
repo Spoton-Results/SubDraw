@@ -18,7 +18,6 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
     host: connectors.getProxyUrl().replace("https://", "").replace(/\/$/, "") + "/stripe",
     port: 443,
     protocol: "https",
-    basePath: "",
   });
 
   return stripe;
