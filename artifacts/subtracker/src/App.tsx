@@ -54,6 +54,30 @@ function RedirectTo({ path }: { path: string }) {
   return null;
 }
 
+function Logout() {
+  React.useEffect(() => {
+    const runLogout = async () => {
+      try {
+        await fetch(`${import.meta.env.BASE_URL}api/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch {
+        // Continue clearing client state even if the network request fails.
+      }
+
+      queryClient.clear();
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.replace(`${import.meta.env.BASE_URL}login`);
+    };
+
+    runLogout();
+  }, []);
+
+  return null;
+}
+
 function ProtectedRoute({
   component: Component,
   gcOnly,
@@ -73,6 +97,8 @@ function ProtectedRoute({
     const handleLogout = async () => {
       await fetch(`${import.meta.env.BASE_URL}api/auth/logout`, { method: "POST", credentials: "include" });
       queryClient.clear();
+      localStorage.clear();
+      sessionStorage.clear();
       window.location.href = `${import.meta.env.BASE_URL}login`;
     };
     return <PausedScreen companyName={user.companyName} onLogout={handleLogout} />;
@@ -128,6 +154,7 @@ function Router() {
     <>
       <AnalyticsTracker />
       <Switch>
+      <Route path="/logout" component={Logout} />
       <Route path="/admin" component={AdminLogin} />
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/admin/accounts/:userId" component={AdminAccountDetail} />
