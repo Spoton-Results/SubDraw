@@ -145,12 +145,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
     try {
       await logout.mutateAsync();
       queryClient.clear();
+      localStorage.clear();
+      sessionStorage.clear();
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success("Logged out successfully");
-      setLocation("/login");
+      window.location.href = `${import.meta.env.BASE_URL}login`;
     } catch {
-      toast.error("Failed to logout");
+      window.location.href = `${import.meta.env.BASE_URL}logout`;
     }
+  };
+
+  const handleSwitchDemo = () => {
+    window.location.href = `${import.meta.env.BASE_URL}logout`;
   };
 
   const showTrialGate =
@@ -187,7 +193,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const roleLabel = roleMeta?.label ?? (user.role === "GC" ? "GC" : "SUB");
 
-  const isDemoGC = (user as any).isDemo === true && user.role === "GC";
+  const isDemoUser = (user as any).isDemo === true;
+  const isDemoGC = isDemoUser && user.role === "GC";
 
   // Mobile home screen banner — show if mobile browser, not standalone, not recently dismissed
   const [showHomeScreen, setShowHomeScreen] = React.useState(false);
@@ -251,6 +258,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {perms.isOwner ? "GC" : perms.role === "vp_operations" ? "VP" : perms.role === "project_manager" ? "PM" : perms.role === "project_engineer" ? "PE" : perms.role === "contract_administrator" ? "CA" : perms.role ? perms.role.slice(0, 3).toUpperCase() : user.role}
             </Badge>
           </div>
+          {isDemoUser && (
+            <button
+              onClick={handleSwitchDemo}
+              className="flex items-center justify-center w-full gap-2 px-3 py-2 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors mb-2"
+            >
+              <FlaskConical className="h-4 w-4" />
+              Switch Demo Role
+            </button>
+          )}
           <button
             onClick={handleLogout}
             className="flex items-center justify-center w-full gap-2 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
@@ -272,6 +288,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/* Breadcrumb or empty, handled per-page */}
           </div>
           <div className="flex items-center gap-2">
+            {isDemoUser && (
+              <button
+                onClick={handleSwitchDemo}
+                className="hidden sm:flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors min-h-[40px]"
+              >
+                <FlaskConical className="h-4 w-4" />
+                Switch Demo
+              </button>
+            )}
             <NotificationBell onNavigate={setLocation} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -307,6 +332,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <CreditCard className="h-4 w-4" />
                       Billing
                     </Link>
+                  </DropdownMenuItem>
+                )}
+                {isDemoUser && (
+                  <DropdownMenuItem
+                    onClick={handleSwitchDemo}
+                    className="text-primary focus:text-primary focus:bg-primary/10 flex items-center gap-2 cursor-pointer"
+                  >
+                    <FlaskConical className="h-4 w-4" />
+                    Switch Demo Role
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
@@ -386,6 +420,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Team
           </Link>
         )}
+        <button
+          onClick={isDemoUser ? handleSwitchDemo : handleLogout}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+            isDemoUser ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          {isDemoUser ? <FlaskConical className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+          {isDemoUser ? "Switch" : "Logout"}
+        </button>
         <Link
           href="/account"
           className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
