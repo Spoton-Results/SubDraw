@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield, Smartphone, X } from "lucide-react";
+import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield, Smartphone, X, Search } from "lucide-react";
 import { DemoWalkthroughProvider, DemoProgressBar, DemoWalkthroughOverlay } from "@/components/demo-walkthrough";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
@@ -196,7 +196,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isDemoUser = (user as any).isDemo === true;
   const isDemoGC = isDemoUser && user.role === "GC";
 
-  // Mobile home screen banner — show if mobile browser, not standalone, not recently dismissed
   const [showHomeScreen, setShowHomeScreen] = React.useState(false);
   React.useEffect(() => {
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
@@ -220,7 +219,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <DemoWalkthroughProvider isDemoGC={isDemoGC}>
     <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full">
-      {/* Sidebar — desktop only */}
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
@@ -233,6 +231,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-3 px-2">Menu</div>
           <nav className="space-y-1">
             {navItem("/dashboard", <LayoutDashboard className="h-5 w-5" />, "Projects")}
+            {perms.isOwner && navItem("/directory", <Search className="h-5 w-5" />, "Directory")}
             {perms.isOwner && navItem("/contacts", <BookUser className="h-5 w-5" />, "Contact Book")}
             {navItem("/notifications", <Bell className="h-5 w-5" />, "Notifications")}
             {user.role === "SUB" && navItem("/account", <User className="h-5 w-5" />, "My Profile")}
@@ -277,16 +276,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <header className="h-16 bg-card border-b border-border flex items-center px-4 md:px-8 shadow-sm justify-between">
           <div className="md:hidden flex items-center gap-2">
             <HardHat className="h-6 w-6 text-primary" />
             <span className="font-bold font-display">SubDraw</span>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm">
-            {/* Breadcrumb or empty, handled per-page */}
-          </div>
+          <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm" />
           <div className="flex items-center gap-2">
             {isDemoUser && (
               <button
@@ -318,6 +314,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     Account Settings
                   </Link>
                 </DropdownMenuItem>
+                {perms.isOwner && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/directory" className="flex items-center gap-2 cursor-pointer">
+                      <Search className="h-4 w-4" />
+                      Directory
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 {perms.canManageTeam && (
                   <DropdownMenuItem asChild>
                     <Link href="/team" className="flex items-center gap-2 cursor-pointer">
@@ -387,11 +391,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-stretch shadow-lg">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-stretch shadow-lg overflow-x-auto">
         <Link
           href="/dashboard"
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
             isActive("/dashboard") ? "text-primary" : "text-muted-foreground"
           }`}
         >
@@ -400,8 +403,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </Link>
         {perms.isOwner && (
           <Link
+            href="/directory"
+            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+              isActive("/directory") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <Search className={`h-5 w-5 ${isActive("/directory") ? "text-primary" : ""}`} />
+            Directory
+          </Link>
+        )}
+        {perms.isOwner && (
+          <Link
             href="/contacts"
-            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
               isActive("/contacts") ? "text-primary" : "text-muted-foreground"
             }`}
           >
@@ -412,7 +426,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {perms.canManageTeam && (
           <Link
             href="/team"
-            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
               isActive("/team") ? "text-primary" : "text-muted-foreground"
             }`}
           >
@@ -422,7 +436,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
         <button
           onClick={isDemoUser ? handleSwitchDemo : handleLogout}
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
             isDemoUser ? "text-primary" : "text-muted-foreground"
           }`}
         >
@@ -431,7 +445,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </button>
         <Link
           href="/account"
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
             isActive("/account") ? "text-primary" : "text-muted-foreground"
           }`}
         >
@@ -441,13 +455,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </nav>
       <DemoWalkthroughOverlay />
 
-      {/* Push Notification Permission Prompt */}
       <PushPermissionPrompt
         pushPromptLastSeenAt={(user as any).pushPromptLastSeenAt}
         onDismiss={() => {}}
       />
 
-      {/* Mobile Home Screen Banner */}
       {showHomeScreen && (
         <div className="fixed bottom-16 md:hidden left-3 right-3 z-40 bg-card border border-border rounded-2xl shadow-xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
           <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
