@@ -73,6 +73,8 @@ export default function Login() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
     }).catch(() => {});
+
+    let didNavigate = false;
     try {
       const res = await fetch(`${BASE}api/auth/demo-login`, {
         method: "POST",
@@ -95,14 +97,18 @@ export default function Login() {
 
       localStorage.setItem("subdraw_demo_mode", "true");
       localStorage.setItem("subdraw_demo_role", role);
-      queryClient.setQueryData(getGetMeQueryKey(), body?.user);
-      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      if (body?.user) queryClient.setQueryData(getGetMeQueryKey(), body.user);
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
-      window.location.assign(`${BASE}dashboard`);
+      didNavigate = true;
+      setLocation("/dashboard");
+      window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
+      }, 500);
     } catch (err: any) {
       console.error("[demo-login] fetch error:", err?.message);
       toast.error("Demo login failed. Check your connection and try again.");
-      setDemoLoading(null);
+    } finally {
+      if (!didNavigate) setDemoLoading(null);
     }
   };
 
@@ -270,7 +276,7 @@ export default function Login() {
           </p>
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/register" className="text-primary font-semibold hover:underline">
               Start your free 7-day trial
             </Link>
