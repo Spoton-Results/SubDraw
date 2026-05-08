@@ -26,6 +26,7 @@ import connectRouter from "./connect.js";
 import stripeConnectRouter from "./stripe-connect.js";
 import pushRouter from "./push.js";
 import demoLeadsRouter from "./demo-leads.js";
+import directoryRouter from "./directory.js";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use("/connect", connectRouter);
 router.use("/stripe/connect", stripeConnectRouter);
 router.use("/push", pushRouter);
 router.use("/demo-leads", demoLeadsRouter);
+router.use("/directory", directoryRouter);
 
 export default router;
