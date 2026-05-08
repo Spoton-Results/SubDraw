@@ -37,7 +37,6 @@ export default function Login() {
     resolver: zodResolver(loginSchema),
   });
 
-  // Show error messages from magic link redirect query params
   React.useEffect(() => {
     const params = new URLSearchParams(search);
     const error = params.get("error");
@@ -66,7 +65,9 @@ export default function Login() {
   };
 
   const handleDemoLogin = async (role: "GC" | "SUB") => {
+    if (demoLoading) return;
     setDemoLoading(role);
+    toast.dismiss();
     fetch(`${BASE}api/analytics/demo-click`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,13 +92,16 @@ export default function Login() {
         toast.error(body?.error || `Demo login failed (${res.status}). Please try again.`);
         return;
       }
+
+      localStorage.setItem("subdraw_demo_mode", "true");
+      localStorage.setItem("subdraw_demo_role", role);
+      queryClient.setQueryData(getGetMeQueryKey(), body?.user);
       await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
-      setLocation("/dashboard");
+      window.location.assign(`${BASE}dashboard`);
     } catch (err: any) {
       console.error("[demo-login] fetch error:", err?.message);
       toast.error("Demo login failed. Check your connection and try again.");
-    } finally {
       setDemoLoading(null);
     }
   };
@@ -151,7 +155,6 @@ export default function Login() {
           </div>
           <p className="text-sm text-muted-foreground mb-6">Subcontract management built for modern GCs</p>
 
-          {/* Demo login section */}
           <div className="rounded-2xl border border-border bg-secondary/40 p-4 mb-6">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               Try the interactive demo — no sign-up needed
@@ -188,7 +191,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Magic link section */}
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 mb-6">
             <div className="flex items-center gap-2 mb-1">
               <Mail className="h-4 w-4 text-primary shrink-0" />
