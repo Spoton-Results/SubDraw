@@ -19,6 +19,7 @@ import {
   Users,
   RotateCcw,
   PlusCircle,
+  Star,
 } from "lucide-react";
 
 interface DirectorySubcontractor {
@@ -33,6 +34,7 @@ interface DirectorySubcontractor {
   serviceArea: string | null;
   licenseNumber: string | null;
   savedToContacts: boolean;
+  preferred: boolean;
 }
 
 interface ProjectOption {
@@ -56,8 +58,10 @@ export default function Directory() {
   const [trade, setTrade] = React.useState("");
   const [state, setState] = React.useState("");
   const [city, setCity] = React.useState("");
+  const [preferredOnly, setPreferredOnly] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [preferredSavingId, setPreferredSavingId] = React.useState<string | null>(null);
   const [invitingId, setInvitingId] = React.useState<string | null>(null);
   const [results, setResults] = React.useState<DirectorySubcontractor[]>([]);
   const [projects, setProjects] = React.useState<ProjectOption[]>([]);
@@ -72,8 +76,9 @@ export default function Directory() {
     if (trade.trim()) params.set("trade", trade.trim());
     if (state.trim()) params.set("state", state.trim());
     if (city.trim()) params.set("city", city.trim());
+    if (preferredOnly) params.set("preferredOnly", "true");
     return params.toString();
-  }, [q, trade, state, city]);
+  }, [q, trade, state, city, preferredOnly]);
 
   const loadProjects = React.useCallback(async () => {
     try {
@@ -94,7 +99,8 @@ export default function Directory() {
       const res = await fetch(`${BASE}/api/directory/subcontractors${qs ? `?${qs}` : ""}`, { credentials: "include" });
       const body = await res.json().catch(() => []);
       if (!res.ok) throw new Error(body?.error || "Directory search failed");
-      setResults(body);
+      const sorted = [...body].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.companyName.localeCompare(b.companyName));
+      setResults(sorted);
     } catch (err: any) {
       toast.error(err.message || "Directory search failed");
     } finally {
@@ -107,12 +113,22 @@ export default function Directory() {
     loadProjects();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  React.useEffect(() => {
+    if (hasSearched) runSearch();
+  }, [preferredOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const clearFilters = () => {
     setQ("");
     setTrade("");
     setState("");
     setCity("");
+    setPreferredOnly(false);
     setTimeout(() => runSearch(), 0);
+  };
+
+  const updateSub = (subId: string, updates: Partial<DirectorySubcontractor>) => {
+    setResults(prev => [...prev.map(item => item.subId === subId ? { ...item, ...updates } : item)]
+      .sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.companyName.localeCompare(b.companyName)));
   };
 
   const saveToContacts = async (sub: DirectorySubcontractor) => {
@@ -121,12 +137,30 @@ export default function Directory() {
       const res = await fetch(`${BASE}/api/directory/subcontractors/${sub.subId}/save`, { method: "POST", credentials: "include" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Could not save subcontractor");
-      setResults(prev => prev.map(item => item.subId === sub.subId ? { ...item, savedToContacts: true } : item));
+      updateSub(sub.subId, { savedToContacts: true });
       toast.success(`${sub.companyName} saved to Contact Book`);
     } catch (err: any) {
       toast.error(err.message || "Could not save subcontractor");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const togglePreferred = async (sub: DirectorySubcontractor) => {
+    setPreferredSavingId(sub.subId);
+    try {
+      const res = await fetch(`${BASE}/api/directory/subcontractors/${sub.subId}/preferred`, {
+        method: sub.preferred ? "DELETE" : "POST",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Could not update preferred status");
+      updateSub(sub.subId, { preferred: !sub.preferred, savedToContacts: sub.savedToContacts || !sub.preferred });
+      toast.success(!sub.preferred ? `${sub.companyName} marked preferred` : `${sub.companyName} removed from preferred`);
+    } catch (err: any) {
+      toast.error(err.message || "Could not update preferred status");
+    } finally {
+      setPreferredSavingId(null);
     }
   };
 
@@ -157,7 +191,7 @@ export default function Directory() {
       if (!inviteRes.ok) throw new Error(inviteBody?.error || "Could not add subcontractor to project");
 
       const projectName = projects.find(p => p.id === selectedProjectId)?.name || "project";
-      setResults(prev => prev.map(item => item.subId === inviteTarget.subId ? { ...item, savedToContacts: true } : item));
+      updateSub(inviteTarget.subId, { savedToContacts: true });
       toast.success(`${inviteTarget.companyName} added to ${projectName}`);
       setInviteTarget(null);
       setSelectedProjectId("");
@@ -169,6 +203,8 @@ export default function Directory() {
     }
   };
 
+  const preferredCount = results.filter(r => r.preferred).length;
+
   return (
     <Layout>
       <div className="p-6 md:p-8 max-w-6xl mx-auto">
@@ -179,7 +215,7 @@ export default function Directory() {
             </div>
             <h1 className="text-2xl md:text-3xl font-bold font-display">Subcontractor Directory</h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              Search subcontractors by trade, city, and state. Save the right subs, then add them directly to active projects.
+              Search subcontractors by trade, city, and state. Star trusted subs as preferred, then add them directly to active projects.
             </p>
           </div>
           <Button variant="outline" onClick={clearFilters} className="gap-2 w-full md:w-auto">
@@ -208,7 +244,16 @@ export default function Directory() {
             </div>
           </div>
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="text-xs text-muted-foreground">{loading ? "Searching directory…" : `${results.length} subcontractor${results.length === 1 ? "" : "s"} found`}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">{loading ? "Searching directory…" : `${results.length} subcontractor${results.length === 1 ? "" : "s"} found`}</p>
+              <button
+                type="button"
+                onClick={() => setPreferredOnly(v => !v)}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${preferredOnly ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" : "bg-background text-muted-foreground border-border hover:bg-muted"}`}
+              >
+                <Star className={`h-3.5 w-3.5 ${preferredOnly ? "fill-current" : ""}`} /> Preferred only {preferredCount > 0 ? `(${preferredCount})` : ""}
+              </button>
+            </div>
             <Button onClick={runSearch} disabled={loading} className="gap-2 w-full sm:w-auto">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               Search Directory
@@ -227,16 +272,27 @@ export default function Directory() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {results.map(sub => (
-              <div key={sub.subId} className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+              <div key={sub.subId} className={`bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow ${sub.preferred ? "border-amber-300 ring-1 ring-amber-200 dark:border-amber-700 dark:ring-amber-900/40" : "border-border"}`}>
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">{sub.companyName.charAt(0).toUpperCase()}</div>
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center font-bold shrink-0 ${sub.preferred ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : "bg-primary/10 text-primary"}`}>{sub.companyName.charAt(0).toUpperCase()}</div>
                     <div className="min-w-0"><h2 className="font-bold text-base truncate">{sub.companyName}</h2><p className="text-sm text-muted-foreground truncate">{sub.email}</p></div>
                   </div>
-                  {sub.savedToContacts ? <Badge variant="secondary" className="gap-1 shrink-0 text-green-700 bg-green-100 dark:bg-green-950/30 dark:text-green-300"><CheckCircle2 className="h-3 w-3" /> Saved</Badge> : null}
+                  <button
+                    type="button"
+                    disabled={preferredSavingId === sub.subId}
+                    onClick={() => togglePreferred(sub)}
+                    className={`h-9 w-9 rounded-xl border flex items-center justify-center transition-colors shrink-0 ${sub.preferred ? "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-amber-600"}`}
+                    aria-label={sub.preferred ? "Remove preferred" : "Mark preferred"}
+                    title={sub.preferred ? "Remove preferred" : "Mark preferred"}
+                  >
+                    {preferredSavingId === sub.subId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${sub.preferred ? "fill-current" : ""}`} />}
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-4">
+                  {sub.preferred && <Badge variant="secondary" className="gap-1 shrink-0 text-amber-800 bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300"><Star className="h-3 w-3 fill-current" /> Preferred</Badge>}
+                  {sub.savedToContacts ? <Badge variant="secondary" className="gap-1 shrink-0 text-green-700 bg-green-100 dark:bg-green-950/30 dark:text-green-300"><CheckCircle2 className="h-3 w-3" /> Saved</Badge> : null}
                   {sub.trade && <Badge variant="outline" className="gap-1"><Wrench className="h-3 w-3" /> {sub.trade}</Badge>}
                   {(sub.city || sub.state) && <Badge variant="outline" className="gap-1"><MapPin className="h-3 w-3" /> {[sub.city, sub.state].filter(Boolean).join(", ")}</Badge>}
                   {sub.licenseNumber && <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" /> Lic: {sub.licenseNumber}</Badge>}
