@@ -14,7 +14,6 @@ function generateMagicToken(): string {
 }
 
 async function createMagicToken(userId: string): Promise<string> {
-  // Clean up any expired unused tokens for this user first
   await db
     .delete(magicLinkTokensTable)
     .where(
@@ -26,7 +25,7 @@ async function createMagicToken(userId: string): Promise<string> {
     );
 
   const token = generateMagicToken();
-  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
   await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
   return token;
 }
@@ -138,14 +137,12 @@ router.post("/change-password", requireAuth, async (req, res) => {
     .where(eq(usersTable.id, user.id))
     .returning();
 
-  // Issue a fresh token so the current session stays valid
   const token = generateToken(updated);
   setAuthCookie(res, token);
 
   res.json({ message: "Password changed successfully" });
 });
 
-// Set password for users who don't have one (magic-link-only users)
 router.post("/set-password", requireAuth, async (req, res) => {
   const userPayload = (req as any).user;
   const { newPassword } = req.body;
@@ -203,7 +200,6 @@ router.patch("/update-profile", requireAuth, async (req, res) => {
 
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
-  // Always respond 200 to prevent email enumeration
   if (!email) {
     res.json({ message: "If that email exists, a reset link has been sent." });
     return;
@@ -211,7 +207,7 @@ router.post("/forgot-password", async (req, res) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, String(email).toLowerCase().trim())).limit(1);
   if (user) {
     const token = crypto.randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expires = new Date(Date.now() + 60 * 60 * 1000);
     await db.update(usersTable).set({ passwordResetToken: token, passwordResetExpires: expires, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
     const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
     sendPasswordResetEmail({
@@ -223,10 +219,8 @@ router.post("/forgot-password", async (req, res) => {
   res.json({ message: "If that email exists, a reset link has been sent." });
 });
 
-// Request a magic login link — anyone can request one for their own email
 router.post("/magic-link/request", async (req, res) => {
   const { email } = req.body;
-  // Always 200 to prevent email enumeration
   if (!email) {
     res.json({ message: "If that email is registered, a login link has been sent." });
     return;
@@ -251,7 +245,6 @@ router.post("/magic-link/request", async (req, res) => {
   res.json({ message: "If that email is registered, a login link has been sent." });
 });
 
-// Verify a magic link token — GET so it works as a direct email link
 router.get("/magic-link/verify", async (req, res) => {
   const { token } = req.query;
   const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
@@ -282,13 +275,11 @@ router.get("/magic-link/verify", async (req, res) => {
     return;
   }
 
-  // Mark token as used
   await db
     .update(magicLinkTokensTable)
     .set({ usedAt: new Date() })
     .where(eq(magicLinkTokensTable.id, record.id));
 
-  // Load user and set permanent auth cookie
   const [user] = await db
     .select()
     .from(usersTable)
@@ -303,7 +294,7 @@ router.get("/magic-link/verify", async (req, res) => {
   const jwt = generateToken(user);
   setAuthCookie(res, jwt);
 
-  res.redirect(`${appUrl}/`);
+  res.redirect(`${appUrl}/dashboard`);
 });
 
 router.post("/demo-login", async (req, res) => {
@@ -313,17 +304,28 @@ router.post("/demo-login", async (req, res) => {
       res.status(400).json({ error: "role must be GC or SUB" });
       return;
     }
-    const email =
-      role === "GC" ? "demo-gc@subtracker.com" : "demo-sub@subtracker.com";
-    const [user] = await db
+    const primaryEmail = role === "GC" ? "demo-gc@subdraw.com" : "demo-sub@subdraw.com";
+    const legacyEmail = role === "GC" ? "demo-gc@subtracker.com" : "demo-sub@subtracker.com";
+    let [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.email, email))
+      .where(eq(usersTable.email, primaryEmail))
       .limit(1);
+
+    if (!user) {
+      [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.email, legacyEmail))
+        .limit(1);
+    }
+
     if (!user) {
       res.status(503).json({ error: "Demo account is being set up. Please try again in a moment." });
       return;
     }
+
+    await db.update(usersTable).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, user.id));
     const token = generateToken(user);
     setAuthCookie(res, token);
     const { passwordHash: _, ...safeUser } = user;
