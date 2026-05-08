@@ -20,6 +20,7 @@ import {
   RotateCcw,
   PlusCircle,
   Star,
+  AlertCircle,
 } from "lucide-react";
 
 interface DirectorySubcontractor {
@@ -50,6 +51,10 @@ function getBaseUrl() {
   return import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 }
 
+function normalizeCity(value: string) {
+  return value.trim().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
+}
+
 export default function Directory() {
   usePageTitle("Subcontractor Directory");
 
@@ -66,6 +71,7 @@ export default function Directory() {
   const [results, setResults] = React.useState<DirectorySubcontractor[]>([]);
   const [projects, setProjects] = React.useState<ProjectOption[]>([]);
   const [hasSearched, setHasSearched] = React.useState(false);
+  const [searchError, setSearchError] = React.useState<string | null>(null);
   const [inviteTarget, setInviteTarget] = React.useState<DirectorySubcontractor | null>(null);
   const [selectedProjectId, setSelectedProjectId] = React.useState("");
   const [inviteTradeCategory, setInviteTradeCategory] = React.useState("");
@@ -75,7 +81,8 @@ export default function Directory() {
     if (q.trim()) params.set("q", q.trim());
     if (trade.trim()) params.set("trade", trade.trim());
     if (state.trim()) params.set("state", state.trim());
-    if (city.trim()) params.set("city", city.trim());
+    const normalizedCity = normalizeCity(city);
+    if (normalizedCity) params.set("city", normalizedCity);
     if (preferredOnly) params.set("preferredOnly", "true");
     return params.toString();
   }, [q, trade, state, city, preferredOnly]);
@@ -94,15 +101,22 @@ export default function Directory() {
   const runSearch = React.useCallback(async () => {
     setLoading(true);
     setHasSearched(true);
+    setSearchError(null);
     try {
       const qs = buildQuery();
       const res = await fetch(`${BASE}/api/directory/subcontractors${qs ? `?${qs}` : ""}`, { credentials: "include" });
-      const body = await res.json().catch(() => []);
-      if (!res.ok) throw new Error(body?.error || "Directory search failed");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.error || "Directory search unavailable");
+      }
+      if (!Array.isArray(body)) {
+        throw new Error("Directory search returned an invalid response");
+      }
       const sorted = [...body].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.companyName.localeCompare(b.companyName));
       setResults(sorted);
     } catch (err: any) {
-      toast.error(err.message || "Directory search failed");
+      setResults([]);
+      setSearchError(err?.message || "Directory search unavailable");
     } finally {
       setLoading(false);
     }
@@ -123,6 +137,7 @@ export default function Directory() {
     setState("");
     setCity("");
     setPreferredOnly(false);
+    setSearchError(null);
     setTimeout(() => runSearch(), 0);
   };
 
@@ -245,7 +260,9 @@ export default function Directory() {
           </div>
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs text-muted-foreground">{loading ? "Searching directory…" : `${results.length} subcontractor${results.length === 1 ? "" : "s"} found`}</p>
+              <p className="text-xs text-muted-foreground">
+                {loading ? "Searching directory…" : searchError ? "Directory unavailable" : `${results.length} subcontractor${results.length === 1 ? "" : "s"} found`}
+              </p>
               <button
                 type="button"
                 onClick={() => setPreferredOnly(v => !v)}
@@ -263,11 +280,21 @@ export default function Directory() {
 
         {loading && !hasSearched ? (
           <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        ) : searchError ? (
+          <div className="bg-card border border-border rounded-2xl p-10 text-center text-muted-foreground">
+            <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-500" />
+            <p className="font-semibold text-foreground">Directory search unavailable</p>
+            <p className="text-sm mt-1">Please try again. If this continues, reset filters and search again.</p>
+            <Button onClick={runSearch} disabled={loading} className="gap-2 mt-5">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Retry Search
+            </Button>
+          </div>
         ) : results.length === 0 ? (
           <div className="bg-card border border-border rounded-2xl p-10 text-center text-muted-foreground">
             <Building2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-semibold text-foreground">No subcontractors found</p>
-            <p className="text-sm mt-1">Try widening your filters or importing subcontractors into your Contact Book first.</p>
+            <p className="text-sm mt-1">No subcontractors matched your filters yet. Try widening your filters or invite subcontractors to build your private network.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
