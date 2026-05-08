@@ -14,6 +14,23 @@ export const PLANS = [
 
 export type PlanName = (typeof PLANS)[number]["name"];
 
+type BillingInterval = "month" | "year";
+
+const PLAN_PRICE_ENV_KEYS: Record<PlanName, Record<BillingInterval, string[]>> = {
+  "SubDraw Starter": {
+    month: ["STRIPE_PRICE_STARTER_MONTHLY", "STRIPE_STARTER_MONTHLY_PRICE_ID", "STRIPE_STARTER_PRICE_ID"],
+    year: ["STRIPE_PRICE_STARTER_ANNUAL", "STRIPE_STARTER_ANNUAL_PRICE_ID"],
+  },
+  "SubDraw Professional": {
+    month: ["STRIPE_PRICE_PROFESSIONAL_MONTHLY", "STRIPE_PRICE_PRO_MONTHLY", "STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID", "STRIPE_PRO_MONTHLY_PRICE_ID", "STRIPE_PRO_PRICE_ID"],
+    year: ["STRIPE_PRICE_PROFESSIONAL_ANNUAL", "STRIPE_PRICE_PRO_ANNUAL", "STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID", "STRIPE_PRO_ANNUAL_PRICE_ID"],
+  },
+  "SubDraw Scale": {
+    month: ["STRIPE_PRICE_SCALE_MONTHLY", "STRIPE_SCALE_MONTHLY_PRICE_ID", "STRIPE_SCALE_PRICE_ID"],
+    year: ["STRIPE_PRICE_SCALE_ANNUAL", "STRIPE_SCALE_ANNUAL_PRICE_ID"],
+  },
+};
+
 export function getPlanByName(name: string) {
   return PLANS.find(p => p.name === name) ?? null;
 }
@@ -24,11 +41,41 @@ export function getNextPlan(currentName: string) {
   return PLANS[idx + 1];
 }
 
+async function getConfiguredPlanPrice(planName: PlanName, interval: BillingInterval, expectedAmount: number): Promise<string | null> {
+  const stripe = await getUncachableStripeClient();
+  const keys = PLAN_PRICE_ENV_KEYS[planName][interval];
+  const configuredPriceId = keys.map(key => process.env[key]?.trim()).find(Boolean);
+
+  if (!configuredPriceId) return null;
+
+  try {
+    const price = await stripe.prices.retrieve(configuredPriceId);
+    const actualInterval = price.recurring?.interval;
+    const actualAmount = price.unit_amount;
+
+    if (!price.active) {
+      throw new Error(`${configuredPriceId} is not active in Stripe`);
+    }
+    if (actualInterval !== interval) {
+      throw new Error(`${configuredPriceId} is ${actualInterval ?? "non-recurring"}, expected ${interval}`);
+    }
+    if (actualAmount !== expectedAmount) {
+      throw new Error(`${configuredPriceId} is ${actualAmount ?? "unknown"} cents, expected ${expectedAmount} cents`);
+    }
+
+    return configuredPriceId;
+  } catch (err: any) {
+    throw new Error(`Configured Stripe price for ${planName} (${interval}) is invalid: ${err?.message || err}`);
+  }
+}
+
 // ── Stripe product/price helpers ──────────────────────────────────────────────
 
 export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> {
   const stripe = await getUncachableStripeClient();
   const plan = getPlanByName(planName)!;
+  const configuredPriceId = await getConfiguredPlanPrice(planName, "month", plan.monthlyUsd);
+  if (configuredPriceId) return configuredPriceId;
 
   // Try the synced DB first
   const result = await db.execute(
@@ -38,14 +85,15 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
       JOIN stripe.products p ON p.id = pr.product
       WHERE p.name = ${planName} AND pr.active = true AND p.active = true
         AND pr.recurring->>'interval' = 'month'
+        AND pr.unit_amount = ${plan.monthlyUsd}
       LIMIT 1
     `
   );
   if (result.rows[0]) {
     const priceId = (result.rows[0] as any).price_id as string;
     try {
-      await stripe.prices.retrieve(priceId);
-      return priceId;
+      const price = await stripe.prices.retrieve(priceId);
+      if (price.active && price.recurring?.interval === "month" && price.unit_amount === plan.monthlyUsd) return priceId;
     } catch {
       // stale — fall through
     }
@@ -68,7 +116,7 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
   }
 
   // Create new
-  const product = await stripe.products.create({ name: planName });
+  const product = await stripe.products.create({ name: planName, metadata: { planName, billing: "monthly", source: "subdraw" } });
   const price = await stripe.prices.create({
     product: product.id,
     unit_amount: plan.monthlyUsd,
@@ -82,6 +130,9 @@ export async function getOrCreatePlanPrice(planName: PlanName): Promise<string> 
 export async function getOrCreateAnnualPlanPrice(planName: PlanName): Promise<string> {
   const stripe = await getUncachableStripeClient();
   const plan = getPlanByName(planName)!;
+  const configuredPriceId = await getConfiguredPlanPrice(planName, "year", plan.annualUsd);
+  if (configuredPriceId) return configuredPriceId;
+
   const annualProductName = `${planName} Annual`;
 
   // Try synced DB
@@ -92,14 +143,15 @@ export async function getOrCreateAnnualPlanPrice(planName: PlanName): Promise<st
       JOIN stripe.products p ON p.id = pr.product
       WHERE p.name = ${annualProductName} AND pr.active = true AND p.active = true
         AND pr.recurring->>'interval' = 'year'
+        AND pr.unit_amount = ${plan.annualUsd}
       LIMIT 1
     `
   );
   if (result.rows[0]) {
     const priceId = (result.rows[0] as any).price_id as string;
     try {
-      await stripe.prices.retrieve(priceId);
-      return priceId;
+      const price = await stripe.prices.retrieve(priceId);
+      if (price.active && price.recurring?.interval === "year" && price.unit_amount === plan.annualUsd) return priceId;
     } catch {
       // stale — fall through
     }
@@ -122,7 +174,7 @@ export async function getOrCreateAnnualPlanPrice(planName: PlanName): Promise<st
   }
 
   // Create new
-  const product = await stripe.products.create({ name: annualProductName, metadata: { planName, billing: "annual" } });
+  const product = await stripe.products.create({ name: annualProductName, metadata: { planName, billing: "annual", source: "subdraw" } });
   const price = await stripe.prices.create({
     product: product.id,
     unit_amount: plan.annualUsd,
