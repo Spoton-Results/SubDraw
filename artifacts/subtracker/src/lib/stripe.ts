@@ -46,15 +46,27 @@ export interface BillingInfo extends TrialInfo {
   annualRenewsAt: string | null;
 }
 
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const err = await res.json().catch(() => ({}));
+    return (err as any).error || (err as any).message || fallback;
+  }
+
+  const text = await res.text().catch(() => "");
+  const cleaned = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned ? `${fallback}: ${cleaned.slice(0, 300)}` : fallback;
+}
+
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   const res = await fetch(`${API}/stripe/subscription-status`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch subscription status");
+  if (!res.ok) throw new Error(await readApiError(res, "Failed to fetch subscription status"));
   return res.json();
 }
 
 export async function getBilling(): Promise<BillingInfo> {
   const res = await fetch(`${API}/stripe/billing`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch billing info");
+  if (!res.ok) throw new Error(await readApiError(res, "Failed to fetch billing info"));
   return res.json();
 }
 
@@ -66,10 +78,10 @@ export async function startCheckout(planName: string): Promise<string> {
     body: JSON.stringify({ planName }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to start checkout");
+    throw new Error(await readApiError(res, "Failed to start checkout"));
   }
   const data = await res.json();
+  if (!data?.url) throw new Error("Stripe checkout did not return a checkout URL");
   return data.url;
 }
 
@@ -81,10 +93,10 @@ export async function startAnnualCheckout(planName: string): Promise<string> {
     body: JSON.stringify({ planName }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to start annual checkout");
+    throw new Error(await readApiError(res, "Failed to start annual checkout"));
   }
   const data = await res.json();
+  if (!data?.url) throw new Error("Stripe checkout did not return a checkout URL");
   return data.url;
 }
 
@@ -96,8 +108,7 @@ export async function upgradePlan(planName: string): Promise<void> {
     body: JSON.stringify({ planName }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to upgrade plan");
+    throw new Error(await readApiError(res, "Failed to upgrade plan"));
   }
 }
 
@@ -109,8 +120,7 @@ export async function switchBillingInterval(interval: "month" | "year"): Promise
     body: JSON.stringify({ interval }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to switch billing interval");
+    throw new Error(await readApiError(res, "Failed to switch billing interval"));
   }
 }
 
@@ -121,8 +131,7 @@ export async function cancelSubscription() {
     headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to cancel subscription");
+    throw new Error(await readApiError(res, "Failed to cancel subscription"));
   }
   return res.json();
 }
@@ -134,8 +143,7 @@ export async function reactivateSubscription() {
     headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error || "Failed to reactivate subscription");
+    throw new Error(await readApiError(res, "Failed to reactivate subscription"));
   }
   return res.json();
 }
