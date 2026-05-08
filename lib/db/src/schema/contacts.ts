@@ -20,6 +20,15 @@ export const preferredSubcontractorsTable = pgTable("preferred_subcontractors", 
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [unique("preferred_subcontractors_gc_sub_unique").on(t.gcId, t.subId)]);
 
+export const subcontractorInternalNotesTable = pgTable("subcontractor_internal_notes", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  gcId: text("gc_id").notNull().references(() => usersTable.id),
+  subId: text("sub_id").notNull().references(() => usersTable.id),
+  authorUserId: text("author_user_id").references(() => usersTable.id),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const subProfilesTable = pgTable("sub_profiles", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().unique().references(() => usersTable.id),
