@@ -3,12 +3,25 @@ import { StripeSync, runMigrations } from "stripe-replit-sync";
 import Stripe from "stripe";
 
 let _stripeSyncInstance: StripeSync | null = null;
-let _stripeClientInstance: Stripe | null = null;
+
+function getStripeSecretKey() {
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  if (key && key.startsWith("sk_")) return key;
+  return null;
+}
+
+function isRunningOnReplit() {
+  return !!process.env.REPL_ID || !!process.env.REPLIT_DOMAINS;
+}
 
 async function buildStripeClient(): Promise<Stripe> {
-  const fromEnv = process.env.STRIPE_SECRET_KEY;
-  if (fromEnv && fromEnv.startsWith("sk_")) {
+  const fromEnv = getStripeSecretKey();
+  if (fromEnv) {
     return new Stripe(fromEnv, { apiVersion: "2025-05-28.basil" });
+  }
+
+  if (!isRunningOnReplit()) {
+    throw new Error("STRIPE_SECRET_KEY is missing or invalid. Add your live Stripe secret key to Railway variables. It must start with sk_live_ for live mode or sk_test_ for test mode.");
   }
 
   const connectors = new ReplitConnectors();
@@ -29,15 +42,19 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
 export async function getStripeSync(): Promise<StripeSync> {
   if (_stripeSyncInstance) return _stripeSyncInstance;
 
-  const fromEnv = process.env.STRIPE_SECRET_KEY;
+  const fromEnv = getStripeSecretKey();
   const databaseUrl = process.env.DATABASE_URL!;
 
-  if (fromEnv && fromEnv.startsWith("sk_")) {
+  if (fromEnv) {
     _stripeSyncInstance = new StripeSync({
       stripeSecretKey: fromEnv,
       poolConfig: { connectionString: databaseUrl, max: 5 },
     });
     return _stripeSyncInstance;
+  }
+
+  if (!isRunningOnReplit()) {
+    throw new Error("STRIPE_SECRET_KEY is missing or invalid. Stripe sync cannot run on Railway without a real Stripe secret key.");
   }
 
   const connectors = new ReplitConnectors();
