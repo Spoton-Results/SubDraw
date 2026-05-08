@@ -4,6 +4,7 @@ import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, pro
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 import { sendAddedToProjectEmail } from "../lib/email.js";
+import { createNotification } from "./notifications.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -71,7 +72,6 @@ async function upsertSubProfile(userId: string, opts: { trade?: string; phone?: 
   }
 }
 
-// POST / — add a single contact to the GC's contact book
 router.post("/", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { companyName, email, contactName, phone, tradeSpecialty, licenseNumber } = req.body;
@@ -102,7 +102,6 @@ router.post("/", requireAuth, requireGC, async (req, res) => {
   res.status(201).json(await buildContact(contact, user.id));
 });
 
-// POST /import — bulk import contacts from CSV rows
 router.post("/import", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const { contacts } = req.body as { contacts: Array<{ companyName: string; contactName?: string; email: string; phone?: string; tradeSpecialty?: string; licenseNumber?: string }> };
@@ -211,6 +210,15 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     tradeScope,
     isConstructionPhase: project.status === "CONSTRUCTION",
   }).catch((err) => console.error("[email] sendAddedToProjectEmail failed:", err));
+
+  createNotification({
+    userId: sub.id,
+    type: project.status === "CONSTRUCTION" ? "PROJECT_SCOPE_INVITE" : "PROJECT_INVITE",
+    title: project.status === "CONSTRUCTION" ? "New scope invite" : "New project invite",
+    body: `${user.companyName} added you to ${project.name}${effectiveTrade ? ` for ${effectiveTrade}` : ""}.`,
+    url: `/projects/${project.id}`,
+    data: { projectId: project.id, tradeCategory: effectiveTrade ?? "" },
+  }).catch((err) => console.error("[notification] project invite failed:", err));
 
   res.json({ message: "Subcontractor added to project" });
 });
