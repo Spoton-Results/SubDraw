@@ -11,6 +11,15 @@ export const gcContactsTable = pgTable("gc_contacts", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [unique("gc_contacts_gc_sub_unique").on(t.gcId, t.subId)]);
 
+export const preferredSubcontractorsTable = pgTable("preferred_subcontractors", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  gcId: text("gc_id").notNull().references(() => usersTable.id),
+  subId: text("sub_id").notNull().references(() => usersTable.id),
+  preferred: boolean("preferred").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [unique("preferred_subcontractors_gc_sub_unique").on(t.gcId, t.subId)]);
+
 export const subProfilesTable = pgTable("sub_profiles", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().unique().references(() => usersTable.id),
