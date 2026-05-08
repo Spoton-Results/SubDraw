@@ -23,6 +23,17 @@ function sum(values: Array<number | null | undefined>) {
   return values.reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
+function percentage(part: number, whole: number) {
+  if (!whole) return 0;
+  return Math.round((part / whole) * 100);
+}
+
+function signalStatus(value: number, goodMax: number, watchMax: number): "GOOD" | "WATCH" | "RISK" {
+  if (value <= goodMax) return "GOOD";
+  if (value <= watchMax) return "WATCH";
+  return "RISK";
+}
+
 router.get("/subcontractors", requireAuth, requireGC, async (req, res) => {
   const user = (req as any).user;
   const q = normalize(req.query.q);
@@ -198,21 +209,85 @@ router.get("/subcontractors/:subId/history", requireAuth, requireGC, async (req,
     })
     .sort((a, b) => new Date(b.invitedAt).getTime() - new Date(a.invitedAt).getTime());
 
+  const totalInvoiceCount = sum(projectHistory.map((p) => p.invoiceCount));
+  const flaggedInvoiceCount = sum(projectHistory.map((p) => p.flaggedInvoiceCount));
+  const disputedInvoiceCount = sum(projectHistory.map((p) => p.disputedInvoiceCount));
+  const rejectedInvoiceCount = sum(projectHistory.map((p) => p.rejectedInvoiceCount));
+  const completedProjects = projectHistory.filter((p) => p.projectStatus === "COMPLETE").length;
+  const awardedProjects = subcontracts.length;
+  const projectsInvited = memberships.length;
+  const repeatProjectCount = Math.max(0, awardedProjects - 1);
+  const flaggedInvoiceRate = percentage(flaggedInvoiceCount, totalInvoiceCount);
+  const disputeRate = percentage(disputedInvoiceCount, totalInvoiceCount);
+  const rejectionRate = percentage(rejectedInvoiceCount, totalInvoiceCount);
+  const awardRate = percentage(awardedProjects, projectsInvited);
+  const completionRate = percentage(completedProjects, awardedProjects);
+
+  const trustSignals = {
+    billingAccuracy: {
+      status: signalStatus(flaggedInvoiceRate + disputeRate + rejectionRate, 5, 15),
+      label: "Billing accuracy",
+      flaggedInvoiceRate,
+      flaggedInvoiceCount,
+      disputedInvoiceCount,
+      rejectedInvoiceCount,
+      invoiceCount: totalInvoiceCount,
+      explanation: `${flaggedInvoiceCount} flagged, ${disputedInvoiceCount} disputed, ${rejectedInvoiceCount} rejected out of ${totalInvoiceCount} invoices.`,
+    },
+    relationshipStability: {
+      status: completedProjects >= 3 || repeatProjectCount >= 2 ? "GOOD" : awardedProjects > 0 ? "WATCH" : "RISK",
+      label: "Relationship history",
+      projectsInvited,
+      projectsAwarded: awardedProjects,
+      completedProjects,
+      repeatProjectCount,
+      awardRate,
+      completionRate,
+      explanation: `${awardedProjects} awarded project${awardedProjects === 1 ? "" : "s"}, ${completedProjects} completed, ${repeatProjectCount} repeat relationship${repeatProjectCount === 1 ? "" : "s"}.`,
+    },
+    financialReliability: {
+      status: disputedInvoiceCount === 0 && rejectedInvoiceCount === 0 ? "GOOD" : disputedInvoiceCount + rejectedInvoiceCount <= 2 ? "WATCH" : "RISK",
+      label: "Financial reliability",
+      totalBilled: sum(projectHistory.map((p) => p.totalBilled)),
+      totalPaid: sum(projectHistory.map((p) => p.totalPaid)),
+      totalRetainageHeld: sum(projectHistory.map((p) => p.totalRetainageHeld)),
+      disputeRate,
+      rejectionRate,
+      explanation: `${disputeRate}% dispute rate and ${rejectionRate}% rejection rate across paid/billed history.`,
+    },
+    dataDepth: {
+      status: awardedProjects >= 3 || totalInvoiceCount >= 5 ? "GOOD" : projectsInvited > 0 ? "WATCH" : "RISK",
+      label: "Data depth",
+      invoiceCount: totalInvoiceCount,
+      projectsInvited,
+      projectsAwarded: awardedProjects,
+      explanation: awardedProjects > 0 || totalInvoiceCount > 0
+        ? `Based on ${projectsInvited} invite${projectsInvited === 1 ? "" : "s"}, ${awardedProjects} award${awardedProjects === 1 ? "" : "s"}, and ${totalInvoiceCount} invoice${totalInvoiceCount === 1 ? "" : "s"}.`
+        : "Not enough SubDraw history yet. Treat this as unknown, not bad.",
+    },
+  };
+
   const summary = {
-    projectsInvited: memberships.length,
-    projectsAwarded: subcontracts.length,
+    projectsInvited,
+    projectsAwarded: awardedProjects,
     activeProjects: projectHistory.filter((p) => p.projectStatus === "BIDDING" || p.projectStatus === "CONSTRUCTION").length,
-    completedProjects: projectHistory.filter((p) => p.projectStatus === "COMPLETE").length,
+    completedProjects,
     totalContracted: sum(subcontracts.map((sc) => sc.baseContractAmount)),
     totalBilled: sum(projectHistory.map((p) => p.totalBilled)),
     totalPaid: sum(projectHistory.map((p) => p.totalPaid)),
     totalRetainageHeld: sum(projectHistory.map((p) => p.totalRetainageHeld)),
-    flaggedInvoiceCount: sum(projectHistory.map((p) => p.flaggedInvoiceCount)),
-    disputedInvoiceCount: sum(projectHistory.map((p) => p.disputedInvoiceCount)),
-    rejectedInvoiceCount: sum(projectHistory.map((p) => p.rejectedInvoiceCount)),
+    flaggedInvoiceCount,
+    disputedInvoiceCount,
+    rejectedInvoiceCount,
+    invoiceCount: totalInvoiceCount,
+    flaggedInvoiceRate,
+    disputeRate,
+    rejectionRate,
+    awardRate,
+    completionRate,
   };
 
-  res.json({ sub, summary, projects: projectHistory });
+  res.json({ sub, summary, trustSignals, projects: projectHistory });
 });
 
 router.post("/subcontractors/:subId/save", requireAuth, requireGC, async (req, res) => {
