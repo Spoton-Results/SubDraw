@@ -25,6 +25,10 @@ function getAppUrl(req: any) {
   return process.env.APP_URL || `https://${req.hostname}`;
 }
 
+function stripeErrorMessage(err: any, fallback = "Stripe checkout failed") {
+  return err?.raw?.message || err?.message || err?.error?.message || fallback;
+}
+
 // ── GET /billing ─────────────────────────────────────────────────────────────
 
 router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
@@ -102,95 +106,125 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
 // ── POST /checkout (monthly) ──────────────────────────────────────────────────
 
 router.post("/checkout", requireAuth, requireGCOwner, async (req, res) => {
-  const user = (req as any).user;
-  const { planName } = req.body;
+  try {
+    const user = (req as any).user;
+    const { planName } = req.body;
 
-  if (!planName || !getPlanByName(planName)) {
-    res.status(400).json({ error: "Invalid plan name." });
-    return;
-  }
-
-  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
-  const priceId = await getOrCreatePlanPrice(planName as PlanName);
-  const stripe = await getUncachableStripeClient();
-  const appUrl = getAppUrl(req);
-
-  let customerId = dbUser?.stripeCustomerId;
-  if (customerId) {
-    try {
-      await stripe.customers.retrieve(customerId);
-    } catch {
-      customerId = null;
-      await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    if (!planName || !getPlanByName(planName)) {
+      res.status(400).json({ error: "Invalid plan name." });
+      return;
     }
-  }
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: dbUser.email,
-      name: dbUser.companyName,
-      metadata: { userId: user.id },
+
+    const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+    if (!dbUser) {
+      res.status(404).json({ error: "User record not found for checkout." });
+      return;
+    }
+
+    const priceId = await getOrCreatePlanPrice(planName as PlanName);
+    const stripe = await getUncachableStripeClient();
+    const appUrl = getAppUrl(req);
+
+    let customerId = dbUser.stripeCustomerId;
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        customerId = null;
+        await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+      }
+    }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: dbUser.email,
+        name: dbUser.companyName,
+        metadata: { userId: user.id },
+      });
+      await updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: "subscription",
+      success_url: `${appUrl}/billing?success=1`,
+      cancel_url: `${appUrl}/billing?cancelled=1`,
     });
-    await updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
-    customerId = customer.id;
+
+    if (!session.url) {
+      res.status(500).json({ error: "Stripe did not return a checkout URL." });
+      return;
+    }
+
+    res.json({ url: session.url });
+  } catch (err: any) {
+    console.error("[stripe-checkout] Error:", err);
+    res.status(500).json({ error: `Checkout setup failed: ${stripeErrorMessage(err)}` });
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    payment_method_types: ["card"],
-    line_items: [{ price: priceId, quantity: 1 }],
-    mode: "subscription",
-    success_url: `${appUrl}/billing?success=1`,
-    cancel_url: `${appUrl}/billing?cancelled=1`,
-  });
-
-  res.json({ url: session.url });
 });
 
 // ── POST /annual-checkout ────────────────────────────────────────────────────
 
 router.post("/annual-checkout", requireAuth, requireGCOwner, async (req, res) => {
-  const user = (req as any).user;
-  const { planName } = req.body;
+  try {
+    const user = (req as any).user;
+    const { planName } = req.body;
 
-  if (!planName || !getPlanByName(planName)) {
-    res.status(400).json({ error: "Invalid plan name." });
-    return;
-  }
-
-  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
-  const priceId = await getOrCreateAnnualPlanPrice(planName as PlanName);
-  const stripe = await getUncachableStripeClient();
-  const appUrl = getAppUrl(req);
-
-  let customerId = dbUser?.stripeCustomerId;
-  if (customerId) {
-    try {
-      await stripe.customers.retrieve(customerId);
-    } catch {
-      customerId = null;
-      await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+    if (!planName || !getPlanByName(planName)) {
+      res.status(400).json({ error: "Invalid plan name." });
+      return;
     }
-  }
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: dbUser.email,
-      name: dbUser.companyName,
-      metadata: { userId: user.id },
+
+    const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id));
+    if (!dbUser) {
+      res.status(404).json({ error: "User record not found for checkout." });
+      return;
+    }
+
+    const priceId = await getOrCreateAnnualPlanPrice(planName as PlanName);
+    const stripe = await getUncachableStripeClient();
+    const appUrl = getAppUrl(req);
+
+    let customerId = dbUser.stripeCustomerId;
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        customerId = null;
+        await db.update(usersTable).set({ stripeCustomerId: null, stripeSubscriptionId: null, updatedAt: new Date() }).where(eq(usersTable.id, user.id));
+      }
+    }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: dbUser.email,
+        name: dbUser.companyName,
+        metadata: { userId: user.id },
+      });
+      await updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: "subscription",
+      success_url: `${appUrl}/billing?success=1`,
+      cancel_url: `${appUrl}/billing?cancelled=1`,
     });
-    await updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
-    customerId = customer.id;
+
+    if (!session.url) {
+      res.status(500).json({ error: "Stripe did not return a checkout URL." });
+      return;
+    }
+
+    res.json({ url: session.url });
+  } catch (err: any) {
+    console.error("[stripe-annual-checkout] Error:", err);
+    res.status(500).json({ error: `Annual checkout setup failed: ${stripeErrorMessage(err)}` });
   }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    payment_method_types: ["card"],
-    line_items: [{ price: priceId, quantity: 1 }],
-    mode: "subscription",
-    success_url: `${appUrl}/billing?success=1`,
-    cancel_url: `${appUrl}/billing?cancelled=1`,
-  });
-
-  res.json({ url: session.url });
 });
 
 // ── POST /upgrade ─────────────────────────────────────────────────────────────
