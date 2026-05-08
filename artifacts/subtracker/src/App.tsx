@@ -25,6 +25,7 @@ import ResetPassword from "./pages/reset-password";
 import Account from "./pages/account";
 import Notifications from "./pages/notifications";
 import Contacts from "./pages/contacts";
+import Directory from "./pages/directory";
 import ProfileSetup from "./pages/profile-setup";
 import Billing from "./pages/billing";
 import Team from "./pages/team";
@@ -92,7 +93,6 @@ function ProtectedRoute({
   if (isLoading) return null;
   if (!user) return <RedirectTo path="/login" />;
 
-  // Paused account — show paused screen (bypass for impersonation)
   if ((user as any).paused) {
     const handleLogout = async () => {
       await fetch(`${import.meta.env.BASE_URL}api/auth/logout`, { method: "POST", credentials: "include" });
@@ -163,6 +163,7 @@ function Router() {
       <Route path="/signup" component={Register} />
       <Route path="/" component={Home} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/directory" component={() => <ProtectedRoute component={Directory} ownerOnly />} />
       <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
       <Route path="/projects/:id/bid-comparison" component={() => <ProtectedRoute component={BidComparison} gcOnly />} />
       <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
