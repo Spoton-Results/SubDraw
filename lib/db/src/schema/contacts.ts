@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, unique, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const gcContactsTable = pgTable("gc_contacts", {
@@ -17,7 +17,11 @@ export const subProfilesTable = pgTable("sub_profiles", {
   trade: text("trade").notNull(),
   phone: text("phone"),
   businessAddress: text("business_address"),
+  city: text("city"),
+  state: text("state"),
+  serviceArea: text("service_area"),
   licenseNumber: text("license_number"),
+  directoryVisible: boolean("directory_visible").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
