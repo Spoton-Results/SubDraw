@@ -42,49 +42,6 @@ router.get("/subcontractors", requireAuth, requireGC, async (req, res) => {
   const city = normalize(req.query.city);
   const preferredOnly = normalize(req.query.preferredOnly) === "true";
 
-  const filters = [
-    eq(usersTable.role, "SUB"),
-    eq(subProfilesTable.directoryVisible, true),
-  ];
-
-  if (trade) filters.push(ilike(subProfilesTable.trade, `%${trade}%`));
-  if (state) filters.push(ilike(subProfilesTable.state, state));
-  if (city) filters.push(ilike(subProfilesTable.city, `%${city}%`));
-
-  if (q) {
-    filters.push(
-      or(
-        ilike(usersTable.companyName, `%${q}%`),
-        ilike(usersTable.email, `%${q}%`),
-        ilike(subProfilesTable.trade, `%${q}%`),
-        ilike(subProfilesTable.city, `%${q}%`),
-        ilike(subProfilesTable.state, `%${q}%`),
-        ilike(subProfilesTable.serviceArea, `%${q}%`),
-        ilike(subProfilesTable.licenseNumber, `%${q}%`)
-      )!
-    );
-  }
-
-  const rows = await db
-    .select({
-      subId: usersTable.id,
-      companyName: usersTable.companyName,
-      email: usersTable.email,
-      profileId: subProfilesTable.id,
-      trade: subProfilesTable.trade,
-      phone: subProfilesTable.phone,
-      businessAddress: subProfilesTable.businessAddress,
-      city: subProfilesTable.city,
-      state: subProfilesTable.state,
-      serviceArea: subProfilesTable.serviceArea,
-      licenseNumber: subProfilesTable.licenseNumber,
-      createdAt: usersTable.createdAt,
-    })
-    .from(usersTable)
-    .innerJoin(subProfilesTable, eq(subProfilesTable.userId, usersTable.id))
-    .where(and(...filters))
-    .limit(100);
-
   const contacts = await db
     .select({ subId: gcContactsTable.subId })
     .from(gcContactsTable)
@@ -97,13 +54,62 @@ router.get("/subcontractors", requireAuth, requireGC, async (req, res) => {
     .where(and(eq(preferredSubcontractorsTable.gcId, user.id), eq(preferredSubcontractorsTable.preferred, true)));
   const preferredIds = new Set(preferredRows.map((p) => p.subId));
 
-  const mapped = rows.map((row) => ({
-    ...row,
-    savedToContacts: contactIds.has(row.subId),
-    preferred: preferredIds.has(row.subId),
-  }));
+  const subUsers = await db
+    .select({
+      subId: usersTable.id,
+      companyName: usersTable.companyName,
+      email: usersTable.email,
+      createdAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.role, "SUB"))
+    .limit(500);
 
-  res.json(preferredOnly ? mapped.filter((row) => row.preferred) : mapped);
+  const profiles = await db.select().from(subProfilesTable);
+  const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+
+  const mapped = subUsers
+    .map((sub) => {
+      const profile = profileByUserId.get(sub.subId) ?? null;
+      return {
+        subId: sub.subId,
+        companyName: sub.companyName ?? "Subcontractor",
+        email: sub.email,
+        trade: profile?.trade ?? "General",
+        phone: profile?.phone ?? null,
+        businessAddress: profile?.businessAddress ?? null,
+        city: profile?.city ?? null,
+        state: profile?.state ?? null,
+        serviceArea: profile?.serviceArea ?? null,
+        licenseNumber: profile?.licenseNumber ?? null,
+        savedToContacts: contactIds.has(sub.subId),
+        preferred: preferredIds.has(sub.subId),
+        profileComplete: Boolean(profile),
+      };
+    })
+    .filter((row) => {
+      if (preferredOnly && !row.preferred) return false;
+      if (trade && !row.trade.toLowerCase().includes(trade.toLowerCase())) return false;
+      if (state && row.state?.toUpperCase() !== state) return false;
+      if (city && !row.city?.toLowerCase().includes(city.toLowerCase())) return false;
+      if (!q) return true;
+      const haystack = [
+        row.companyName,
+        row.email,
+        row.trade,
+        row.phone,
+        row.businessAddress,
+        row.city,
+        row.state,
+        row.serviceArea,
+        row.licenseNumber,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(q.toLowerCase());
+    })
+    .sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.companyName.localeCompare(b.companyName))
+    .slice(0, 250);
+
+  res.json(mapped);
 });
 
 router.get("/subcontractors/:subId/history", requireAuth, requireGC, async (req, res) => {
