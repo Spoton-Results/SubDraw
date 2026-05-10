@@ -8,6 +8,24 @@ const COOKIE_NAME = "auth_token";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 10;
 
+function getCookieDomain(): string | undefined {
+  const configured = process.env.AUTH_COOKIE_DOMAIN?.trim();
+  if (!configured) return undefined;
+  return configured.startsWith(".") ? configured : `.${configured}`;
+}
+
+function authCookieOptions(maxAge: number) {
+  const domain = getCookieDomain();
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge,
+    path: "/",
+    ...(domain ? { domain } : {}),
+  };
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
@@ -251,8 +269,9 @@ export function setAdminCookie(res: Response, token: string): void {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 8, // 8 hours
+      maxAge: 60 * 60 * 8,
       path: "/",
+      ...(getCookieDomain() ? { domain: getCookieDomain() } : {}),
     })
   );
 }
@@ -260,7 +279,7 @@ export function setAdminCookie(res: Response, token: string): void {
 export function clearAdminCookie(res: Response): void {
   res.setHeader(
     "Set-Cookie",
-    serialize(ADMIN_COOKIE_NAME, "", { httpOnly: true, maxAge: 0, path: "/" })
+    serialize(ADMIN_COOKIE_NAME, "", { ...authCookieOptions(0), maxAge: 0 })
   );
 }
 
@@ -280,23 +299,11 @@ export function verifyToken(token: string): TokenPayload | null {
 }
 
 export function setAuthCookie(res: Response, token: string): void {
-  res.setHeader(
-    "Set-Cookie",
-    serialize(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-    })
-  );
+  res.setHeader("Set-Cookie", serialize(COOKIE_NAME, token, authCookieOptions(COOKIE_MAX_AGE)));
 }
 
 export function clearAuthCookie(res: Response): void {
-  res.setHeader(
-    "Set-Cookie",
-    serialize(COOKIE_NAME, "", { httpOnly: true, maxAge: 0, path: "/" })
-  );
+  res.setHeader("Set-Cookie", serialize(COOKIE_NAME, "", authCookieOptions(0)));
 }
 
 export function getAuthUser(req: Request): TokenPayload | null {
