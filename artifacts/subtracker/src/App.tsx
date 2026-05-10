@@ -36,6 +36,7 @@ import AdminAccountDetail from "./pages/admin-account-detail";
 import SubmittalDetail from "./pages/submittal-detail";
 import PaymentSuccess from "./pages/payment-success";
 import PaymentSetupRefresh from "./pages/payment-setup-refresh";
+import MagicLogin from "./pages/magic-login";
 import { PausedScreen } from "./components/paused-screen";
 
 export const queryClient = new QueryClient({
@@ -159,6 +160,7 @@ function Router() {
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/admin/accounts/:userId" component={AdminAccountDetail} />
       <Route path="/login" component={Login} />
+      <Route path="/magic-login" component={MagicLogin} />
       <Route path="/register" component={Register} />
       <Route path="/signup" component={Register} />
       <Route path="/" component={Home} />
