@@ -51,9 +51,14 @@ export default function Login() {
 
   React.useEffect(() => {
     if (user && !isLoading) {
+      const loggedInUser = user as any;
+      if (loggedInUser.role === "SUB") {
+        setLocation("/dashboard");
+        return;
+      }
       window.location.replace(`${BASE}dashboard`);
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, setLocation]);
 
   const finishLoginRedirect = async (fallbackUser?: unknown) => {
     if (fallbackUser) queryClient.setQueryData(getGetMeQueryKey(), fallbackUser);
@@ -74,6 +79,15 @@ export default function Login() {
     const verifiedUser = await verify.json().catch(() => null);
     if (verifiedUser) queryClient.setQueryData(getGetMeQueryKey(), verifiedUser);
     toast.success("Welcome back!");
+
+    if (verifiedUser?.role === "SUB") {
+      setLocation("/dashboard");
+      window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
+      }, 500);
+      return;
+    }
+
     window.location.replace(`${BASE}dashboard`);
   };
 
