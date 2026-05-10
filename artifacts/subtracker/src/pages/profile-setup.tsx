@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useUpsertMyProfile, getGetMeQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { HardHat, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { HardHat, Loader2, BriefcaseBusiness } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,9 +43,28 @@ interface ProfileSetupProps {
   onComplete: () => void;
 }
 
+function getBaseUrl() {
+  return import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+}
+
 export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
   const upsert = useUpsertMyProfile();
   const qc = useQueryClient();
+  const BASE_URL = getBaseUrl();
+  const inviteProjectId = typeof window !== "undefined" ? sessionStorage.getItem("subdraw_invite_project_id") : null;
+  const redirectPath = typeof window !== "undefined" ? sessionStorage.getItem("subdraw_post_login_redirect") : null;
+
+  const { data: invitedProject } = useQuery<any>({
+    queryKey: ["profile-setup-invite-project", inviteProjectId],
+    queryFn: async () => {
+      if (!inviteProjectId) return null;
+      const res = await fetch(`${BASE_URL}/api/projects/${inviteProjectId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!inviteProjectId,
+    staleTime: 30_000,
+  });
 
   const [trade, setTrade] = React.useState("");
   const [phone, setPhone] = React.useState("");
@@ -57,8 +76,14 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
     if (!trade) { toast.error("Please select your trade"); return; }
     try {
       await upsert.mutateAsync({ data: { trade, phone: phone || undefined, businessAddress: businessAddress || undefined, licenseNumber: licenseNumber || undefined } });
-      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast.success("Profile saved!");
+      if (redirectPath) {
+        sessionStorage.removeItem("subdraw_invite_project_id");
+        sessionStorage.removeItem("subdraw_post_login_redirect");
+        window.location.replace(`${import.meta.env.BASE_URL}${redirectPath.replace(/^\//, "")}`);
+        return;
+      }
       onComplete();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to save profile");
@@ -76,6 +101,22 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
           <h1 className="text-xl font-bold mb-1">Set up your trade profile</h1>
           <p className="text-sm text-muted-foreground">Help GCs find you by completing your profile before continuing.</p>
         </div>
+
+        {invitedProject ? (
+          <div className="bg-primary/10 border border-primary/20 rounded-2xl p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                <BriefcaseBusiness className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-primary uppercase tracking-wide">Project Invite</p>
+                <p className="font-bold text-foreground mt-0.5">{invitedProject.name}</p>
+                {invitedProject.address ? <p className="text-sm text-muted-foreground mt-0.5">{invitedProject.address}</p> : null}
+                <p className="text-xs text-muted-foreground mt-2">Complete your profile to continue into this project.</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="bg-card border border-border rounded-2xl shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -110,7 +151,7 @@ export default function ProfileSetup({ onComplete }: ProfileSetupProps) {
 
             <Button type="submit" className="w-full" disabled={upsert.isPending}>
               {upsert.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Profile & Continue
+              {redirectPath ? "Save Profile & Open Project" : "Save Profile & Continue"}
             </Button>
           </form>
         </div>
