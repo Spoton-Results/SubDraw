@@ -10,13 +10,76 @@ import {
   subcontractsTable,
   usersTable,
 } from "@workspace/db/schema";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
 
 const router = Router();
 
+let directorySchemaReady: Promise<void> | null = null;
+
 function normalize(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function ensureDirectorySchema() {
+  if (!directorySchemaReady) {
+    directorySchemaReady = (async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS gc_contacts (
+          id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          gc_id text NOT NULL REFERENCES users(id),
+          sub_id text NOT NULL REFERENCES users(id),
+          contact_name text,
+          note text,
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now(),
+          CONSTRAINT gc_contacts_gc_sub_unique UNIQUE (gc_id, sub_id)
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS preferred_subcontractors (
+          id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          gc_id text NOT NULL REFERENCES users(id),
+          sub_id text NOT NULL REFERENCES users(id),
+          preferred boolean NOT NULL DEFAULT true,
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now(),
+          CONSTRAINT preferred_subcontractors_gc_sub_unique UNIQUE (gc_id, sub_id)
+        )
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS sub_profiles (
+          id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          user_id text NOT NULL UNIQUE REFERENCES users(id),
+          trade text NOT NULL DEFAULT 'General',
+          phone text,
+          business_address text,
+          city text,
+          state text,
+          service_area text,
+          license_number text,
+          directory_visible boolean NOT NULL DEFAULT true,
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS trade text NOT NULL DEFAULT 'General'`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS phone text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS business_address text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS city text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS state text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS service_area text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS license_number text`);
+      await db.execute(sql`ALTER TABLE sub_profiles ADD COLUMN IF NOT EXISTS directory_visible boolean NOT NULL DEFAULT true`);
+      await db.execute(sql`ALTER TABLE gc_contacts ADD COLUMN IF NOT EXISTS contact_name text`);
+      await db.execute(sql`ALTER TABLE gc_contacts ADD COLUMN IF NOT EXISTS note text`);
+      await db.execute(sql`ALTER TABLE preferred_subcontractors ADD COLUMN IF NOT EXISTS preferred boolean NOT NULL DEFAULT true`);
+    })().catch((err) => {
+      directorySchemaReady = null;
+      throw err;
+    });
+  }
+  await directorySchemaReady;
 }
 
 function sum(values: Array<number | null | undefined>) {
@@ -35,6 +98,7 @@ function signalStatus(value: number, goodMax: number, watchMax: number): "GOOD" 
 }
 
 router.get("/subcontractors", requireAuth, requireGC, async (req, res) => {
+  await ensureDirectorySchema();
   const user = (req as any).user;
   const q = normalize(req.query.q);
   const trade = normalize(req.query.trade);
@@ -113,6 +177,7 @@ router.get("/subcontractors", requireAuth, requireGC, async (req, res) => {
 });
 
 router.get("/subcontractors/:subId/history", requireAuth, requireGC, async (req, res) => {
+  await ensureDirectorySchema();
   const user = (req as any).user;
   const { subId } = req.params;
 
@@ -297,6 +362,7 @@ router.get("/subcontractors/:subId/history", requireAuth, requireGC, async (req,
 });
 
 router.post("/subcontractors/:subId/save", requireAuth, requireGC, async (req, res) => {
+  await ensureDirectorySchema();
   const user = (req as any).user;
   const { subId } = req.params;
 
@@ -320,6 +386,7 @@ router.post("/subcontractors/:subId/save", requireAuth, requireGC, async (req, r
 });
 
 router.post("/subcontractors/:subId/preferred", requireAuth, requireGC, async (req, res) => {
+  await ensureDirectorySchema();
   const user = (req as any).user;
   const { subId } = req.params;
 
@@ -351,6 +418,7 @@ router.post("/subcontractors/:subId/preferred", requireAuth, requireGC, async (r
 });
 
 router.delete("/subcontractors/:subId/preferred", requireAuth, requireGC, async (req, res) => {
+  await ensureDirectorySchema();
   const user = (req as any).user;
   const { subId } = req.params;
 
