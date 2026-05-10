@@ -61,7 +61,18 @@ export default function Login() {
   }, [user, isLoading, setLocation]);
 
   const finishLoginRedirect = async (fallbackUser?: unknown) => {
-    if (fallbackUser) queryClient.setQueryData(getGetMeQueryKey(), fallbackUser);
+    const loginUser = fallbackUser as any;
+    if (loginUser) queryClient.setQueryData(getGetMeQueryKey(), loginUser);
+
+    if (loginUser?.role === "SUB") {
+      toast.success("Welcome back!");
+      setLocation("/dashboard");
+      window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
+      }, 500);
+      return;
+    }
+
     await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
 
     const verify = await fetch(`${BASE}api/auth/me`, {
