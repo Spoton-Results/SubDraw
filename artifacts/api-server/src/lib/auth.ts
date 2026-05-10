@@ -14,8 +14,8 @@ function getCookieDomain(): string | undefined {
   return configured.startsWith(".") ? configured : `.${configured}`;
 }
 
-function authCookieOptions(maxAge: number) {
-  const domain = getCookieDomain();
+function authCookieOptions(maxAge: number, includeDomain = true) {
+  const domain = includeDomain ? getCookieDomain() : undefined;
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -24,6 +24,14 @@ function authCookieOptions(maxAge: number) {
     path: "/",
     ...(domain ? { domain } : {}),
   };
+}
+
+function setCookieWithFallback(res: Response, name: string, value: string, maxAge: number) {
+  const cookies = [serialize(name, value, authCookieOptions(maxAge, false))];
+  if (getCookieDomain()) {
+    cookies.push(serialize(name, value, authCookieOptions(maxAge, true)));
+  }
+  res.setHeader("Set-Cookie", cookies);
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -263,24 +271,11 @@ export function verifyAdminToken(token: string): AdminTokenPayload | null {
 }
 
 export function setAdminCookie(res: Response, token: string): void {
-  res.setHeader(
-    "Set-Cookie",
-    serialize(ADMIN_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 8,
-      path: "/",
-      ...(getCookieDomain() ? { domain: getCookieDomain() } : {}),
-    })
-  );
+  setCookieWithFallback(res, ADMIN_COOKIE_NAME, token, 60 * 60 * 8);
 }
 
 export function clearAdminCookie(res: Response): void {
-  res.setHeader(
-    "Set-Cookie",
-    serialize(ADMIN_COOKIE_NAME, "", { ...authCookieOptions(0), maxAge: 0 })
-  );
+  setCookieWithFallback(res, ADMIN_COOKIE_NAME, "", 0);
 }
 
 export function getAdminUser(req: Request): AdminTokenPayload | null {
@@ -299,11 +294,11 @@ export function verifyToken(token: string): TokenPayload | null {
 }
 
 export function setAuthCookie(res: Response, token: string): void {
-  res.setHeader("Set-Cookie", serialize(COOKIE_NAME, token, authCookieOptions(COOKIE_MAX_AGE)));
+  setCookieWithFallback(res, COOKIE_NAME, token, COOKIE_MAX_AGE);
 }
 
 export function clearAuthCookie(res: Response): void {
-  res.setHeader("Set-Cookie", serialize(COOKIE_NAME, "", authCookieOptions(0)));
+  setCookieWithFallback(res, COOKIE_NAME, "", 0);
 }
 
 export function getAuthUser(req: Request): TokenPayload | null {
