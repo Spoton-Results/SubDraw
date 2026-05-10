@@ -13,7 +13,9 @@ export default function MagicLogin() {
   const BASE = getBaseUrl();
 
   React.useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    const projectId = params.get("projectId");
     if (!token) {
       setError("This invite link is missing its login token.");
       return;
@@ -23,8 +25,10 @@ export default function MagicLogin() {
 
     async function run() {
       try {
-        // Move through the backend verifier from a real browser page, not directly
-        // from the email client. This avoids many email-app/security-scanner issues.
+        if (projectId) {
+          sessionStorage.setItem("subdraw_invite_project_id", projectId);
+          sessionStorage.setItem("subdraw_post_login_redirect", `/projects/${projectId}`);
+        }
         window.location.replace(`${BASE}api/auth/magic-link/verify?token=${encodeURIComponent(token!)}`);
       } catch {
         if (!cancelled) setError("This invite link could not be opened. Please request a new invite link.");
