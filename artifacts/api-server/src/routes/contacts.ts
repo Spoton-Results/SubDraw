@@ -27,7 +27,7 @@ async function createMagicLoginUrl(userId: string, appUrl: string) {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
   await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
-  return `${appUrl}/api/auth/magic-link/verify?token=${token}`;
+  return `${appUrl}/magic-login?token=${token}`;
 }
 
 async function buildContact(contact: any, gcId: string) {
