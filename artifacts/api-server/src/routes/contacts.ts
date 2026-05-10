@@ -1,13 +1,34 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, projectsTable, tradeScopesTable } from "@workspace/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { gcContactsTable, subProfilesTable, usersTable, projectMembersTable, projectsTable, tradeScopesTable, magicLinkTokensTable } from "@workspace/db/schema";
+import { eq, and, inArray, isNull, lt } from "drizzle-orm";
 import { requireAuth, requireGC } from "../middlewares/requireAuth.js";
-import { sendAddedToProjectEmail } from "../lib/email.js";
+import { sendAddedToProjectEmail, sendInviteEmail } from "../lib/email.js";
 import { createNotification } from "./notifications.js";
 import crypto from "crypto";
 
 const router = Router();
+
+function getAppUrl(req: any) {
+  return process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+}
+
+async function createMagicLoginUrl(userId: string, appUrl: string) {
+  await db
+    .delete(magicLinkTokensTable)
+    .where(
+      and(
+        eq(magicLinkTokensTable.userId, userId),
+        isNull(magicLinkTokensTable.usedAt),
+        lt(magicLinkTokensTable.expiresAt, new Date())
+      )
+    );
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
+  return `${appUrl}/api/auth/magic-link/verify?token=${token}`;
+}
 
 async function buildContact(contact: any, gcId: string) {
   const [sub] = await db
@@ -200,16 +221,18 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     tradeScope = scope?.description ?? null;
   }
 
-  const appUrl = `${req.protocol}://${req.get("host")}`;
-  sendAddedToProjectEmail({
+  const appUrl = getAppUrl(req);
+  const magicUrl = await createMagicLoginUrl(sub.id, appUrl);
+
+  sendInviteEmail({
     toEmail: sub.email,
-    subCompanyName: sub.companyName,
     projectName: project.name,
+    magicUrl,
     appUrl,
     tradeCategory: effectiveTrade,
     tradeScope,
     isConstructionPhase: project.status === "CONSTRUCTION",
-  }).catch((err) => console.error("[email] sendAddedToProjectEmail failed:", err));
+  }).catch((err) => console.error("[email] sendInviteEmail failed:", err));
 
   createNotification({
     userId: sub.id,
@@ -220,7 +243,7 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
     data: { projectId: project.id, tradeCategory: effectiveTrade ?? "" },
   }).catch((err) => console.error("[notification] project invite failed:", err));
 
-  res.json({ message: "Subcontractor added to project" });
+  res.json({ message: "Subcontractor added to project", emailQueued: true });
 });
 
 export default router;
