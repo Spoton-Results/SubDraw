@@ -265,20 +265,17 @@ router.get("/magic-link/verify", async (req, res) => {
     return;
   }
 
-  if (record.usedAt) {
-    res.redirect(`${appUrl}/login?error=link_used`);
-    return;
-  }
-
   if (record.expiresAt < new Date()) {
     res.redirect(`${appUrl}/login?error=link_expired`);
     return;
   }
 
-  await db
-    .update(magicLinkTokensTable)
-    .set({ usedAt: new Date() })
-    .where(eq(magicLinkTokensTable.id, record.id));
+  if (!record.usedAt) {
+    await db
+      .update(magicLinkTokensTable)
+      .set({ usedAt: new Date() })
+      .where(eq(magicLinkTokensTable.id, record.id));
+  }
 
   const [user] = await db
     .select()
