@@ -191,6 +191,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </Link>
   );
 
+  const mobileNavItem = (href: string, icon: React.ReactNode, label: string) => (
+    <Link
+      href={href}
+      className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2 px-1 text-[11px] font-medium transition-colors min-h-[56px] ${
+        isActive(href) ? "text-primary" : "text-muted-foreground"
+      }`}
+    >
+      {icon}
+      <span className="leading-none text-center max-w-full break-words">{label}</span>
+    </Link>
+  );
+
   const roleLabel = roleMeta?.label ?? (user.role === "GC" ? "GC" : "SUB");
 
   const isDemoUser = (user as any).isDemo === true;
@@ -218,7 +230,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <DemoWalkthroughProvider isDemoGC={isDemoGC}>
-    <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full">
+    <div className="min-h-screen bg-secondary/30 flex overflow-x-hidden w-full max-w-full">
       <aside className="w-64 bg-card border-r border-border flex flex-col shadow-sm hidden md:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold font-display text-primary">
@@ -276,14 +288,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <header className="h-16 bg-card border-b border-border flex items-center px-4 md:px-8 shadow-sm justify-between">
-          <div className="md:hidden flex items-center gap-2">
-            <HardHat className="h-6 w-6 text-primary" />
-            <span className="font-bold font-display">SubDraw</span>
+      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden max-w-full">
+        <header className="h-16 bg-card border-b border-border flex items-center px-4 md:px-8 shadow-sm justify-between shrink-0">
+          <div className="md:hidden flex items-center gap-2 min-w-0">
+            <HardHat className="h-6 w-6 text-primary shrink-0" />
+            <span className="font-bold font-display truncate">SubDraw</span>
           </div>
           <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {isDemoUser && (
               <button
                 onClick={handleSwitchDemo}
@@ -384,74 +396,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
         <DemoProgressBar />
-        <div className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
-          <div className="max-w-6xl mx-auto">
+        <div className="flex-1 overflow-auto overflow-x-hidden p-4 md:p-8 pb-24 md:pb-8 max-w-full">
+          <div className="max-w-6xl mx-auto w-full min-w-0">
             {children}
           </div>
         </div>
       </main>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex items-stretch shadow-lg overflow-x-auto">
-        <Link
-          href="/dashboard"
-          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-            isActive("/dashboard") ? "text-primary" : "text-muted-foreground"
-          }`}
-        >
-          <LayoutDashboard className={`h-5 w-5 ${isActive("/dashboard") ? "text-primary" : ""}`} />
-          Projects
-        </Link>
-        {perms.isOwner && (
-          <Link
-            href="/directory"
-            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-              isActive("/directory") ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            <Search className={`h-5 w-5 ${isActive("/directory") ? "text-primary" : ""}`} />
-            Directory
-          </Link>
-        )}
-        {perms.isOwner && (
-          <Link
-            href="/contacts"
-            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-              isActive("/contacts") ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            <BookUser className={`h-5 w-5 ${isActive("/contacts") ? "text-primary" : ""}`} />
-            Contacts
-          </Link>
-        )}
-        {perms.canManageTeam && (
-          <Link
-            href="/team"
-            className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-              isActive("/team") ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            <Users className={`h-5 w-5 ${isActive("/team") ? "text-primary" : ""}`} />
-            Team
-          </Link>
-        )}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border grid shadow-lg overflow-hidden" style={{ gridTemplateColumns: `repeat(${3 + (perms.isOwner ? 2 : 0) + (perms.canManageTeam ? 1 : 0)}, minmax(0, 1fr))` }}>
+        {mobileNavItem("/dashboard", <LayoutDashboard className={`h-5 w-5 ${isActive("/dashboard") ? "text-primary" : ""}`} />, "Projects")}
+        {perms.isOwner && mobileNavItem("/directory", <Search className={`h-5 w-5 ${isActive("/directory") ? "text-primary" : ""}`} />, "Directory")}
+        {perms.isOwner && mobileNavItem("/contacts", <BookUser className={`h-5 w-5 ${isActive("/contacts") ? "text-primary" : ""}`} />, "Contacts")}
+        {perms.canManageTeam && mobileNavItem("/team", <Users className={`h-5 w-5 ${isActive("/team") ? "text-primary" : ""}`} />, "Team")}
         <button
           onClick={isDemoUser ? handleSwitchDemo : handleLogout}
-          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 py-2 px-1 text-[11px] font-medium transition-colors min-h-[56px] ${
             isDemoUser ? "text-primary" : "text-muted-foreground"
           }`}
         >
           {isDemoUser ? <FlaskConical className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
-          {isDemoUser ? "Switch" : "Logout"}
+          <span className="leading-none text-center">{isDemoUser ? "Switch" : "Logout"}</span>
         </button>
-        <Link
-          href="/account"
-          className={`flex-1 min-w-[68px] flex flex-col items-center justify-center gap-1 py-2 text-xs font-medium transition-colors min-h-[56px] ${
-            isActive("/account") ? "text-primary" : "text-muted-foreground"
-          }`}
-        >
-          <Settings className={`h-5 w-5 ${isActive("/account") ? "text-primary" : ""}`} />
-          Account
-        </Link>
+        {mobileNavItem("/account", <Settings className={`h-5 w-5 ${isActive("/account") ? "text-primary" : ""}`} />, "Account")}
       </nav>
       <DemoWalkthroughOverlay />
 
