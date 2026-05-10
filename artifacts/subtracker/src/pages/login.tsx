@@ -122,7 +122,10 @@ export default function Login() {
       if (body?.user) queryClient.setQueryData(getGetMeQueryKey(), body.user);
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
       didNavigate = true;
-      window.location.replace(`${BASE}dashboard`);
+      setLocation("/dashboard");
+      window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
+      }, 500);
     } catch (err: any) {
       console.error("[demo-login] fetch error:", err?.message);
       toast.error("Demo login failed. Check your connection and try again.");
