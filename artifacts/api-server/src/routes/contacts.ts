@@ -13,7 +13,7 @@ function getAppUrl(req: any) {
   return process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
 }
 
-async function createMagicLoginUrl(userId: string, appUrl: string) {
+async function createMagicLoginUrl(userId: string, appUrl: string, projectId?: string | null) {
   await db
     .delete(magicLinkTokensTable)
     .where(
@@ -27,7 +27,9 @@ async function createMagicLoginUrl(userId: string, appUrl: string) {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
   await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
-  return `${appUrl}/magic-login?token=${token}`;
+  const params = new URLSearchParams({ token });
+  if (projectId) params.set("projectId", projectId);
+  return `${appUrl}/magic-login?${params.toString()}`;
 }
 
 async function buildContact(contact: any, gcId: string) {
@@ -222,7 +224,7 @@ router.post("/:subId/invite/:projectId", requireAuth, requireGC, async (req, res
   }
 
   const appUrl = getAppUrl(req);
-  const magicUrl = await createMagicLoginUrl(sub.id, appUrl);
+  const magicUrl = await createMagicLoginUrl(sub.id, appUrl, project.id);
 
   sendInviteEmail({
     toEmail: sub.email,
