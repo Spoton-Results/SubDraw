@@ -50,15 +50,37 @@ export default function Login() {
   }, [search]);
 
   React.useEffect(() => {
-    if (user && !isLoading) setLocation("/dashboard");
-  }, [user, isLoading, setLocation]);
+    if (user && !isLoading) {
+      window.location.replace(`${BASE}dashboard`);
+    }
+  }, [user, isLoading]);
+
+  const finishLoginRedirect = async (fallbackUser?: unknown) => {
+    if (fallbackUser) queryClient.setQueryData(getGetMeQueryKey(), fallbackUser);
+    await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+
+    const verify = await fetch(`${BASE}api/auth/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: { "Accept": "application/json" },
+      cache: "no-store",
+    });
+
+    if (!verify.ok) {
+      toast.error("Login was accepted, but this browser did not keep the session. Try the email login link or clear site data for subdraw.com.");
+      return;
+    }
+
+    const verifiedUser = await verify.json().catch(() => null);
+    if (verifiedUser) queryClient.setQueryData(getGetMeQueryKey(), verifiedUser);
+    toast.success("Welcome back!");
+    window.location.replace(`${BASE}dashboard`);
+  };
 
   const onSubmit = async (data: LoginForm) => {
     try {
-      await login.mutateAsync({ data });
-      await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-      toast.success("Welcome back!");
-      setLocation("/dashboard");
+      const response = await login.mutateAsync({ data });
+      await finishLoginRedirect(response?.user);
     } catch (e: any) {
       toast.error(e?.data?.error || e?.message || "Login failed");
     }
@@ -100,10 +122,7 @@ export default function Login() {
       if (body?.user) queryClient.setQueryData(getGetMeQueryKey(), body.user);
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
       didNavigate = true;
-      setLocation("/dashboard");
-      window.setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
-      }, 500);
+      window.location.replace(`${BASE}dashboard`);
     } catch (err: any) {
       console.error("[demo-login] fetch error:", err?.message);
       toast.error("Demo login failed. Check your connection and try again.");
