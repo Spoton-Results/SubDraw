@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useLocation } from "wouter";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "../App";
@@ -9,6 +10,7 @@ function getBaseUrl() {
 }
 
 export default function MagicLogin() {
+  const [, setLocation] = useLocation();
   const [error, setError] = React.useState<string | null>(null);
   const BASE = getBaseUrl();
 
@@ -16,6 +18,7 @@ export default function MagicLogin() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     const projectId = params.get("projectId");
+
     if (!token) {
       setError("This invite link is missing its login token.");
       return;
@@ -29,19 +32,72 @@ export default function MagicLogin() {
           sessionStorage.setItem("subdraw_invite_project_id", projectId);
           sessionStorage.setItem("subdraw_post_login_redirect", `/projects/${projectId}`);
         }
-        window.location.replace(`${BASE}api/auth/magic-link/verify?token=${encodeURIComponent(token!)}`);
+
+        // Use fetch() so the browser keeps the React app alive (no full page reload).
+        // The server sets the session cookie on this response.
+        const res = await fetch(
+          `${BASE}api/auth/magic-link/verify?token=${encodeURIComponent(token!)}`,
+          {
+            method: "GET",
+            credentials: "include",
+            redirect: "manual", // don't follow server redirect — we handle navigation
+          }
+        );
+
+        if (cancelled) return;
+
+        // Any 2xx or 3xx means the server accepted the token and set the cookie.
+        // Now fetch the user so we can pre-seed the query cache.
+        if (res.ok || res.status === 0 || (res.status >= 300 && res.status < 400)) {
+          // Fetch the current user to warm the cache before navigating
+          const meRes = await fetch(`${BASE}api/auth/me`, {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          });
+
+          if (cancelled) return;
+
+          if (meRes.ok) {
+            const userData = await meRes.json().catch(() => null);
+            if (userData) {
+              queryClient.setQueryData(getGetMeQueryKey(), userData);
+            }
+            // Navigate inside React — no hard reload, no blank screen
+            const redirect = projectId
+              ? `/projects/${projectId}`
+              : "/dashboard";
+            setLocation(redirect);
+          } else {
+            // Cookie didn't stick — fall back to hard redirect so server can handle it
+            window.location.replace(
+              `${BASE}api/auth/magic-link/verify?token=${encodeURIComponent(token!)}`
+            );
+          }
+        } else {
+          // Token rejected by server
+          const body = await res.json().catch(() => null);
+          const msg = body?.error || "This login link is invalid or has expired.";
+          if (!cancelled) setError(msg);
+        }
       } catch {
-        if (!cancelled) setError("This invite link could not be opened. Please request a new invite link.");
+        // Network error or fetch blocked — fall back to hard redirect
+        if (!cancelled) {
+          window.location.replace(
+            `${BASE}api/auth/magic-link/verify?token=${encodeURIComponent(token!)}`
+          );
+        }
       }
     }
 
+    // Clear any stale session before verifying
     queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
     run();
 
     return () => {
       cancelled = true;
     };
-  }, [BASE]);
+  }, [BASE, setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
