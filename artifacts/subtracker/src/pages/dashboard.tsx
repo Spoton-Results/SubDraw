@@ -873,12 +873,7 @@ export default function Dashboard() {
       )}
 
       {/* SUB: Quick Actions + My Subcontracts */}
-      {!isGC && (
-        <SubQuickActions
-          subcontracts={subContractList}
-          pendingCOCount={pendingCOCount}
-        />
-      )}
+
 
       {/* Trial countdown banner — only when trial is active and no paid plan */}
       {isGC && subStatus?.trialActive && !subStatus?.planName && (
