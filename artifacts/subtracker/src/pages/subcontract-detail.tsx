@@ -3042,6 +3042,11 @@ export default function SubcontractDetail() {
                 <PlusCircle className="h-4 w-4" /> Create CO
               </Button>
             )}
+            {isSub && (
+              <Button size="sm" variant="outline" onClick={() => setCoDialogOpen(true)} className="gap-1 min-h-[44px]">
+                <PlusCircle className="h-4 w-4" /> Request CO
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-0 overflow-auto flex-1">
             {sub.changeOrders.length === 0 ? (
