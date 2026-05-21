@@ -63,14 +63,15 @@ export default function Login() {
     const loginUser = fallbackUser as any;
     // Mark redirect as in-progress so the useEffect above won't double-fire
     didRedirect.current = true;
+    // Seed the cache with the returned user so ProtectedRoute never sees undefined
     if (loginUser) queryClient.setQueryData(getGetMeQueryKey(), loginUser);
 
     toast.success("Welcome back!");
     setLocation("/dashboard");
-    // Refresh session data in the background after navigation
-    window.setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
-    }, 500);
+    // NOTE: intentionally NOT calling invalidateQueries here.
+    // setQueryData above already provides fresh user data to the cache.
+    // Invalidating would briefly null the cache while re-fetching, which
+    // causes ProtectedRoute to redirect back to /login (the blank screen bug).
   };
 
   const onSubmit = async (data: LoginForm) => {
@@ -120,9 +121,7 @@ export default function Login() {
       didNavigate = true;
       didRedirect.current = true;
       setLocation("/dashboard");
-      window.setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
-      }, 500);
+      // NOTE: no invalidateQueries — setQueryData above is sufficient
     } catch (err: any) {
       console.error("[demo-login] fetch error:", err?.message);
       toast.error("Demo login failed. Check your connection and try again.");

@@ -116,9 +116,13 @@ function ProtectedRoute({
   gcOnly?: boolean;
   ownerOnly?: boolean;
 }) {
-  const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
+  const { data: user, isLoading, isFetching } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
 
-  if (isLoading) return <AuthLoading />;
+  // Show spinner while loading OR while re-fetching with no cached user.
+  // Without this, invalidateQueries briefly sets user=undefined which
+  // triggers the redirect-to-login and causes the GC blank screen.
+  if (isLoading || (!user && isFetching)) return <AuthLoading />;
+
   if (!user) return <RedirectTo path="/login" />;
 
   if ((user as any).paused) {
