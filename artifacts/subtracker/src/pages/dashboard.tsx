@@ -213,7 +213,7 @@ function SubQuickActions({
   subcontracts,
   pendingCOCount,
 }: {
-  subcontracts: { id: string; projectName: string; gcCompanyName: string }[];
+  subcontracts: { id: string; projectName: string; gcCompanyName: string; status: string; contractValue: number | null }[];
   pendingCOCount: number;
 }) {
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -275,8 +275,22 @@ function SubQuickActions({
     }
   };
 
+  const getSubStatusBadge = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200 dark:border-green-800">Active</span>;
+      case "PENDING":
+        return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Pending</span>;
+      case "COMPLETE":
+        return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">Complete</span>;
+      default:
+        return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">{status}</span>;
+    }
+  };
+
   return (
     <>
+      {/* Quick Actions bar */}
       <div className="mb-6 rounded-2xl border border-border bg-card p-4">
         <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
@@ -293,14 +307,6 @@ function SubQuickActions({
             </Button>
           </Link>
 
-          {/* Submit Invoice — navigates to subcontracts list */}
-          <Link href="/subcontracts">
-            <Button variant="outline" className="gap-2 min-h-[44px]">
-              <Receipt className="h-4 w-4" />
-              Submit Invoice
-            </Button>
-          </Link>
-
           {/* Upload Submittal */}
           <Button
             variant="outline"
@@ -312,6 +318,48 @@ function SubQuickActions({
           </Button>
         </div>
       </div>
+
+      {/* My Subcontracts section */}
+      {subcontracts.length > 0 && (
+        <div className="mb-8" id="my-subcontracts">
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+              <FileSignature className="h-4 w-4 text-muted-foreground" />
+              My Subcontracts
+            </h2>
+            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold leading-none">
+              {subcontracts.length}
+            </span>
+          </div>
+          <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+            {subcontracts.map((s, idx) => (
+              <Link key={s.id} href={`/subcontracts/${s.id}`}>
+                <div className={cn(
+                  "flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-muted/40",
+                  idx < subcontracts.length - 1 && "border-b border-border/50"
+                )}>
+                  <div className="bg-primary/10 rounded-lg p-2 shrink-0">
+                    <Receipt className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{s.projectName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{s.gcCompanyName}</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {s.contractValue !== null && (
+                      <span className="text-sm font-mono font-semibold text-foreground hidden sm:block">
+                        {formatCurrency(s.contractValue)}
+                      </span>
+                    )}
+                    {getSubStatusBadge(s.status)}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upload Submittal Dialog */}
       <Dialog
@@ -494,8 +542,8 @@ export default function Dashboard() {
     refetchOnMount: "always",
   });
 
-  // Build subcontract list for Upload Submittal dialog
-  type SubQuickSub = { id: string; projectName: string; gcCompanyName: string };
+  // Build subcontract list — now includes status + contractValue for the My Subcontracts section
+  type SubQuickSub = { id: string; projectName: string; gcCompanyName: string; status: string; contractValue: number | null };
   const { data: subContractList = [] } = useQuery<SubQuickSub[]>({
     queryKey: ["sub-contract-list-quick"],
     queryFn: async () => {
@@ -506,6 +554,8 @@ export default function Dashboard() {
         id: s.id,
         projectName: s.project?.name ?? "Unknown Project",
         gcCompanyName: s.gc?.companyName ?? "GC",
+        status: s.status ?? "ACTIVE",
+        contractValue: s.contractValue ?? null,
       }));
     },
     enabled: !isGC,
@@ -822,7 +872,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* SUB: Quick Actions (Change Orders + Submit Invoice + Upload Submittal) */}
+      {/* SUB: Quick Actions + My Subcontracts */}
       {!isGC && (
         <SubQuickActions
           subcontracts={subContractList}
@@ -1050,7 +1100,7 @@ export default function Dashboard() {
                     <div className="font-mono text-xl font-bold text-foreground">{formatCurrency(inv.amount)}</div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{inv.projectName}</span>
-                      <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{inv.subCompanyName}</span>
+                      <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{inv.gcCompanyName}</span>
                       <span className="flex items-center gap-1"><Receipt className="h-3.5 w-3.5" />{format(new Date(inv.updatedAt), "MMM d, yyyy")}</span>
                     </div>
                     {inv.disputeReason && (
@@ -1467,33 +1517,37 @@ export default function Dashboard() {
                             variant={alreadyMember ? "outline" : "default"}
                             disabled={alreadyMember || addSubLoading}
                             onClick={() => !alreadyMember && handleAddSubContactSelect(contact.subId, contact.sub.companyName)}
+                            className="min-h-[44px] shrink-0"
                           >
-                            {alreadyMember ? "Invited" : "Invite to Bid"}
+                            {alreadyMember ? "Already added" : addSubLoading ? "Adding…" : "Add to Project"}
                           </Button>
                         </div>
                       );
                     })
                   }
                 </div>
-                <div className="flex justify-between pt-1">
-                  <Button type="button" variant="ghost" onClick={() => setAddSubStep("project")}>← Back</Button>
-                  <Button type="button" variant="ghost" onClick={handleAddSubClose}>Cancel</Button>
+                <div className="flex justify-start pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setAddSubStep("project")} className="gap-1 text-muted-foreground">
+                    ← Back
+                  </Button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleAddSubNewNext} className="space-y-4">
+              <form onSubmit={handleAddSubNewNext} className="space-y-3">
                 <div>
-                  <label className="text-sm font-semibold mb-1 block">Email Address</label>
-                  <Input type="email" required placeholder="sub@example.com" value={addSubEmail} onChange={e => setAddSubEmail(e.target.value)} />
+                  <label className="text-sm font-semibold mb-1 block">Company Name *</label>
+                  <Input placeholder="e.g. Apex Electrical" value={addSubCompanyName} onChange={e => setAddSubCompanyName(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold mb-1 block">Company Name</label>
-                  <Input type="text" required placeholder="ABC Electric LLC" value={addSubCompanyName} onChange={e => setAddSubCompanyName(e.target.value)} />
+                  <label className="text-sm font-semibold mb-1 block">Email *</label>
+                  <Input type="email" placeholder="sub@example.com" value={addSubEmail} onChange={e => setAddSubEmail(e.target.value)} required />
                 </div>
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
-                  <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setAddSubStep("project")}>← Back</Button>
-                  <Button type="submit" isLoading={addSubLoading} className="min-h-[44px]">
-                    Send Invitation
+                <div className="flex gap-3 justify-between pt-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setAddSubStep("project")} className="gap-1 text-muted-foreground">
+                    ← Back
+                  </Button>
+                  <Button type="submit" className="min-h-[44px] gap-2" isLoading={addSubLoading}>
+                    <Mail className="h-4 w-4" /> Send Invitation
                   </Button>
                 </div>
               </form>
@@ -1502,91 +1556,63 @@ export default function Dashboard() {
         )}
       </Dialog>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen} title="Create New Project" description="Add details about your project. Only the name is required.">
-        <form onSubmit={handleCreate} className="space-y-4 mt-2">
+      {isDemoGC && (
+        <DemoGateModal
+          open={showGate}
+          onComplete={handleGateComplete}
+          onSkip={handleGateSkip}
+        />
+      )}
+
+      {/* Create Project Dialog */}
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        title="Create New Project"
+        description="Add a new project to start inviting subcontractors."
+      >
+        <form onSubmit={handleCreate} className="mt-4 space-y-4">
           <div>
             <label className="text-sm font-semibold mb-1 block">Project Name *</label>
-            <Input
-              autoFocus
-              required
-              placeholder="e.g. Downtown Office Renovation"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-            />
+            <Input placeholder="e.g. Downtown Office Renovation" value={newName} onChange={e => setNewName(e.target.value)} required />
           </div>
           <div>
-            <label className="text-sm font-semibold mb-1 block">Full Address</label>
-            <Input
-              placeholder="e.g. 123 Main St, Chicago, IL 60601"
-              value={newAddress}
-              onChange={e => setNewAddress(e.target.value)}
-            />
+            <label className="text-sm font-semibold mb-1 block">Address <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <Input placeholder="123 Main St, City, State" value={newAddress} onChange={e => setNewAddress(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm font-semibold mb-1 block">Project Description</label>
+            <label className="text-sm font-semibold mb-1 block">Description <span className="text-muted-foreground font-normal">(optional)</span></label>
             <textarea
-              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
               rows={3}
-              placeholder="Brief overview of the project scope and objectives..."
+              placeholder="Brief description of the project scope…"
               value={newDescription}
               onChange={e => setNewDescription(e.target.value)}
             />
           </div>
           <div>
-            <label className="text-sm font-semibold mb-1 block">Estimated Start Date</label>
-            <Input
-              type="date"
-              value={newStartDate}
-              onChange={e => setNewStartDate(e.target.value)}
-            />
+            <label className="text-sm font-semibold mb-1 block">Estimated Start Date <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <Input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
           </div>
           <div>
             <label className="text-sm font-semibold mb-2 block">Labor Type</label>
-            <div className="flex rounded-xl border border-input overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setNewLaborType("non-union")}
-                className={cn(
-                  "flex-1 py-2.5 text-sm font-semibold transition-colors",
-                  newLaborType === "non-union"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:bg-muted"
-                )}
-              >
-                Non-Union Open Shop
+            <div className="flex rounded-xl border border-border overflow-hidden">
+              <button type="button" className={`flex-1 py-2.5 text-sm font-medium transition-colors ${newLaborType === "non-union" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`} onClick={() => setNewLaborType("non-union")}>
+                Non-Union
               </button>
-              <button
-                type="button"
-                onClick={() => setNewLaborType("union")}
-                className={cn(
-                  "flex-1 py-2.5 text-sm font-semibold border-l border-input transition-colors",
-                  newLaborType === "union"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:bg-muted"
-                )}
-              >
-                Union Prevailing Wage
+              <button type="button" className={`flex-1 py-2.5 text-sm font-medium transition-colors ${newLaborType === "union" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-secondary"}`} onClick={() => setNewLaborType("union")}>
+                Union
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5">Used for AI bid range analysis. You can change this in project settings later.</p>
           </div>
-          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
-            <p className="text-xs text-blue-700 dark:text-blue-300">
-              <span className="font-semibold">Tip:</span> After creating the project, add your insurance certificate and contractor license in Project Settings — they will automatically appear on every subcontract and on your subs' dashboards. You only need to enter your credentials once per project.
-            </p>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)} className="min-h-[44px]">Cancel</Button>
-            <Button type="submit" isLoading={createProject.isPending} className="min-h-[44px]">Create Project</Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px] gap-2" isLoading={createProject.isPending}>
+              <Plus className="h-4 w-4" /> Create Project
+            </Button>
           </div>
         </form>
       </Dialog>
-      {showGate && (
-        <DemoGateModal
-          onComplete={handleGateComplete}
-          onSkip={handleGateSkip}
-        />
-      )}
     </Layout>
   );
 }
