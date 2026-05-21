@@ -12,13 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { PaywallModal } from "@/components/paywall-modal";
 import { format } from "date-fns";
-import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail, Inbox, MessageSquare, X } from "lucide-react";
+import { Plus, Briefcase, Building2, ChevronRight, FileSignature, DollarSign, AlertTriangle, MapPin, CalendarDays, ShieldAlert, Receipt, ExternalLink, CreditCard, Archive, ArchiveRestore, Search, UserPlus, KeyRound, Check, Copy, CheckCircle2, Clock, Banknote, Shield, PenLine, FileWarning, ListChecks, Mail, Inbox, MessageSquare, X, FilePlus2, GitPullRequest, Upload } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { getSubscriptionStatus } from "@/lib/stripe";
 import { useQuery } from "@tanstack/react-query";
 import { TrialBanner } from "@/components/trial-banner";
 import toast from "react-hot-toast";
 import { DemoGateModal, isDemoGatePassed } from "@/components/demo-gate-modal";
+import { useUpload } from "@workspace/object-storage-web";
 
 // ── Action Required types ──────────────────────────────────────────────────────
 type ActionItem = {
@@ -207,6 +208,198 @@ function ActionRequired({ items, isLoading, onFlaggedInvoiceClick }: {
   );
 }
 
+// ── SUB Quick Actions panel ────────────────────────────────────────────────────
+function SubQuickActions({
+  subcontracts,
+  pendingCOCount,
+}: {
+  subcontracts: { id: string; projectName: string; gcCompanyName: string }[];
+  pendingCOCount: number;
+}) {
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  // Upload submittal dialog state
+  const [uploadOpen, setUploadOpen] = React.useState(false);
+  const [selectedSubId, setSelectedSubId] = React.useState("");
+  const [submittalName, setSubmittalName] = React.useState("");
+  const [submittalMsg, setSubmittalMsg] = React.useState("");
+  const [submittalDocPath, setSubmittalDocPath] = React.useState<string | null>(null);
+  const [submittalDocName, setSubmittalDocName] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const { uploadFile, isUploading } = useUpload({
+    onError: (err) => toast.error(err.message || "Upload failed"),
+  });
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const result = await uploadFile(file);
+    if (result?.objectPath) {
+      setSubmittalDocPath(result.objectPath);
+      setSubmittalDocName(file.name);
+    }
+    e.target.value = "";
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubId) return toast.error("Please select a subcontract");
+    if (!submittalName.trim()) return toast.error("Submittal name is required");
+    if (!submittalDocPath) return toast.error("Please upload a document");
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/submittals/subcontracts/${selectedSubId}/submittals`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: submittalName.trim(),
+          documentPath: submittalDocPath,
+          documentName: submittalDocName,
+          openingMessage: submittalMsg.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to upload submittal");
+      }
+      toast.success("Submittal uploaded and sent to GC");
+      setUploadOpen(false);
+      setSelectedSubId(""); setSubmittalName(""); setSubmittalMsg("");
+      setSubmittalDocPath(null); setSubmittalDocName(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload submittal");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="mb-6 rounded-2xl border border-border bg-card p-4">
+        <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3">Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          {/* Change Orders */}
+          <Link href="/change-orders">
+            <Button variant="outline" className="gap-2 min-h-[44px] relative">
+              <GitPullRequest className="h-4 w-4" />
+              Change Orders
+              {pendingCOCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none">
+                  {pendingCOCount}
+                </span>
+              )}
+            </Button>
+          </Link>
+
+          {/* Submit Invoice — navigates to subcontracts list */}
+          <Link href="/subcontracts">
+            <Button variant="outline" className="gap-2 min-h-[44px]">
+              <Receipt className="h-4 w-4" />
+              Submit Invoice
+            </Button>
+          </Link>
+
+          {/* Upload Submittal */}
+          <Button
+            variant="outline"
+            className="gap-2 min-h-[44px]"
+            onClick={() => setUploadOpen(true)}
+          >
+            <Upload className="h-4 w-4" />
+            Upload Submittal
+          </Button>
+        </div>
+      </div>
+
+      {/* Upload Submittal Dialog */}
+      <Dialog
+        open={uploadOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUploadOpen(false);
+            setSelectedSubId(""); setSubmittalName(""); setSubmittalMsg("");
+            setSubmittalDocPath(null); setSubmittalDocName(null);
+          }
+        }}
+        title="Upload Submittal"
+        description="Upload a document to send to the GC for review on a subcontract."
+      >
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Subcontract *</label>
+            <select
+              className="flex w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={selectedSubId}
+              onChange={e => setSelectedSubId(e.target.value)}
+              required
+            >
+              <option value="">Select a subcontract…</option>
+              {subcontracts.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.projectName} — {s.gcCompanyName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Submittal Name *</label>
+            <Input
+              placeholder="e.g. Shop Drawings – Structural Steel"
+              value={submittalName}
+              onChange={e => setSubmittalName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Document *</label>
+            {submittalDocName ? (
+              <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 dark:bg-green-950/20 px-3 py-2.5 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                <span className="truncate flex-1 font-medium">{submittalDocName}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => { setSubmittalDocPath(null); setSubmittalDocName(null); }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 hover:bg-muted/60 transition-colors px-3 py-3 cursor-pointer text-sm text-muted-foreground">
+                <Upload className="h-4 w-4 shrink-0" />
+                {isUploading ? "Uploading…" : "Click to upload PDF, DWG, or image"}
+                <input type="file" className="hidden" accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.heic" onChange={handleDocUpload} disabled={isUploading} />
+              </label>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-1 block">Message to GC <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <textarea
+              className="flex w-full rounded-xl border border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              rows={3}
+              placeholder="Add context or notes for the GC…"
+              value={submittalMsg}
+              onChange={e => setSubmittalMsg(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" className="min-h-[44px]" onClick={() => setUploadOpen(false)}>Cancel</Button>
+            <Button type="submit" className="min-h-[44px] gap-2" isLoading={saving || isUploading}>
+              <Upload className="h-4 w-4" /> Send Submittal
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
+  );
+}
+
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { data: user } = useGetMe();
@@ -267,6 +460,9 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
+  // Count total pending COs across all projects
+  const pendingCOCount = subPendingCOProjects.length;
+
   type SubSubmittal = {
     id: string; name: string; projectName: string; gcCompanyName: string;
     openingMessage: string | null; requiredResponseDate: string | null;
@@ -295,6 +491,25 @@ export default function Dashboard() {
     },
     enabled: !isGC,
     staleTime: 120_000,
+    refetchOnMount: "always",
+  });
+
+  // Build subcontract list for Upload Submittal dialog
+  type SubQuickSub = { id: string; projectName: string; gcCompanyName: string };
+  const { data: subContractList = [] } = useQuery<SubQuickSub[]>({
+    queryKey: ["sub-contract-list-quick"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_DASH}/api/subcontracts/my`, { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data as any[]).map((s: any) => ({
+        id: s.id,
+        projectName: s.project?.name ?? "Unknown Project",
+        gcCompanyName: s.gc?.companyName ?? "GC",
+      }));
+    },
+    enabled: !isGC,
+    staleTime: 60_000,
     refetchOnMount: "always",
   });
 
@@ -605,6 +820,14 @@ export default function Dashboard() {
             </Button>
           </a>
         </div>
+      )}
+
+      {/* SUB: Quick Actions (Change Orders + Submit Invoice + Upload Submittal) */}
+      {!isGC && (
+        <SubQuickActions
+          subcontracts={subContractList}
+          pendingCOCount={pendingCOCount}
+        />
       )}
 
       {/* Trial countdown banner — only when trial is active and no paid plan */}
