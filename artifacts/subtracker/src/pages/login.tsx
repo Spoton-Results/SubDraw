@@ -51,12 +51,7 @@ export default function Login() {
 
   React.useEffect(() => {
     if (user && !isLoading) {
-      const loggedInUser = user as any;
-      if (loggedInUser.role === "SUB") {
-        setLocation("/dashboard");
-        return;
-      }
-      window.location.replace(`${BASE}dashboard`);
+      setLocation("/dashboard");
     }
   }, [user, isLoading, setLocation]);
 
@@ -91,15 +86,10 @@ export default function Login() {
     if (verifiedUser) queryClient.setQueryData(getGetMeQueryKey(), verifiedUser);
     toast.success("Welcome back!");
 
-    if (verifiedUser?.role === "SUB") {
-      setLocation("/dashboard");
-      window.setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
-      }, 500);
-      return;
-    }
-
-    window.location.replace(`${BASE}dashboard`);
+    setLocation("/dashboard");
+    window.setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
+    }, 500);
   };
 
   const onSubmit = async (data: LoginForm) => {
