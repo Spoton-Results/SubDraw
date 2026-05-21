@@ -189,6 +189,76 @@ router.post("/subcontracts/:subcontractId/submittals", requireAuth, requireGC, a
   res.status(201).json({ ...submittal, status: "PENDING_REVIEW", messages: [] });
 });
 
+// ── POST /subcontracts/:subcontractId/sub-submittals — Sub creates submittal → GC ──
+router.post("/subcontracts/:subcontractId/sub-submittals", requireAuth, requireSub, async (req, res) => {
+  const user = (req as any).user;
+  const { subcontractId } = req.params;
+  const { name, documentPath, documentName, openingMessage, requiredResponseDate } = req.body;
+
+  if (!name?.trim() || !documentPath || !documentName) {
+    res.status(400).json({ error: "name, documentPath, and documentName are required" }); return;
+  }
+
+  const sc = (await db.select().from(subcontractsTable).where(eq(subcontractsTable.id, subcontractId)).limit(1))[0];
+  if (!sc) { res.status(404).json({ error: "Subcontract not found" }); return; }
+  if (sc.subId !== user.id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const project = (await db.select().from(projectsTable).where(eq(projectsTable.id, sc.projectId)).limit(1))[0];
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const gcUser = (await db.select().from(usersTable).where(eq(usersTable.id, project.gcId)).limit(1))[0];
+  if (!gcUser) { res.status(404).json({ error: "GC user not found" }); return; }
+
+  const [submittal] = await db.insert(submittalsTable).values({
+    subcontractId,
+    name: name.trim(),
+    documentPath,
+    documentName,
+    openingMessage: openingMessage?.trim() || null,
+    requiredResponseDate: requiredResponseDate || null,
+  }).returning();
+
+  // Seed the opening message into the thread as a SUB message so GC sees it immediately
+  if (openingMessage?.trim()) {
+    await db.insert(submittalMessagesTable).values({
+      submittalId: submittal.id,
+      senderId: user.id,
+      senderName: user.companyName ?? user.email ?? "Sub",
+      senderRole: "SUB",
+      message: openingMessage.trim(),
+      documentPath: null,
+      documentName: null,
+    });
+  }
+
+  await logActivity(subcontractId, "SUBMITTAL_CREATED", `Submittal submitted to GC by ${user.companyName ?? "Sub"}: ${name}`, getActorName(user), getActorRoleLabel(user));
+
+  const appUrl = getAppUrl(req);
+  const submittalUrl = `${appUrl}/submittals/${submittal.id}`;
+
+  // Notify GC
+  createNotification({
+    userId: gcUser.id,
+    type: "SUBMITTAL_CREATED",
+    title: `New Submittal from ${user.companyName ?? "Sub"}`,
+    body: `${name} on ${project.name} has been submitted for your review.`,
+    url: `/submittals/${submittal.id}`,
+    data: { subcontractId, submittalId: submittal.id, projectId: project.id },
+  }).catch(err => console.error("[notification] SUB_SUBMITTAL_CREATED failed:", err));
+
+  sendSubmittalCreatedEmail({
+    toEmail: gcUser.email,
+    submittalName: name,
+    projectName: project.name,
+    gcCompanyName: user.companyName ?? "Sub",
+    openingMessage: openingMessage?.trim() || null,
+    requiredResponseDate: requiredResponseDate || null,
+    submittalUrl,
+  }).catch(err => console.error("[email] sendSubmittalCreatedEmail (sub→gc) failed:", err));
+
+  res.status(201).json({ ...submittal, status: "PENDING_REVIEW", messages: [] });
+});
+
 // ── GET /subcontracts/:subcontractId/submittals — list for a subcontract ───────
 router.get("/subcontracts/:subcontractId/submittals", requireAuth, async (req, res) => {
   const user = (req as any).user;
@@ -388,7 +458,7 @@ router.post("/:id/acknowledge", requireAuth, requireSub, async (req, res) => {
   res.json({ ...updated, status: "ACKNOWLEDGED" });
 });
 
-// ── GET /submittals/:id/document — proxy download of original GC document ──────
+// ── GET /submittals/:id/document — proxy download of original document ─────────
 router.get("/:id/document", requireAuth, async (req, res) => {
   const user = (req as any).user;
   const submittal = (await db.select().from(submittalsTable).where(eq(submittalsTable.id, req.params.id)).limit(1))[0];
