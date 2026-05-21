@@ -116,7 +116,7 @@ function NotificationBell({ onNavigate }: { onNavigate: (path: string) => void }
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
+  const { data: user, isLoading, isFetching } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const logout = useLogout();
   const perms = usePermissions();
 
@@ -131,7 +131,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     staleTime: 60_000,
   });
 
-  if (isLoading) {
+  // Show spinner while loading OR while fetching with no cached user yet.
+  // This prevents the white-screen flash that GC accounts hit because their
+  // session re-fetch (triggered 500 ms after login navigation) takes longer
+  // than SUB accounts and briefly leaves `user` undefined.
+  if (isLoading || (!user && isFetching)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -139,7 +143,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  // If not loading and still no user, redirect to login
+  if (!user) {
+    window.location.replace(`${import.meta.env.BASE_URL}login`);
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const handleLogout = async () => {
     try {
