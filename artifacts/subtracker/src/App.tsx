@@ -118,7 +118,6 @@ function ProtectedRoute({
 }) {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
 
-  // Show spinner instead of blank screen while session is being verified
   if (isLoading) return <AuthLoading />;
   if (!user) return <RedirectTo path="/login" />;
 
@@ -162,6 +161,25 @@ function ProtectedRoute({
   return <Component />;
 }
 
+// ---------------------------------------------------------------------------
+// Stable named wrapper components — MUST live outside Router/App so React
+// never sees a new component type on re-render, which would unmount+remount
+// ProtectedRoute and reset useGetMe back to isLoading=true (blank screen).
+// ---------------------------------------------------------------------------
+const DashboardRoute         = () => <ProtectedRoute component={Dashboard} />;
+const DirectoryRoute         = () => <ProtectedRoute component={Directory} ownerOnly />;
+const ProjectDetailRoute     = () => <ProtectedRoute component={ProjectDetail} />;
+const BidComparisonRoute     = () => <ProtectedRoute component={BidComparison} gcOnly />;
+const SubcontractDetailRoute = () => <ProtectedRoute component={SubcontractDetail} />;
+const SubmittalDetailRoute   = () => <ProtectedRoute component={SubmittalDetail} />;
+const AccountRoute           = () => <ProtectedRoute component={Account} />;
+const NotificationsRoute     = () => <ProtectedRoute component={Notifications} />;
+const ContactsRoute          = () => <ProtectedRoute component={Contacts} ownerOnly />;
+const TeamRoute              = () => <ProtectedRoute component={Team} ownerOnly />;
+const BillingRoute           = () => <ProtectedRoute component={Billing} ownerOnly />;
+const PaymentSuccessRoute    = () => <ProtectedRoute component={PaymentSuccess} />;
+const PaymentSetupRoute      = () => <ProtectedRoute component={PaymentSetupRefresh} />;
+
 function AnalyticsTracker() {
   const [location] = useLocation();
   const { data: user } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
@@ -183,32 +201,32 @@ function Router() {
     <>
       <AnalyticsTracker />
       <Switch>
-      <Route path="/logout" component={Logout} />
-      <Route path="/admin" component={AdminLogin} />
-      <Route path="/admin/dashboard" component={AdminDashboard} />
-      <Route path="/admin/accounts/:userId" component={AdminAccountDetail} />
-      <Route path="/login" component={Login} />
-      <Route path="/magic-login" component={MagicLogin} />
-      <Route path="/register" component={Register} />
-      <Route path="/signup" component={Register} />
-      <Route path="/" component={Home} />
-      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route path="/directory" component={() => <ProtectedRoute component={Directory} ownerOnly />} />
-      <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
-      <Route path="/projects/:id/bid-comparison" component={() => <ProtectedRoute component={BidComparison} gcOnly />} />
-      <Route path="/subcontracts/:id" component={() => <ProtectedRoute component={SubcontractDetail} />} />
-      <Route path="/submittals/:id" component={() => <ProtectedRoute component={SubmittalDetail} />} />
-      <Route path="/account" component={() => <ProtectedRoute component={Account} />} />
-      <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} />} />
-      <Route path="/contacts" component={() => <ProtectedRoute component={Contacts} ownerOnly />} />
-      <Route path="/team" component={() => <ProtectedRoute component={Team} ownerOnly />} />
-      <Route path="/billing" component={() => <ProtectedRoute component={Billing} ownerOnly />} />
-      <Route path="/account/payment-success" component={() => <ProtectedRoute component={PaymentSuccess} />} />
-      <Route path="/account/payment-setup" component={() => <ProtectedRoute component={PaymentSetupRefresh} />} />
-      <Route path="/forgot-password" component={ForgotPassword} />
-      <Route path="/reset-password" component={ResetPassword} />
-      <Route component={NotFound} />
-    </Switch>
+        <Route path="/logout" component={Logout} />
+        <Route path="/admin" component={AdminLogin} />
+        <Route path="/admin/dashboard" component={AdminDashboard} />
+        <Route path="/admin/accounts/:userId" component={AdminAccountDetail} />
+        <Route path="/login" component={Login} />
+        <Route path="/magic-login" component={MagicLogin} />
+        <Route path="/register" component={Register} />
+        <Route path="/signup" component={Register} />
+        <Route path="/" component={Home} />
+        <Route path="/dashboard" component={DashboardRoute} />
+        <Route path="/directory" component={DirectoryRoute} />
+        <Route path="/projects/:id" component={ProjectDetailRoute} />
+        <Route path="/projects/:id/bid-comparison" component={BidComparisonRoute} />
+        <Route path="/subcontracts/:id" component={SubcontractDetailRoute} />
+        <Route path="/submittals/:id" component={SubmittalDetailRoute} />
+        <Route path="/account" component={AccountRoute} />
+        <Route path="/notifications" component={NotificationsRoute} />
+        <Route path="/contacts" component={ContactsRoute} />
+        <Route path="/team" component={TeamRoute} />
+        <Route path="/billing" component={BillingRoute} />
+        <Route path="/account/payment-success" component={PaymentSuccessRoute} />
+        <Route path="/account/payment-setup" component={PaymentSetupRoute} />
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
+        <Route component={NotFound} />
+      </Switch>
     </>
   );
 }
