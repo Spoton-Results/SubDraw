@@ -3642,11 +3642,6 @@ export default function SubcontractDetail() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {isGC && (
-                <Button size="sm" onClick={() => setSubmittalDialogOpen(true)} className="gap-1 min-h-[44px]">
-                  <PlusCircle className="h-4 w-4" /> New Submittal
-                </Button>
-              )}
               {/* Filter tabs */}
               {submittals.length > 0 && (
                 <div className="hidden sm:flex items-center gap-1 text-xs">
