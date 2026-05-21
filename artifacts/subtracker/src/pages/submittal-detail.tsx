@@ -51,6 +51,8 @@ interface SubmittalDetail {
   subCompanyName: string;
   messages: SubmittalMessage[];
   createdAt: string;
+  /** Which role originally created this submittal */
+  creatorRole: "GC" | "SUB";
 }
 
 function getStatusConfig(status: SubmittalStatus) {
@@ -243,7 +245,18 @@ export default function SubmittalDetail() {
   }
 
   const statusConfig = getStatusConfig(submittal.status);
-  const canAcknowledge = !isGC && submittal.status !== "ACKNOWLEDGED";
+
+  // creatorRole determines who receives and who acknowledges.
+  // GC-created → SUB acknowledges (original behaviour)
+  // SUB-created → GC acknowledges
+  const creatorRole = submittal.creatorRole ?? "GC"; // default "GC" for existing records
+  const canAcknowledge =
+    submittal.status !== "ACKNOWLEDGED" &&
+    ((creatorRole === "GC" && !isGC) || (creatorRole === "SUB" && isGC));
+
+  // Label for the original document row in the thread
+  const originatorLabel = creatorRole === "GC" ? "GC Document" : "SUB Document";
+  const originatorCompany = creatorRole === "GC" ? submittal.gcCompanyName : submittal.subCompanyName;
 
   return (
     <Layout>
@@ -312,7 +325,7 @@ export default function SubmittalDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {/* Original document (GC submission) */}
+            {/* Original document — label reflects actual creator */}
             <div className="p-4 border-b bg-primary/5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
@@ -321,9 +334,9 @@ export default function SubmittalDetail() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-xs font-bold text-primary uppercase tracking-wide">GC Document</span>
+                      <span className="text-xs font-bold text-primary uppercase tracking-wide">{originatorLabel}</span>
                       <span className="text-xs text-muted-foreground">
-                        Submitted by {submittal.gcCompanyName} · {format(new Date(submittal.createdAt), "MMM d, yyyy h:mm a")}
+                        Submitted by {originatorCompany} · {format(new Date(submittal.createdAt), "MMM d, yyyy h:mm a")}
                       </span>
                     </div>
                     <p className="text-sm font-semibold text-foreground truncate">{submittal.documentName}</p>
@@ -456,7 +469,7 @@ export default function SubmittalDetail() {
               </div>
             </form>
 
-            {/* Acknowledge Receipt (sub only, when not yet acknowledged) */}
+            {/* Acknowledge Receipt — visible to the party that RECEIVED the submittal */}
             {canAcknowledge && (
               <div className="p-4 border-t bg-muted/30">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
