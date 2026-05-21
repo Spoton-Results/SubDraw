@@ -80,6 +80,33 @@ function Logout() {
   return null;
 }
 
+/** Full-screen spinner shown while /api/auth/me is resolving after login */
+function AuthLoading() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100dvh",
+        background: "var(--color-bg, hsl(var(--background)))",
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          border: "3px solid hsl(var(--border))",
+          borderTopColor: "hsl(var(--primary))",
+          animation: "spin 0.7s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 function ProtectedRoute({
   component: Component,
   gcOnly,
@@ -91,7 +118,8 @@ function ProtectedRoute({
 }) {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
 
-  if (isLoading) return null;
+  // Show spinner instead of blank screen while session is being verified
+  if (isLoading) return <AuthLoading />;
   if (!user) return <RedirectTo path="/login" />;
 
   if ((user as any).paused) {
