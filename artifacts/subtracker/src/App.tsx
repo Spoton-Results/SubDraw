@@ -44,6 +44,10 @@ export const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      // Global 30s staleTime prevents bare useGetMe() calls (dashboard,
+      // usePermissions, layout, etc.) from immediately re-fetching on mount
+      // and briefly nulling the cache — which caused the GC redirect loop.
+      staleTime: 30_000,
     },
   },
 });
@@ -116,11 +120,10 @@ function ProtectedRoute({
   gcOnly?: boolean;
   ownerOnly?: boolean;
 }) {
-  const { data: user, isLoading, isFetching } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
+  const { data: user, isLoading, isFetching } = useGetMe({ query: { retry: false } });
 
   // Show spinner while loading OR while re-fetching with no cached user.
-  // Without this, invalidateQueries briefly sets user=undefined which
-  // triggers the redirect-to-login and causes the GC blank screen.
+  // This prevents any brief user=undefined window from bouncing to /login.
   if (isLoading || (!user && isFetching)) return <AuthLoading />;
 
   if (!user) return <RedirectTo path="/login" />;
@@ -186,7 +189,7 @@ const PaymentSetupRoute      = () => <ProtectedRoute component={PaymentSetupRefr
 
 function AnalyticsTracker() {
   const [location] = useLocation();
-  const { data: user } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
+  const { data: user } = useGetMe();
   React.useEffect(() => {
     if (typeof window.gtag === "function") {
       window.gtag("config", "G-GY5VTKVQ88", { page_path: location });
