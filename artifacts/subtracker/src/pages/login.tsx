@@ -28,6 +28,8 @@ export default function Login() {
   const { data: user, isLoading } = useGetMe({ query: { retry: false, staleTime: 30_000 } });
   const login = useLogin();
   const [demoLoading, setDemoLoading] = React.useState<"GC" | "SUB" | null>(null);
+  // Track that we've already triggered a redirect so the useEffect doesn't race
+  const didRedirect = React.useRef(false);
 
   const [magicEmail, setMagicEmail] = React.useState("");
   const [magicSent, setMagicSent] = React.useState(false);
@@ -49,44 +51,23 @@ export default function Login() {
     }
   }, [search]);
 
+  // Only auto-redirect if we haven't already manually redirected (prevents race)
   React.useEffect(() => {
-    if (user && !isLoading) {
+    if (!isLoading && user && !didRedirect.current) {
+      didRedirect.current = true;
       setLocation("/dashboard");
     }
   }, [user, isLoading, setLocation]);
 
   const finishLoginRedirect = async (fallbackUser?: unknown) => {
     const loginUser = fallbackUser as any;
+    // Mark redirect as in-progress so the useEffect above won't double-fire
+    didRedirect.current = true;
     if (loginUser) queryClient.setQueryData(getGetMeQueryKey(), loginUser);
 
-    if (loginUser?.role === "SUB") {
-      toast.success("Welcome back!");
-      setLocation("/dashboard");
-      window.setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
-      }, 500);
-      return;
-    }
-
-    await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-
-    const verify = await fetch(`${BASE}api/auth/me`, {
-      method: "GET",
-      credentials: "include",
-      headers: { "Accept": "application/json" },
-      cache: "no-store",
-    });
-
-    if (!verify.ok) {
-      toast.error("Login was accepted, but this browser did not keep the session. Try the email login link or clear site data for subdraw.com.");
-      return;
-    }
-
-    const verifiedUser = await verify.json().catch(() => null);
-    if (verifiedUser) queryClient.setQueryData(getGetMeQueryKey(), verifiedUser);
     toast.success("Welcome back!");
-
     setLocation("/dashboard");
+    // Refresh session data in the background after navigation
     window.setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
     }, 500);
@@ -137,6 +118,7 @@ export default function Login() {
       if (body?.user) queryClient.setQueryData(getGetMeQueryKey(), body.user);
       toast.success(`Exploring as demo ${role === "GC" ? "General Contractor" : "Subcontractor"}`);
       didNavigate = true;
+      didRedirect.current = true;
       setLocation("/dashboard");
       window.setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }).catch(() => {});
@@ -172,7 +154,25 @@ export default function Login() {
     }
   };
 
-  if (isLoading) return null;
+  // Show spinner while checking existing session (not blank screen)
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100dvh",
+          background: "hsl(var(--background))",
+        }}
+      >
+        <Loader2
+          style={{ width: 36, height: 36, animation: "spin 0.7s linear infinite" }}
+          className="text-primary animate-spin"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen grid md:grid-cols-2 bg-background">
