@@ -38,6 +38,7 @@ import PaymentSuccess from "./pages/payment-success";
 import PaymentSetupRefresh from "./pages/payment-setup-refresh";
 import MagicLogin from "./pages/magic-login";
 import { PausedScreen } from "./components/paused-screen";
+import { TrialExpiredGate } from "./components/trial-expired-gate";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -127,6 +128,20 @@ function ProtectedRoute({
   if (isLoading || (!user && isFetching)) return <AuthLoading />;
 
   if (!user) return <RedirectTo path="/login" />;
+
+  // Trial expired — GC has no active subscription. Show the plan selection gate
+  // so they can subscribe and continue. This runs BEFORE the paused check so a
+  // trial-expired account never shows the generic "account paused" screen.
+  if ((user as any).trialExpired && user.role === "GC") {
+    const handleLogout = async () => {
+      await fetch(`${import.meta.env.BASE_URL}api/auth/logout`, { method: "POST", credentials: "include" });
+      queryClient.clear();
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = `${import.meta.env.BASE_URL}login`;
+    };
+    return <TrialExpiredGate companyName={user.companyName} onLogout={handleLogout} />;
+  }
 
   if ((user as any).paused) {
     const handleLogout = async () => {

@@ -6,6 +6,7 @@ import { eq, and, isNull, lt } from "drizzle-orm";
 import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { sendPasswordResetEmail, sendMagicLinkEmail } from "../lib/email.js";
+import { getGCPlanInfo } from "../lib/stripeStorage.js";
 
 const router = Router();
 
@@ -101,7 +102,21 @@ router.get("/me", requireAuth, async (req, res) => {
   const hasPassword = user.passwordHash.startsWith("$2b$") || user.passwordHash.startsWith("$2a$");
   const paused = !!user.pausedAt && !userPayload.impersonatedBy;
   const impersonatedBy = userPayload.impersonatedBy ?? null;
-  res.json({ ...safeUser, subProfile, hasPassword, paused, impersonatedBy });
+
+  // For GC users without an active subscription/admin override, check if trial has expired.
+  // This lets ProtectedRoute redirect them to the upgrade gate instead of a blank paused screen.
+  let trialExpired = false;
+  if (user.role === "GC" && !paused) {
+    try {
+      const planInfo = await getGCPlanInfo(user.id);
+      trialExpired = planInfo.trialExpired && !planInfo.subscribed;
+    } catch {
+      // If plan info fails, don't block login — fail open.
+      trialExpired = false;
+    }
+  }
+
+  res.json({ ...safeUser, subProfile, hasPassword, paused, impersonatedBy, trialExpired });
 });
 
 router.post("/change-password", requireAuth, async (req, res) => {
