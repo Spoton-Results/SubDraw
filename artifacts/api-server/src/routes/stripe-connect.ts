@@ -137,18 +137,24 @@ router.post("/create-payment-intent", requireAuth, requireGC, async (req, res) =
   const stripe = await getUncachableStripeClient();
 
   try {
-    const amountInCents = Math.round(invoice.amount * 100);
+    const baseAmountInCents = Math.round(invoice.amount * 100);
+    const processingComplianceFeeInCents = Math.round(invoice.amount * 0.01 * 100);
+    const amountInCents = baseAmountInCents + processingComplianceFeeInCents;
 
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: amountInCents,
         currency: "usd",
+        application_fee_amount: processingComplianceFeeInCents,
         automatic_payment_methods: { enabled: true },
         metadata: {
           invoiceId: invoice.id,
           subcontractId: invoice.subcontractId,
           gcId: user.id,
           subId: subUser.id,
+          baseInvoiceAmount: String(baseAmountInCents),
+          processingComplianceFee: String(processingComplianceFeeInCents),
+          totalCharged: String(amountInCents),
         },
       },
       { stripeAccount: subUser.stripeConnectAccountId }
