@@ -190,7 +190,7 @@ function ActionRequired({ items, isLoading, onFlaggedInvoiceClick }: {
                     </div>
                   );
                   return interceptClick ? (
-                    <div key={item.id} onClick={() => onFlaggedInvoiceClick!(item.href)}>
+                    <div key={item.id} data-demo-target="flagged-invoice" onClick={() => onFlaggedInvoiceClick!(item.href)}>
                       {innerEl}
                     </div>
                   ) : (

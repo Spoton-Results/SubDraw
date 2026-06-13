@@ -582,11 +582,11 @@ export function DemoWalkthroughOverlay() {
     if (!cfg) return;
 
     if (wt.step === 1) {
-      const link = document.querySelector(
-        '[data-demo-target="action-required"] a[href]'
-      ) as HTMLAnchorElement | null;
-      if (link) {
-        link.click();
+      const target = document.querySelector(
+        '[data-demo-target="action-required"] [data-demo-target="flagged-invoice"]'
+      ) as HTMLElement | null;
+      if (target) {
+        target.click();
       }
       return; // Step advances via navigation detection
     }
