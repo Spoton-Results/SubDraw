@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { HardHat, LayoutDashboard, LogOut, Loader2, Settings, ChevronDown, BookUser, User, CreditCard, FlaskConical, ArrowRight, Users, Bell, Check, Shield, Smartphone, X, Search } from "lucide-react";
-import { DemoWalkthroughProvider, DemoProgressBar } from "@/components/demo-walkthrough";
+import { DemoWalkthroughProvider, DemoProgressBar, DemoWalkthroughOverlay } from "@/components/demo-walkthrough";
 import { Badge } from "@/components/ui/badge";
 import toast from "react-hot-toast";
 import { PushPermissionPrompt } from "@/components/push-permission-prompt";
@@ -431,7 +431,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </button>
         {mobileNavItem("/account", <Settings className={`h-5 w-5 ${isActive("/account") ? "text-primary" : ""}`} />, "Account")}
       </nav>
-      {/* Demo walkthrough disabled until lead gate flow is stable */}
+      <DemoWalkthroughOverlay />
 
       <PushPermissionPrompt
         pushPromptLastSeenAt={(user as any).pushPromptLastSeenAt}
