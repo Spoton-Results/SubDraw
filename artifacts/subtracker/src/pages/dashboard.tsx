@@ -473,7 +473,12 @@ export default function Dashboard() {
 
   const handleGateComplete = React.useCallback(() => {
     setShowGate(false);
-    if (gatedHref) setLocation(gatedHref);
+    if (gatedHref) {
+      setLocation(gatedHref);
+      window.setTimeout(() => {
+        window.location.href = gatedHref;
+      }, 50);
+    }
   }, [gatedHref, setLocation]);
 
   const handleGateSkip = React.useCallback(() => {
