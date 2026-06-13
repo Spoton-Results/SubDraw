@@ -1,7 +1,7 @@
 import * as React from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 
-const BASE = import.meta.env.BASE_URL;
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 const GATE_STORAGE_KEY = "subtracker_demo_gate_passed";
 const GATE_SESSION_KEY = "subtracker_demo_gate_seen";
@@ -66,8 +66,9 @@ export function DemoGateModal({ onComplete, onSkip }: DemoGateModalProps) {
         try { sessionStorage.setItem("subtracker_session_id", sessionId); } catch {}
       }
 
-      await fetch(`${BASE}api/demo-leads`, {
+      const res = await fetch(`${BASE}/api/demo-leads`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firstName: firstName.trim(),
@@ -78,6 +79,8 @@ export function DemoGateModal({ onComplete, onSkip }: DemoGateModalProps) {
         }),
       });
 
+      if (!res.ok) throw new Error("Demo gate submission failed");
+
       // Mark gate passed forever on this device
       try {
         localStorage.setItem(GATE_STORAGE_KEY, "true");
@@ -86,8 +89,7 @@ export function DemoGateModal({ onComplete, onSkip }: DemoGateModalProps) {
 
       onComplete();
     } catch {
-      // Still let them through if submission fails
-      onComplete();
+      setErrors(prev => ({ ...prev, email: "We could not open the demo. Please try again." }));
     } finally {
       setSubmitting(false);
     }
