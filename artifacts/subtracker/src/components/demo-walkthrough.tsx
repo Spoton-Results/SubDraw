@@ -502,12 +502,6 @@ export function DemoWalkthroughOverlay() {
 
     // Auto-start on dashboard
     if (step === 0 && location === "/dashboard") {
-      const gatePassed =
-        localStorage.getItem("subtracker_demo_gate_passed") === "true" ||
-        sessionStorage.getItem("subtracker_demo_gate_seen") === "true";
-
-      if (!gatePassed) return;
-
       const t = setTimeout(() => setStep(1), 1500);
       return () => clearTimeout(t);
     }
