@@ -463,12 +463,7 @@ export default function Dashboard() {
   const [gatedHref, setGatedHref] = React.useState<string | null>(null);
 
   const handleFlaggedInvoiceClick = React.useCallback((href: string) => {
-    if (isDemoGatePassed()) {
-      setLocation(href);
-      return;
-    }
-    setGatedHref(href);
-    setShowGate(true);
+    setLocation(href);
   }, [setLocation]);
 
   const handleGateComplete = React.useCallback(() => {
