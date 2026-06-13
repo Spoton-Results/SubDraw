@@ -472,13 +472,10 @@ export default function Dashboard() {
   }, [setLocation]);
 
   const handleGateComplete = React.useCallback(() => {
+    const href = gatedHref || "/subcontracts";
     setShowGate(false);
-    if (gatedHref) {
-      setLocation(gatedHref);
-      window.setTimeout(() => {
-        window.location.href = gatedHref;
-      }, 50);
-    }
+    setLocation(href);
+    window.location.href = href;
   }, [gatedHref, setLocation]);
 
   const handleGateSkip = React.useCallback(() => {
