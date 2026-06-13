@@ -1548,7 +1548,7 @@ export default function Dashboard() {
         )}
       </Dialog>
 
-      {isDemoGC && (
+      {isDemoGC && showGate && (
         <DemoGateModal
           open={showGate}
           onComplete={handleGateComplete}
