@@ -431,7 +431,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </button>
         {mobileNavItem("/account", <Settings className={`h-5 w-5 ${isActive("/account") ? "text-primary" : ""}`} />, "Account")}
       </nav>
-      <DemoWalkthroughOverlay />
+      {/* Demo walkthrough disabled until lead gate flow is stable */}
 
       <PushPermissionPrompt
         pushPromptLastSeenAt={(user as any).pushPromptLastSeenAt}
