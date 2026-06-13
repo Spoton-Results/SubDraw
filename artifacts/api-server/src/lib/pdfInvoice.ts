@@ -290,7 +290,8 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
     // ── Retention line (only for non-retention-release invoices with retention held) ───
     const retPct = subcontract.retentionPercentage ?? 0;
     const retAmt = invoice.retentionAmount ?? 0;
-    const netPayable = invoice.amount - retAmt;
+    const processingComplianceFee = Math.round(invoice.amount * 0.01 * 100) / 100;
+    const netPayable = invoice.amount - retAmt + processingComplianceFee;
 
     if (!invoice.isRetentionRelease && retPct > 0) {
       // Retention held back row
@@ -299,6 +300,14 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
         .text(`Retention Held (${retPct}%)`, labelPad, y + 8);
       doc.fontSize(10).font("Helvetica-Bold").fillColor(ORANGE_TEXT)
         .text(`(${formatCurrency(retAmt)})`, valX - 100, y + 8, { width: 100, align: "right" });
+      y += ROW_H;
+
+      // Processing and compliance fee row
+      doc.rect(MARGIN, y, CONTENT_W, ROW_H).fill("#f8fafc");
+      doc.fontSize(10).font("Helvetica").fillColor(TEXT)
+        .text("Processing and Compliance Fee (1%)", labelPad, y + 8);
+      doc.fontSize(10).font("Helvetica-Bold").fillColor(TEXT)
+        .text(formatCurrency(processingComplianceFee), valX - 100, y + 8, { width: 100, align: "right" });
       y += ROW_H;
 
       // Net payable now row
@@ -328,7 +337,7 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     // ── Amount Due box ────────────────────────────────────────────────────────────
     const amtBoxH = 54;
-    const netAmountDue = (!invoice.isRetentionRelease && retPct > 0) ? netPayable : invoice.amount;
+    const netAmountDue = (!invoice.isRetentionRelease && retPct > 0) ? netPayable : invoice.amount + processingComplianceFee;
     doc.roundedRect(MARGIN, y, CONTENT_W, amtBoxH, 8).fill(PRIMARY);
     doc.fontSize(10).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.8)")
       .text("NET AMOUNT DUE NOW", MARGIN + 20, y + 10);
@@ -337,7 +346,7 @@ export function generateInvoicePDF(data: InvoicePDFData): Promise<Buffer> {
 
     if (!invoice.isRetentionRelease && retPct > 0) {
       doc.fontSize(8).font("Helvetica").fillColor("rgba(200,220,255,0.7)")
-        .text(`Gross: ${formatCurrency(invoice.amount)} · ${retPct}% retention: ${formatCurrency(retAmt)}`, MARGIN + 20, y + 46, { width: 260 });
+        .text(`Gross: ${formatCurrency(invoice.amount)} · ${retPct}% retention: ${formatCurrency(retAmt)} · 1% fee: ${formatCurrency(processingComplianceFee)}`, MARGIN + 20, y + 46, { width: 360 });
     }
 
     doc.fontSize(9).font("Helvetica-Bold").fillColor("rgba(200,220,255,0.7)")
