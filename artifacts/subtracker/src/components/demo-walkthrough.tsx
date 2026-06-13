@@ -506,9 +506,9 @@ export function DemoWalkthroughOverlay() {
       return () => clearTimeout(t);
     }
 
-    // Step 1 → 2: user navigated to a subcontract page
-    if (step === 1 && location.startsWith("/subcontracts/")) {
-      setStep(2);
+    // Step 1 → 3: user navigated to a project page
+    if (step === 1 && location.startsWith("/projects/")) {
+      setStep(3);
     }
 
     // Step 2 → 3: user navigated to a project page (clicked Back to Project)
