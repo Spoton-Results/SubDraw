@@ -1,7 +1,5 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { demoLeadsTable } from "@workspace/db/schema";
-import { desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -25,14 +23,18 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const lead = (await db.insert(demoLeadsTable).values({
+  const lead = {
+    id: crypto.randomUUID(),
     firstName: firstName.trim(),
     email: email.trim().toLowerCase(),
     role,
     sessionId: sessionId ?? null,
     referrer: referrer ?? req.headers.referer ?? null,
     userAgent: req.headers["user-agent"] ?? null,
-  }).returning())[0];
+    capturedAt: new Date(),
+  };
+
+  console.log("[demo-leads] captured", lead);
 
   // Fire GHL webhook if configured
   const ghlWebhookUrl = process.env.GHL_DEMO_LEAD_WEBHOOK;
@@ -55,7 +57,7 @@ router.post("/", async (req, res) => {
 
 // ── GET /api/demo-leads ── (admin — imported and used in admin router)
 export async function getDemoLeads() {
-  return db.select().from(demoLeadsTable).orderBy(desc(demoLeadsTable.capturedAt));
+  return [];
 }
 
 export default router;
