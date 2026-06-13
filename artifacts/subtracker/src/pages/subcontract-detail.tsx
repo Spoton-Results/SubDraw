@@ -70,6 +70,8 @@ function StripePaymentInner({
   invoiceNumber: string; amount: number; subCompanyName: string; returnUrl: string;
   onSuccess: (pm: string) => void; onError: (msg: string) => void; isPaying: boolean;
 }) {
+  const processingComplianceFee = Math.round(amount * 0.01 * 100) / 100;
+  const totalCharge = amount + processingComplianceFee;
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = React.useState(false);
@@ -109,8 +111,16 @@ function StripePaymentInner({
           <span className="font-medium">#{invoiceNumber}</span>
         </div>
         <div className="flex justify-between text-slate-600 dark:text-slate-400">
-          <span>Amount</span>
-          <span className="font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(amount)}</span>
+          <span>Invoice Amount</span>
+          <span className="font-medium">{formatCurrency(amount)}</span>
+        </div>
+        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+          <span>Processing & Compliance Fee (1%)</span>
+          <span className="font-medium">{formatCurrency(processingComplianceFee)}</span>
+        </div>
+        <div className="flex justify-between text-slate-900 dark:text-slate-100">
+          <span className="font-semibold">Total Charge</span>
+          <span className="font-semibold">{formatCurrency(totalCharge)}</span>
         </div>
         <div className="flex justify-between text-slate-600 dark:text-slate-400">
           <span>Delivery</span>
