@@ -463,16 +463,25 @@ export default function Dashboard() {
   const [gatedHref, setGatedHref] = React.useState<string | null>(null);
 
   const handleFlaggedInvoiceClick = React.useCallback((href: string) => {
-    if (isDemoGatePassed()) {
-      setLocation(href);
-      return;
-    }
-    setGatedHref(href);
-    setShowGate(true);
+    setLocation(href);
   }, [setLocation]);
 
+  React.useEffect(() => {
+    if (!isDemoGC || isDemoGatePassed()) return;
+
+    const handleMouseLeave = (event: MouseEvent) => {
+      if (event.clientY <= 0) {
+        setGatedHref(null);
+        setShowGate(true);
+      }
+    };
+
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => document.removeEventListener("mouseleave", handleMouseLeave);
+  }, [isDemoGC]);
+
   const handleGateComplete = React.useCallback(() => {
-    const href = gatedHref || "/subcontracts";
+    const href = gatedHref || "/dashboard";
     setShowGate(false);
     setLocation(href);
     window.location.href = href;
