@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/layout";
+import { ProjectSection } from "@/components/ProjectSection";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   useGetProject,
@@ -174,6 +175,7 @@ export default function ProjectDetail() {
 
   const [expandedPlanViews, setExpandedPlanViews] = React.useState<Set<string>>(new Set());
   const [showNoPlanWarning, setShowNoPlanWarning] = React.useState(false);
+  const [plansSectionOpen, setPlansSectionOpen] = React.useState(false);
 
   const [isScopeOpen, setIsScopeOpen] = React.useState(false);
   const [selectedScopeFiles, setSelectedScopeFiles] = React.useState<File[]>([]);
@@ -182,6 +184,7 @@ export default function ProjectDetail() {
   const [scopeUploadFileIndex, setScopeUploadFileIndex] = React.useState(0);
   const scopeFileInputRef = React.useRef<HTMLInputElement>(null);
   const [deleteScopeConfirm, setDeleteScopeConfirm] = React.useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
+  const [scopeDocsSectionOpen, setScopeDocsSectionOpen] = React.useState(false);
 
   // GC Credentials state
   const gcInsCertInputRef = React.useRef<HTMLInputElement>(null);
@@ -215,6 +218,7 @@ export default function ProjectDetail() {
   const [complianceEditDocAllowed, setComplianceEditDocAllowed] = React.useState(false);
   const [complianceEditSaving, setComplianceEditSaving] = React.useState(false);
   const [complianceDeleteConfirm, setComplianceDeleteConfirm] = React.useState<string | null>(null);
+  const [complianceSectionOpen, setComplianceSectionOpen] = React.useState(false);
 
   // Project Owner state
   const [ownerEditing, setOwnerEditing] = React.useState(false);
@@ -225,7 +229,6 @@ export default function ProjectDetail() {
 
   // AI Bid Analysis state
   const [aiAnalyzing, setAiAnalyzing] = React.useState(false);
-  const [aiArchiveExpanded, setAiArchiveExpanded] = React.useState(false);
   const [aiExpandedTrades, setAiExpandedTrades] = React.useState<Set<string>>(new Set());
   const [aiFeedbackDropdown, setAiFeedbackDropdown] = React.useState<Record<string, boolean>>({});
   const [aiFeedbackSaving, setAiFeedbackSaving] = React.useState<Record<string, boolean>>({});
@@ -1764,16 +1767,21 @@ export default function ProjectDetail() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" /> Site Plans
-                </CardTitle>
-                {isGC && project.status === "BIDDING" && (
+                <button type="button" onClick={() => setPlansSectionOpen(v => !v)} className="flex items-center gap-2 text-left">
+                  {plansSectionOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" /> Site Plans
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">{planFiles.length} file{planFiles.length !== 1 ? "s" : ""}</span>
+                </button>
+                {plansSectionOpen && isGC && project.status === "BIDDING" && (
                   <Button size="sm" variant="outline" onClick={() => setIsPlanOpen(true)} className="gap-1.5">
                     <Upload className="h-4 w-4" /> Upload Plans
                   </Button>
                 )}
               </div>
             </CardHeader>
+            {plansSectionOpen && (
             <CardContent>
               {planFiles.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-2">No plan files uploaded yet.</p>
@@ -1874,23 +1882,31 @@ export default function ProjectDetail() {
                 </ul>
               )}
             </CardContent>
+            )}
           </Card>
 
           {/* SCOPE DOCUMENTS SECTION */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5 text-primary" /> Scope of Work Documents
-                </CardTitle>
-                {isGC && project.status === "BIDDING" && (
+                <button type="button" onClick={() => setScopeDocsSectionOpen(v => !v)} className="flex items-center gap-2 text-left">
+                  {scopeDocsSectionOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="h-5 w-5 text-primary" /> Scope of Work Documents
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">{scopeDocs.length} file{scopeDocs.length !== 1 ? "s" : ""}</span>
+                </button>
+                {scopeDocsSectionOpen && isGC && project.status === "BIDDING" && (
                   <Button size="sm" variant="outline" onClick={() => setIsScopeOpen(true)} className="gap-1.5">
                     <Upload className="h-4 w-4" /> Upload Docs
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Specifications, project requirements, and scope documents available to all invited subs before bidding.</p>
+              {scopeDocsSectionOpen && (
+                <p className="text-xs text-muted-foreground mt-1">Specifications, project requirements, and scope documents available to all invited subs before bidding.</p>
+              )}
             </CardHeader>
+            {scopeDocsSectionOpen && (
             <CardContent>
               {scopeDocs.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-2">No scope documents uploaded yet.</p>
@@ -1946,6 +1962,7 @@ export default function ProjectDetail() {
                 </ul>
               )}
             </CardContent>
+              )}
           </Card>
 
           {/* COMPLIANCE CHECKLIST SECTION — GC only */}
@@ -1953,13 +1970,19 @@ export default function ProjectDetail() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <ListChecks className="h-5 w-5 text-primary" /> Compliance Checklist
-                  </CardTitle>
+                  <button type="button" onClick={() => setComplianceSectionOpen(v => !v)} className="flex items-center gap-2 text-left">
+                    {complianceSectionOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    <CardTitle className="flex items-center gap-2">
+                      <ListChecks className="h-5 w-5 text-primary" /> Compliance Checklist
+                    </CardTitle>
+                  </button>
                   <span className="text-xs text-muted-foreground">{complianceItems.length} item{complianceItems.length !== 1 ? "s" : ""}</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Required documents and tasks each subcontractor must complete. Required items block invoice submission until marked complete.</p>
+                {complianceSectionOpen && (
+                  <p className="text-xs text-muted-foreground mt-1">Required documents and tasks each subcontractor must complete. Required items block invoice submission until marked complete.</p>
+                )}
               </CardHeader>
+              {complianceSectionOpen && (
               <CardContent className="space-y-4">
                 {/* Checklist Items */}
                 {complianceItems.length === 0 ? (
@@ -2084,6 +2107,7 @@ export default function ProjectDetail() {
                   </div>
                 )}
               </CardContent>
+              )}
             </Card>
           )}
 
@@ -3301,31 +3325,23 @@ export default function ProjectDetail() {
 
           {/* AI BID BENCHMARKS ARCHIVED — CONSTRUCTION phase, read-only collapsed */}
           {isGC && project.status === "CONSTRUCTION" && (project as any).aiAnalysis && (
-            <Card className="border-blue-200 dark:border-blue-800">
-              <button
-                className="w-full text-left"
-                onClick={() => setAiArchiveExpanded(e => !e)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-base leading-snug">
-                      <BrainCircuit className="h-5 w-5 shrink-0" />
-                      <span>AI Bid Benchmarks<span className="hidden sm:inline"> (Archived)</span></span>
-                    </CardTitle>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {(project as any).aiAnalysisAt && (
-                        <span className="text-xs text-muted-foreground hidden sm:block">
-                          {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy")}
-                        </span>
-                      )}
-                      <Badge variant="secondary" className="text-xs">Archived</Badge>
-                      {aiArchiveExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                    </div>
-                  </div>
-                </CardHeader>
-              </button>
-              {aiArchiveExpanded && (
-                <CardContent>
+            <ProjectSection
+              title={<span>AI Bid Benchmarks<span className="hidden sm:inline"> (Archived)</span></span>}
+              icon={<BrainCircuit className="h-5 w-5 shrink-0" />}
+              defaultOpen={false}
+              className="border-blue-200 dark:border-blue-800"
+              titleClassName="text-blue-700 dark:text-blue-400 text-base leading-snug"
+              actions={
+                <div className="flex items-center gap-2 shrink-0">
+                  {(project as any).aiAnalysisAt && (
+                    <span className="text-xs text-muted-foreground hidden sm:block">
+                      {format(new Date((project as any).aiAnalysisAt), "MMM d, yyyy")}
+                    </span>
+                  )}
+                  <Badge variant="secondary" className="text-xs">Archived</Badge>
+                </div>
+              }
+            >
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">Historical AI estimates from the bidding phase. These ranges are archived and cannot be regenerated while the project is in construction.</p>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -3361,9 +3377,7 @@ export default function ProjectDetail() {
                       })}
                     </div>
                   </div>
-                </CardContent>
-              )}
-            </Card>
+            </ProjectSection>
           )}
 
           {/* BIDS SECTION */}
