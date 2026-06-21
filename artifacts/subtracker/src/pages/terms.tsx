@@ -87,7 +87,7 @@ export default function Terms() {
           <UL items={[
             "Provide accurate, complete, and current registration information",
             "Maintain the security of your password and account credentials",
-            "Notify us immediately at hello@subdraw.com of any unauthorized access to your account",
+            "Notify us immediately at team@trysubdraw.com of any unauthorized access to your account",
             "Accept responsibility for all activities that occur under your account",
             "Not share your account credentials with unauthorized parties",
           ]} />
@@ -101,11 +101,11 @@ export default function Terms() {
           <P><strong style={{ color: T.text }}>Free trial:</strong> SubDraw offers a free trial period as described on the pricing page. No credit card is required to start a trial. At the end of the trial, a paid subscription is required to continue access.</P>
           <P><strong style={{ color: T.text }}>Automatic renewal:</strong> Your subscription automatically renews at the end of each billing period at the then-current rate unless you cancel before the renewal date.</P>
           <P><strong style={{ color: T.text }}>Price changes:</strong> We reserve the right to change subscription pricing. We will provide at least 30 days' notice before any price increase takes effect. Continued use after the effective date constitutes acceptance of the new pricing.</P>
-          <P><strong style={{ color: T.text }}>Refunds:</strong> We offer a 7-day refund policy for new subscriptions. Refund requests must be submitted to hello@subdraw.com within 7 days of the initial charge. Annual subscription refunds are prorated for unused months. We do not offer refunds for partial months on monthly plans.</P>
+          <P><strong style={{ color: T.text }}>Refunds:</strong> We offer a 7-day refund policy for new subscriptions. Refund requests must be submitted to team@trysubdraw.com within 7 days of the initial charge. Annual subscription refunds are prorated for unused months. We do not offer refunds for partial months on monthly plans.</P>
         </Section>
 
         <Section title="5. Cancellation">
-          <P>You may cancel your SubDraw subscription at any time through your account billing settings or by contacting hello@subdraw.com. Upon cancellation:</P>
+          <P>You may cancel your SubDraw subscription at any time through your account billing settings or by contacting team@trysubdraw.com. Upon cancellation:</P>
           <UL items={[
             "Your subscription remains active through the end of the current paid billing period",
             "You will not be charged for subsequent billing periods",
@@ -183,7 +183,7 @@ export default function Terms() {
         </Section>
 
         <Section title="13. Dispute Resolution">
-          <P><strong style={{ color: T.text }}>Informal resolution:</strong> Before filing any formal dispute, you agree to contact SubDraw at hello@subdraw.com and attempt to resolve the dispute informally. We will attempt to respond within 30 days.</P>
+          <P><strong style={{ color: T.text }}>Informal resolution:</strong> Before filing any formal dispute, you agree to contact SubDraw at team@trysubdraw.com and attempt to resolve the dispute informally. We will attempt to respond within 30 days.</P>
           <P><strong style={{ color: T.text }}>Arbitration:</strong> If informal resolution fails, disputes shall be resolved by binding arbitration administered by the American Arbitration Association (AAA) under its Commercial Arbitration Rules. Arbitration will be conducted in the state of Utah. The arbitrator's decision shall be final and binding.</P>
           <P><strong style={{ color: T.text }}>Class action waiver:</strong> You waive any right to participate in class action lawsuits or class-wide arbitration against SubDraw.</P>
           <P><strong style={{ color: T.text }}>Exceptions:</strong> Either party may seek injunctive or other equitable relief in court to prevent irreparable harm, and either party may bring claims in small claims court for disputes within that court's jurisdiction.</P>
@@ -216,7 +216,8 @@ export default function Terms() {
           <P>For questions about these Terms, please contact us:</P>
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "20px 24px", marginTop: 8 }}>
             <p style={{ color: T.text, fontWeight: 600, marginBottom: 4 }}>SpotOn Results LLC (SubDraw)</p>
-            <p style={{ color: T.muted, marginBottom: 4 }}>Email: <a href="mailto:hello@subdraw.com" style={{ color: T.teal, textDecoration: "none" }}>hello@subdraw.com</a></p>
+            <p style={{ color: T.muted, marginBottom: 4 }}>Email: <a href="mailto:team@trysubdraw.com" style={{ color: T.teal, textDecoration: "none" }}>team@trysubdraw.com</a></p>
+            <p style={{ color: T.muted, marginBottom: 4 }}>Phone: <a href="tel:+14359995348" style={{ color: T.teal, textDecoration: "none" }}>(435) 999-5348</a></p>
             <p style={{ color: T.muted, margin: 0 }}>We respond to all legal inquiries within 30 days.</p>
           </div>
         </Section>

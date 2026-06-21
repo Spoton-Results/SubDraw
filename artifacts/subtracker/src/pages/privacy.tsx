@@ -126,12 +126,12 @@ export default function Privacy() {
         </Section>
 
         <Section title="6. Your Rights and Choices">
-          <P><strong style={{ color: T.text }}>Access and correction:</strong> You may access and update your account information at any time through your account settings or by contacting us at hello@subdraw.com.</P>
+          <P><strong style={{ color: T.text }}>Access and correction:</strong> You may access and update your account information at any time through your account settings or by contacting us at team@trysubdraw.com.</P>
           <P><strong style={{ color: T.text }}>Data portability:</strong> You may request a copy of your data in a machine-readable format by contacting us. We will respond within 30 days.</P>
-          <P><strong style={{ color: T.text }}>Deletion:</strong> You may request deletion of your account and personal data by contacting hello@subdraw.com. Note that we may retain certain information as required by law or legitimate business purposes as described in Section 4.</P>
+          <P><strong style={{ color: T.text }}>Deletion:</strong> You may request deletion of your account and personal data by contacting team@trysubdraw.com. Note that we may retain certain information as required by law or legitimate business purposes as described in Section 4.</P>
           <P><strong style={{ color: T.text }}>Marketing opt-out:</strong> You may opt out of marketing emails at any time by clicking the "unsubscribe" link in any email or contacting us directly. You will continue to receive transactional and account-related messages.</P>
           <P><strong style={{ color: T.text }}>Cookies:</strong> Most browsers accept cookies by default. You can configure your browser to refuse cookies, though some platform features may not function properly without them.</P>
-          <P><strong style={{ color: T.text }}>California residents (CCPA):</strong> California residents have additional rights including the right to know what personal information we collect, the right to delete personal information, and the right to opt out of sale (we do not sell personal information). To exercise these rights, contact us at hello@subdraw.com.</P>
+          <P><strong style={{ color: T.text }}>California residents (CCPA):</strong> California residents have additional rights including the right to know what personal information we collect, the right to delete personal information, and the right to opt out of sale (we do not sell personal information). To exercise these rights, contact us at team@trysubdraw.com.</P>
         </Section>
 
         <Section title="7. Cookies and Tracking Technologies">
@@ -150,7 +150,7 @@ export default function Privacy() {
         </Section>
 
         <Section title="9. Children's Privacy">
-          <P>SubDraw is a business platform intended for use by adults operating general contracting businesses. We do not knowingly collect personal information from anyone under the age of 18. If you become aware that a minor has provided us with personal information, please contact us at hello@subdraw.com and we will take steps to delete that information.</P>
+          <P>SubDraw is a business platform intended for use by adults operating general contracting businesses. We do not knowingly collect personal information from anyone under the age of 18. If you become aware that a minor has provided us with personal information, please contact us at team@trysubdraw.com and we will take steps to delete that information.</P>
         </Section>
 
         <Section title="10. Changes to This Policy">
@@ -161,7 +161,8 @@ export default function Privacy() {
           <P>If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us:</P>
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "20px 24px", marginTop: 8 }}>
             <p style={{ color: T.text, fontWeight: 600, marginBottom: 4 }}>SpotOn Results LLC (SubDraw)</p>
-            <p style={{ color: T.muted, marginBottom: 4 }}>Email: <a href="mailto:hello@subdraw.com" style={{ color: T.teal, textDecoration: "none" }}>hello@subdraw.com</a></p>
+            <p style={{ color: T.muted, marginBottom: 4 }}>Email: <a href="mailto:team@trysubdraw.com" style={{ color: T.teal, textDecoration: "none" }}>team@trysubdraw.com</a></p>
+            <p style={{ color: T.muted, marginBottom: 4 }}>Phone: <a href="tel:+14359995348" style={{ color: T.teal, textDecoration: "none" }}>(435) 999-5348</a></p>
             <p style={{ color: T.muted, margin: 0 }}>We respond to all privacy requests within 30 days.</p>
           </div>
         </Section>

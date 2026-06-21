@@ -741,7 +741,7 @@ export default function Home() {
               <div>
                 <h4 style={{ fontSize:".68rem", fontWeight:700, color:T.text, textTransform:"uppercase", letterSpacing:".1em", marginBottom:12 }}>Company</h4>
                 <ul style={{ listStyle:"none", display:"flex", flexDirection:"column", gap:8 }}>
-                  {[["Contact","mailto:hello@subdraw.com"],["Privacy","#"],["Terms","#"]].map(([l,h])=>(
+                  {[["team@trysubdraw.com","mailto:team@trysubdraw.com"],["(435) 999-5348","tel:+14359995348"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,h])=>(
                     <li key={l}><a href={h} style={{ color:T.hint, fontSize:".85rem", textDecoration:"none" }}>{l}</a></li>
                   ))}
                 </ul>
