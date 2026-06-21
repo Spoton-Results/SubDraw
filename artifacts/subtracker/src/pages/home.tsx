@@ -78,9 +78,9 @@ function HeroMockup() {
         </div>
       </div>
       {/* App layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", minHeight: 420 }}>
+      <div className="mockup-body" style={{ display: "grid", gridTemplateColumns: "180px 1fr", minHeight: 420 }}>
         {/* Sidebar */}
-        <div style={{ background: "#090f1d", borderRight: `1px solid ${T.border}`, padding: "16px 0" }}>
+        <div className="mockup-sidebar" style={{ background: "#090f1d", borderRight: `1px solid ${T.border}`, padding: "16px 0" }}>
           <div style={{ padding: "0 14px 14px", borderBottom: `1px solid ${T.border}`, marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 26, height: 26, background: T.teal, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, color: "#000" }}>SD</div>
@@ -115,7 +115,7 @@ function HeroMockup() {
             </div>
           </div>
           {/* KPI strip */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 14 }}>
+          <div className="mockup-met-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 14 }}>
             {[
               { label: "Draw Total", val: "$387K", sub: "⚠ 3 flagged", subColor: T.red },
               { label: "Errors Caught", val: "$22.4K", sub: "before payment", subColor: T.green },
@@ -216,7 +216,7 @@ function ScoreboardMockup() {
                   <div style={{ fontSize: 18, fontWeight: 800, color: sub.remaining < 500 ? T.amber : T.green, fontFamily: "monospace", letterSpacing: "-.02em" }}>${sub.remaining.toLocaleString()}</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, fontSize: 10 }}>
+              <div className="sub-stats-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, fontSize: 10 }}>
                 {[
                   { l: "Base Contract", v: `$${sub.contract.toLocaleString()}` },
                   { l: "Change Orders", v: `+$${sub.co.toLocaleString()}` },
@@ -238,7 +238,7 @@ function ScoreboardMockup() {
         </div>
         <div style={{ marginTop: 12, padding: "12px 14px", background: T.hint, border: `1px solid ${T.border2}`, borderRadius: 8, fontSize: 10 }}>
           <div style={{ fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".07em", fontSize: 9, marginBottom: 6 }}>Totals — 3 Subcontracts</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+          <div className="sub-totals-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
             {[["Base Contracts","$105,000"],["Change Orders","$16,800"],["Approved Total","$121,800"],["Total Invoiced","$88,000"]].map(([l,v],i) => (
               <div key={i}>
                 <div style={{ fontSize: 9, color: T.muted, marginBottom: 2 }}>{l}</div>
@@ -281,7 +281,7 @@ function ActionMockup() {
                 <div style={{ padding: "5px 12px", border: `1px solid ${T.border2}`, borderRadius: 5, fontSize: 10, fontWeight: 600, color: T.muted, cursor: "default" }}>Override (reason required)</div>
               </div>
             </div>
-            <div style={{ background: "rgba(255,59,92,.1)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 8, padding: "8px 12px", textAlign: "center", flexShrink: 0 }}>
+            <div className="action-proof-box" style={{ background: "rgba(255,59,92,.1)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 8, padding: "8px 12px", textAlign: "center", flexShrink: 0 }}>
               <div style={{ fontSize: 9, color: T.red, marginBottom: 2 }}>Overbilled</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: T.red, fontFamily: "monospace" }}>$5,450</div>
             </div>
@@ -382,7 +382,7 @@ export default function Home() {
 
       {/* ═══ HERO ═══════════════════════════════════════════════════════════ */}
       <section id="hero" style={{ paddingTop: 60, background: `radial-gradient(ellipse 100% 60% at 50% -10%, rgba(0,212,168,.1) 0%, transparent 65%), ${T.navy}`, overflow: "hidden" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 24px 0" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "60px 20px 0" }}>
           {/* Badge */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .5 }} style={{ textAlign: "center", marginBottom: 28 }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.tealDim, border: `1px solid ${T.tealBrd}`, borderRadius: 100, padding: "6px 16px" }}>
@@ -419,7 +419,7 @@ export default function Home() {
 
           {/* CTAs */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .5, delay: .38 }}
-            style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
+            className="hero-ctas" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
             <Link href="/login" style={{ display: "inline-flex", alignItems: "center", gap: 10, background: T.teal, color: "#000", fontWeight: 800, fontSize: "1rem", borderRadius: 10, padding: "16px 32px", textDecoration: "none", boxShadow: `0 8px 32px rgba(0,212,168,.35)` }}>
               Watch It Flag a Bad Invoice
               <ArrowRight size={18} strokeWidth={2.5} />
@@ -450,7 +450,7 @@ export default function Home() {
 
       {/* ═══ STATS BAR ══════════════════════════════════════════════════════ */}
       <section style={{ background: T.card, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "48px 24px" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 32, textAlign: "center" }}>
+        <div className="stats-bar" style={{ maxWidth: 1000, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 32, textAlign: "center" }}>
           {[
             { num: 8000, prefix: "$", suffix: "+", label: "Avg caught per draw" },
             { num: 73, suffix: "%", label: "Fewer invoice disputes" },
@@ -468,7 +468,7 @@ export default function Home() {
       </section>
 
       {/* ═══ PAIN ══════════════════════════════════════════════════════════ */}
-      <section style={{ background: T.navy, padding: "96px 0" }}>
+      <section className="section-pad" style={{ background: T.navy, padding: "96px 0" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
           <FadeUp>
             <div style={{ marginBottom: 56 }}>
@@ -480,7 +480,7 @@ export default function Home() {
               </h2>
             </div>
           </FadeUp>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px,1fr))", gap: 14 }}>
+          <div className="pain-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 14 }}>
             {[
               { icon: <AlertTriangle size={18} />, title: "Over-invoices you miss", desc: "Invoice hits the same day the draw is due. You're reviewing 12 subs across 3 jobs. You approve it. Find out later they billed for work that wasn't done.", stat: "$6,200 avg per incident" },
               { icon: <FileText size={18} />, title: "Duplicate charges", desc: "Same line item submitted twice under different framing. Easy to miss when you're moving fast. Impossible to claw back once paid.", stat: "$3,800 avg per duplicate" },
@@ -505,7 +505,7 @@ export default function Home() {
       </section>
 
       {/* ═══ FEATURES ═══════════════════════════════════════════════════════ */}
-      <section id="features" style={{ background: T.card, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "96px 0" }}>
+      <section id="features" className="section-pad" style={{ background: T.card, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: "96px 0" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
           <FadeUp>
             <div style={{ textAlign: "center", marginBottom: 56 }}>
@@ -517,7 +517,7 @@ export default function Home() {
               </h2>
             </div>
           </FadeUp>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }} className="grid-cols-1 md:grid-cols-3">
+          <div className="features-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
             {[
               { num: "01", icon: <AlertTriangle size={20} />, title: "Flags over-invoices before you pay", desc: "Every invoice is checked against the approved total the moment it's submitted. Anything over gets flagged before your PM ever clicks approve — with a written override reason required." },
               { num: "02", icon: <FileText size={20} />, title: "Locks change orders in writing", desc: "Every CO is approved by the sub first, then you. No more 'I thought that was included' at closeout. Every change has a timestamp and a signature you can point to." },
@@ -538,7 +538,7 @@ export default function Home() {
           {/* Feature checklist */}
           <FadeUp delay={.3}>
             <div style={{ marginTop: 20, background: T.tealDim, border: `1px solid ${T.tealBrd}`, borderRadius: 12, padding: "24px 32px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14 }}>
+              <div className="feature-checklist" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
                 {["Invoice flagging on every draw","Lender-ready draw packages","Digital lien waivers","Retainage tracking & schedules","Change order audit trail","Subcontractor portal","Insurance & license tracking","Real-time budget vs actual","Bulk payment approvals","Multi-project dashboard"].map(item => (
                   <div key={item} style={{ display: "flex", alignItems: "center", gap: 9 }}>
                     <Check size={13} style={{ color: T.teal, flexShrink: 0 }} strokeWidth={2.5} />
@@ -565,8 +565,8 @@ export default function Home() {
               <p style={{ color: T.muted, fontSize: "1rem", marginTop: 12 }}>No implementation consultant. No training sessions. Most GCs are reviewing their first draw in 2 minutes.</p>
             </div>
           </FadeUp>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 32, position: "relative" }}>
-            <div style={{ position: "absolute", top: 28, left: "8%", right: "8%", height: 1, background: `linear-gradient(90deg, ${T.teal}, transparent)`, opacity: .2 }} />
+          <div className="steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 32, position: "relative" }}>
+            <div className="steps-line" style={{ position: "absolute", top: 28, left: "8%", right: "8%", height: 1, background: `linear-gradient(90deg, ${T.teal}, transparent)`, opacity: .2 }} />
             {[
               { num: "1", title: "Upload your draw", desc: "Upload any pay app or connect your lender portal. SubDraw maps every line item automatically." },
               { num: "2", title: "SubDraw reviews everything", desc: "Every invoice checked against approved budget and contract terms. Flags appear before you review." },
@@ -600,7 +600,7 @@ export default function Home() {
           </FadeUp>
 
           {/* Tab 1: Action Required */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center", marginBottom: 80 }}>
+          <div className="proof-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center", marginBottom: 80 }}>
             <FadeUp>
               <div>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 6, padding: "4px 12px", marginBottom: 20 }}>
@@ -633,7 +633,7 @@ export default function Home() {
           </div>
 
           {/* Tab 2: Scoreboard */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+          <div className="proof-row-reverse" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
             <FadeUp delay={.1}>
               <ScoreboardMockup />
             </FadeUp>
@@ -713,10 +713,10 @@ export default function Home() {
             </div>
           </FadeUp>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, alignItems: "start" }}>
+          <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, alignItems: "start" }}>
             {PLANS.map((plan, i) => (
               <FadeUp key={plan.name} delay={i * .1}>
-                <div style={{ background: plan.popular ? "rgba(0,212,168,.04)" : "#0d1525", border: plan.popular ? `2px solid ${T.teal}` : `1px solid ${T.border}`, borderRadius: 14, padding: plan.popular ? "36px 28px 28px" : "28px", position: "relative", transform: plan.popular ? "scale(1.02)" : "none" }}>
+                <div className={plan.popular ? "plan-popular" : ""} style={{ background: plan.popular ? "rgba(0,212,168,.04)" : "#0d1525", border: plan.popular ? `2px solid ${T.teal}` : `1px solid ${T.border}`, borderRadius: 14, padding: plan.popular ? "36px 28px 28px" : "28px", position: "relative", transform: plan.popular ? "scale(1.02)" : "none" }}>
                   {plan.popular && <div style={{ position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)", background: T.teal, color: "#000", fontSize: ".62rem", fontWeight: 800, padding: "4px 14px", borderRadius: 100, letterSpacing: ".08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Most Popular</div>}
                   <div style={{ fontWeight: 800, fontSize: "1.05rem", color: T.text, marginBottom: 3 }}>{plan.name}</div>
                   <div style={{ fontSize: ".78rem", color: T.muted, marginBottom: 5 }}>{plan.limit}</div>
@@ -780,7 +780,7 @@ export default function Home() {
       {/* ═══ FOOTER ══════════════════════════════════════════════════════════ */}
       <footer style={{ background: T.card, borderTop: `1px solid ${T.border}`, padding: "52px 0 24px" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
+          <div className="footer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <div style={{ width: 32, height: 32, background: T.teal, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 11, color: "#000" }}>SD</div>
@@ -837,11 +837,59 @@ export default function Home() {
         *, *::before, *::after { box-sizing: border-box; }
         body { margin: 0; }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+        /* ── MOBILE ── */
         @media (max-width: 768px) {
-          [style*="grid-template-columns: repeat(3"] { grid-template-columns: 1fr !important; }
-          [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
-          [style*="grid-template-columns: 2fr 1fr 1fr 1fr"] { grid-template-columns: 1fr 1fr !important; }
-          [style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2,1fr) !important; }
+          /* Stats bar: 2 cols on mobile */
+          .stats-bar { grid-template-columns: repeat(2,1fr) !important; gap: 24px !important; }
+
+          /* Pain grid: 1 col */
+          .pain-grid { grid-template-columns: 1fr !important; }
+
+          /* Features: 1 col */
+          .features-grid { grid-template-columns: 1fr !important; }
+
+          /* Steps: 1 col */
+          .steps-grid { grid-template-columns: 1fr !important; }
+          .steps-line { display: none !important; }
+
+          /* Proof sections: stack vertically */
+          .proof-row { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .proof-row-reverse { grid-template-columns: 1fr !important; gap: 32px !important; }
+
+          /* Pricing: 1 col, no scale on popular */
+          .pricing-grid { grid-template-columns: 1fr !important; }
+          .plan-popular { transform: none !important; }
+
+          /* Footer: 2 col */
+          .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 28px !important; }
+
+          /* Feature checklist: 1 col */
+          .feature-checklist { grid-template-columns: 1fr !important; }
+
+          /* Hero mockup: hide sidebar on small screens */
+          .mockup-sidebar { display: none !important; }
+          .mockup-body { grid-template-columns: 1fr !important; }
+          .mockup-met-grid { grid-template-columns: repeat(2,1fr) !important; }
+
+          /* Scoreboard sub grid: 2 col */
+          .sub-stats-grid { grid-template-columns: 1fr 1fr !important; }
+          .sub-totals-grid { grid-template-columns: 1fr 1fr !important; }
+
+          /* Section padding: tighter on mobile */
+          .section-pad { padding: 64px 0 !important; }
+
+          /* Proof stats: stack */
+          .proof-stats-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+
+        @media (max-width: 480px) {
+          .stats-bar { grid-template-columns: 1fr 1fr !important; }
+          .footer-grid { grid-template-columns: 1fr !important; }
+          .mockup-met-grid { grid-template-columns: 1fr 1fr !important; }
+          .action-proof-box { display: none !important; }
+          .hero-ctas { flex-direction: column !important; align-items: stretch !important; }
+          .hero-ctas a { justify-content: center !important; text-align: center !important; }
         }
       `}</style>
     </div>
