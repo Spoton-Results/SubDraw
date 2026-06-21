@@ -1,8 +1,11 @@
 import * as React from "react";
 import { Link } from "wouter";
-import {
-  Menu, X, HardHat, ArrowRight, Check,
-} from "lucide-react";
+import { Menu, X, HardHat, ArrowRight, Check, ChevronRight } from "lucide-react";
+
+const TEAL = "#00d4a8";
+const TEAL_DARK = "#00b891";
+const NAVY = "#0b1120";
+const CHARCOAL = "#111827";
 
 const PLANS = [
   {
@@ -10,8 +13,8 @@ const PLANS = [
     monthly: 149,
     annual: 1639,
     limit: "Up to 10 active subcontracts",
-    description: "Perfect for remodelers and small GCs getting started",
-    roi: "If SubDraw catches one invoice overrun this year it paid for itself completely.",
+    description: "For remodelers and small GCs getting started.",
+    roi: "If SubDraw catches one invoice overrun this year, it paid for itself completely.",
     popular: false,
   },
   {
@@ -19,7 +22,7 @@ const PLANS = [
     monthly: 299,
     annual: 3289,
     limit: "Up to 30 active subcontracts",
-    description: "For GCs running two to four active jobs simultaneously",
+    description: "For GCs running two to four active jobs simultaneously.",
     roi: "One caught overrun on a single job covers your entire year of SubDraw.",
     popular: true,
   },
@@ -28,10 +31,41 @@ const PLANS = [
     monthly: 599,
     annual: 6589,
     limit: "Unlimited active subcontracts",
-    description: "For serious GCs running multiple crews with no limits",
-    roi: "Unlimited protection across every job every sub every invoice all year.",
+    description: "For serious GCs running multiple crews with no limits.",
+    roi: "Unlimited protection across every job, every sub, every invoice, all year.",
     popular: false,
   },
+];
+
+const FEATURES = [
+  {
+    num: "01",
+    title: "Flags over-invoices before you pay",
+    body: "Every invoice is checked against the approved total the moment it's submitted. Anything over gets a red flag before your PM ever clicks approve — with a written override reason required if you still want to pay it.",
+  },
+  {
+    num: "02",
+    title: "Locks change orders in writing",
+    body: "Every change order is approved by the sub first, then you. No more 'I thought that was included' arguments three months later. Every CO has a timestamp and a signature.",
+  },
+  {
+    num: "03",
+    title: "Makes compliance automatic",
+    body: "Payments are tied to signed lien waivers and valid insurance certificates. Green, yellow, and red badges show at a glance who is safe to pay — and who isn't.",
+  },
+];
+
+const PAIN_POINTS = [
+  "Over-invoices that slip past tired eyes at 5:30pm.",
+  "Change orders agreed in the hallway and never added to the contract.",
+  "Payments released before lien waivers are actually in hand.",
+  "Spreadsheets only one person understands — until they quit.",
+];
+
+const PROOF_STATS = [
+  { num: "$5,450", label: "caught on one Pacific Electric invoice before payment" },
+  { num: "$5,600", label: "in retainage tracked automatically, zero manual work" },
+  { num: "100%", label: "invoiced visibility — GC knew exactly where they stood" },
 ];
 
 export default function Home() {
@@ -56,195 +90,480 @@ export default function Home() {
   };
 
   return (
-    <div className="font-sans antialiased text-slate-900" style={{ scrollBehavior: "smooth" }}>
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-slate-900/98 backdrop-blur-md shadow-lg" : "bg-slate-900"}`}>
+    <div
+      className="antialiased"
+      style={{ fontFamily: "'Inter', system-ui, sans-serif", scrollBehavior: "smooth", color: "#e8ecf4" }}
+    >
+      {/* ── NAV ── */}
+      <nav
+        className="fixed top-0 left-0 right-0 z-50 transition-all duration-300"
+        style={{
+          background: scrolled ? "rgba(11,17,32,.97)" : NAVY,
+          borderBottom: scrolled ? "1px solid rgba(255,255,255,.08)" : "none",
+          backdropFilter: scrolled ? "blur(16px)" : "none",
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <a href="#hero" onClick={scrollTo("hero")} className="flex items-center gap-2 text-white font-bold text-xl tracking-tight">
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "hsl(221 83% 53%)" }}>
-                <HardHat className="h-4 w-4 text-white" strokeWidth={2.5} />
+            <a href="#hero" onClick={scrollTo("hero")} className="flex items-center gap-2.5" style={{ textDecoration: "none" }}>
+              <div className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-sm" style={{ background: TEAL, color: "#000" }}>
+                SD
               </div>
-              SubDraw
+              <span style={{ color: "#fff", fontWeight: 800, fontSize: "1.1rem", letterSpacing: "-.03em" }}>
+                Sub<span style={{ color: TEAL }}>Draw</span>
+              </span>
             </a>
             <div className="hidden md:flex items-center gap-8">
-              <a href="#what-it-does" onClick={scrollTo("what-it-does")} className="text-slate-300 hover:text-white text-sm font-medium transition-colors cursor-pointer">Features</a>
-              <a href="#pricing" onClick={scrollTo("pricing")} className="text-slate-300 hover:text-white text-sm font-medium transition-colors cursor-pointer">Pricing</a>
-              <Link href="/login" className="text-sm font-semibold text-white border border-white/30 rounded-lg px-4 py-2 hover:bg-white/10 transition-colors">Log In</Link>
-              <Link href="/login" className="text-sm font-bold text-white rounded-lg px-5 py-2.5 transition-all hover:opacity-90 hover:scale-105 shadow-lg" style={{ backgroundColor: "#F97316" }}>
-                See Live Demo →
+              <a href="#features" onClick={scrollTo("features")} style={{ color: "#6b7a96", fontSize: ".9rem", fontWeight: 500, textDecoration: "none", transition: "color .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8ecf4")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#6b7a96")}>Features</a>
+              <a href="#proof" onClick={scrollTo("proof")} style={{ color: "#6b7a96", fontSize: ".9rem", fontWeight: 500, textDecoration: "none", transition: "color .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8ecf4")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#6b7a96")}>See It Work</a>
+              <a href="#pricing" onClick={scrollTo("pricing")} style={{ color: "#6b7a96", fontSize: ".9rem", fontWeight: 500, textDecoration: "none", transition: "color .15s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8ecf4")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#6b7a96")}>Pricing</a>
+              <Link href="/login" style={{ color: "#e8ecf4", fontSize: ".85rem", fontWeight: 600, border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 16px", textDecoration: "none", transition: "all .15s" }}>Log In</Link>
+              <Link
+                href="/login"
+                style={{ background: TEAL, color: "#000", fontWeight: 800, fontSize: ".9rem", borderRadius: 8, padding: "9px 20px", textDecoration: "none", transition: "all .15s", boxShadow: `0 4px 16px rgba(0,212,168,.3)` }}
+              >
+                Try It Free →
               </Link>
             </div>
-            <button className="md:hidden text-white p-2" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">
+            <button className="md:hidden p-2" style={{ background: "none", border: "none", cursor: "pointer", color: "#e8ecf4" }} onClick={() => setMenuOpen(!menuOpen)}>
               {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>
         {menuOpen && (
-          <div className="md:hidden bg-slate-900 border-t border-white/10">
+          <div style={{ background: CHARCOAL, borderTop: "1px solid rgba(255,255,255,.08)" }}>
             <div className="px-4 py-4 flex flex-col gap-3">
-              <a href="#what-it-does" onClick={scrollTo("what-it-does")} className="text-slate-300 hover:text-white font-medium py-2">Features</a>
-              <a href="#pricing" onClick={scrollTo("pricing")} className="text-slate-300 hover:text-white font-medium py-2">Pricing</a>
-              <Link href="/login" className="text-white border border-white/30 rounded-xl px-4 py-3 text-center font-semibold">Log In</Link>
-              <Link href="/login" className="text-white rounded-xl px-4 py-3.5 text-center font-bold text-sm" style={{ backgroundColor: "#F97316" }}>
-                See Live Demo — No Signup Required
+              <a href="#features" onClick={scrollTo("features")} style={{ color: "#6b7a96", fontWeight: 500, padding: "8px 0", textDecoration: "none" }}>Features</a>
+              <a href="#proof" onClick={scrollTo("proof")} style={{ color: "#6b7a96", fontWeight: 500, padding: "8px 0", textDecoration: "none" }}>See It Work</a>
+              <a href="#pricing" onClick={scrollTo("pricing")} style={{ color: "#6b7a96", fontWeight: 500, padding: "8px 0", textDecoration: "none" }}>Pricing</a>
+              <Link href="/login" style={{ color: "#e8ecf4", border: "1px solid rgba(255,255,255,.2)", borderRadius: 10, padding: "12px 16px", textAlign: "center", fontWeight: 600, textDecoration: "none" }}>Log In</Link>
+              <Link href="/login" style={{ background: TEAL, color: "#000", borderRadius: 10, padding: "14px 16px", textAlign: "center", fontWeight: 800, textDecoration: "none" }}>
+                Try It Free — No Signup Required
               </Link>
             </div>
           </div>
         )}
       </nav>
 
-      <section id="hero" className="bg-slate-900 pt-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
-          <div className="inline-flex items-center rounded-full border px-3.5 py-1.5 mb-8" style={{ backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.15)" }}>
-            <span className="text-xs font-bold tracking-widest uppercase text-slate-400">Subcontractor Invoice Control for GCs</span>
+      {/* ── HERO ── */}
+      <section id="hero" style={{ background: `radial-gradient(ellipse 80% 50% at 50% -5%, rgba(0,212,168,.12) 0%, transparent 70%), ${NAVY}`, paddingTop: 64 }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-8" style={{ background: "rgba(0,212,168,.08)", border: "1px solid rgba(0,212,168,.2)" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: TEAL, animation: "pulse 2s ease-in-out infinite" }} />
+            <span style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: TEAL }}>Invoice Protection for General Contractors</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight max-w-4xl">
+
+          {/* Headline */}
+          <h1 style={{ fontSize: "clamp(2.4rem,6vw,4rem)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-.04em", color: "#fff", marginBottom: 20, maxWidth: 820 }}>
             Your sub just invoiced $8,500 over their contract.<br />
-            <span className="text-slate-200">Do you catch it — or pay it?</span>
+            <span style={{ color: "#6b7a96" }}>Do you catch it — or pay it?</span>
           </h1>
-          <p className="mt-7 text-lg sm:text-xl text-slate-300 leading-relaxed max-w-3xl">
-            Most GCs only see overruns after the money is gone. SubDraw sits between you and your subs and flags every over-invoice the second it's submitted, with a written override reason required if you still want to approve it.
+
+          {/* Sub */}
+          <p style={{ fontSize: "1.15rem", color: "#6b7a96", lineHeight: 1.7, maxWidth: 680, marginBottom: 32 }}>
+            Most GCs only see overruns after the money is gone. SubDraw sits between you and your subs —
+            flagging every over-invoice the second it's submitted, before anyone clicks approve.
           </p>
-          <div className="mt-8 max-w-2xl border-l-4 pl-5 py-1" style={{ borderColor: "hsl(221 83% 53%)" }}>
-            <p className="text-slate-200 text-base italic leading-relaxed">"SubDraw caught a $12,000 overrun in week one. That paid for years of subscription in a single click."</p>
-            <p className="mt-2 text-slate-500 text-sm not-italic">— GC Owner, St George Utah</p>
+
+          {/* Testimonial */}
+          <div style={{ borderLeft: `3px solid ${TEAL}`, paddingLeft: 20, marginBottom: 40, maxWidth: 580 }}>
+            <p style={{ color: "#c8d0df", fontSize: ".95rem", fontStyle: "italic", lineHeight: 1.6 }}>
+              "SubDraw caught a $12,000 overrun in week one. That paid for years of subscription in a single click."
+            </p>
+            <p style={{ color: "#4a5568", fontSize: ".8rem", marginTop: 8, fontStyle: "normal" }}>— GC Owner, St. George, Utah</p>
           </div>
-          <div className="mt-10">
-            <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-xl text-white font-bold shadow-2xl transition-all hover:opacity-90 hover:scale-105" style={{ backgroundColor: "#F97316", padding: "1rem 2.25rem", fontSize: "1.05rem" }}>
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-8">
+            <Link
+              href="/login"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, background: TEAL, color: "#000", fontWeight: 800, fontSize: "1.05rem", borderRadius: 10, padding: "16px 32px", textDecoration: "none", boxShadow: `0 8px 24px rgba(0,212,168,.3)`, transition: "all .2s" }}
+            >
               Watch It Flag a Bad Invoice
               <ArrowRight className="h-5 w-5 shrink-0" />
             </Link>
-            <p className="mt-3 text-sm text-slate-500">No login. Real GC project. 60-second walkthrough.</p>
+            <a
+              href="#proof"
+              onClick={scrollTo("proof")}
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#6b7a96", fontWeight: 600, fontSize: ".95rem", borderRadius: 10, padding: "16px 24px", border: "1px solid rgba(255,255,255,.1)", textDecoration: "none", transition: "all .2s" }}
+            >
+              See a real catch →
+            </a>
           </div>
-          <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-8">
-            {["No Credit Card Required", "Subcontractors Always Free", "Cancel Anytime"].map((badge) => (
-              <span key={badge} className="flex items-center gap-2 text-slate-500 text-sm"><Check className="h-4 w-4 text-green-500 shrink-0" strokeWidth={2.5} />{badge}</span>
+
+          {/* Trust signals */}
+          <div className="flex flex-wrap gap-6">
+            {["No credit card required", "2-minute setup", "Used by GCs in CA & UT"].map((t) => (
+              <span key={t} className="flex items-center gap-2" style={{ color: "#4a5568", fontSize: ".82rem" }}>
+                <Check className="h-3.5 w-3.5 shrink-0" style={{ color: "#00c87a" }} strokeWidth={2.5} />
+                {t}
+              </span>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="bg-white py-20">
+      {/* ── PAIN ── */}
+      <section style={{ background: CHARCOAL, borderTop: "1px solid rgba(255,255,255,.06)", borderBottom: "1px solid rgba(255,255,255,.06)", padding: "80px 0" }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">The four places GCs quietly lose money on subs</h2>
-          <ul className="mt-8 space-y-5">
-            {["Over-invoices that slip past tired eyes at 5:30pm.", "Change orders agreed in the hallway and never fully added to the contract.", "Payments released before lien waivers and certificates are actually in hand.", "Spreadsheets that only one person understands — until they're on vacation."].map((item, i) => (
-              <li key={i} className="flex items-start gap-4">
-                <div className="mt-0.5 h-6 w-6 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ backgroundColor: "hsl(221 83% 53%)" }}>{i + 1}</div>
-                <span className="text-slate-700 text-lg leading-snug">{item}</span>
+          <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-.03em", color: "#fff", lineHeight: 1.2, marginBottom: 36 }}>
+            The four places GCs quietly lose money on subs
+          </h2>
+          <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 20, marginBottom: 40 }}>
+            {PAIN_POINTS.map((item, i) => (
+              <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+                <div style={{ minWidth: 28, height: 28, borderRadius: "50%", background: "rgba(0,212,168,.1)", border: "1px solid rgba(0,212,168,.2)", display: "flex", alignItems: "center", justifyContent: "center", color: TEAL, fontWeight: 800, fontSize: ".78rem", marginTop: 1 }}>
+                  {i + 1}
+                </div>
+                <span style={{ color: "#9ca8bc", fontSize: "1.05rem", lineHeight: 1.6 }}>{item}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-10 text-slate-600 text-lg leading-relaxed">SubDraw turns all of that into one live scoreboard per subcontract so those mistakes have nowhere to hide.</p>
-          <div className="mt-8">
-            <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl font-bold text-sm transition-all hover:bg-slate-100" style={{ color: "hsl(221 83% 53%)", border: "2px solid hsl(221 83% 53%)", padding: "0.75rem 1.75rem" }}>
-              See the Live Scoreboard
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          <p style={{ color: "#6b7a96", fontSize: "1rem", lineHeight: 1.7, marginBottom: 24 }}>
+            SubDraw turns all of that into one live scoreboard per subcontract — so those mistakes have nowhere to hide.
+          </p>
+          <a href="#proof" onClick={scrollTo("proof")} style={{ display: "inline-flex", alignItems: "center", gap: 8, color: TEAL, fontWeight: 700, fontSize: ".9rem", textDecoration: "none" }}>
+            See it catch a real error <ChevronRight className="h-4 w-4" />
+          </a>
         </div>
       </section>
 
-      <section id="what-it-does" className="bg-slate-50 py-20">
+      {/* ── FEATURES ── */}
+      <section id="features" style={{ background: NAVY, padding: "96px 0" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight mb-14 max-w-2xl">Exactly what SubDraw does — no feature soup</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[{ num: "01", title: "Stops over-billing before it happens", body: "Every invoice is checked against the approved total. Anything over gets a red flag before your PM ever clicks approve, and any override requires a written reason you can see later." }, { num: "02", title: "Locks in change orders in writing", body: "Every change order is approved by the sub first and you second before it touches the contract. No more \"I thought that was included\" arguments three months later." }, { num: "03", title: "Makes lien waivers and compliance automatic", body: "Payments are tied to signed lien waivers and valid insurance and licenses. Green, yellow, and red badges tell you at a glance who is safe to pay." }].map((block) => (
-              <div key={block.num} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                <div className="text-3xl font-extrabold mb-4" style={{ color: "hsl(221 83% 80%)" }}>{block.num}</div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4 leading-snug">{block.title}</h3>
-                <p className="text-slate-600 leading-relaxed">{block.body}</p>
+          <div style={{ marginBottom: 56 }}>
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-4" style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+              <span style={{ fontSize: ".7rem", fontWeight: 700, color: "#6b7a96", textTransform: "uppercase", letterSpacing: ".1em" }}>What SubDraw Does</span>
+            </div>
+            <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-.03em", color: "#fff", lineHeight: 1.2, maxWidth: 600 }}>
+              Exactly what it does — no feature soup
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {FEATURES.map((f) => (
+              <div key={f.num} style={{ background: "#161f30", border: "1px solid #1e2d45", borderRadius: 12, padding: "28px 24px", transition: "border-color .2s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(0,212,168,.2)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "#1e2d45")}>
+                <div style={{ fontSize: "2rem", fontWeight: 800, color: "rgba(0,212,168,.25)", fontFamily: "'JetBrains Mono', monospace", marginBottom: 16, letterSpacing: "-.04em" }}>{f.num}</div>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#e8ecf4", marginBottom: 10, lineHeight: 1.4 }}>{f.title}</h3>
+                <p style={{ color: "#6b7a96", fontSize: ".875rem", lineHeight: 1.7 }}>{f.body}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="bg-white py-20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">Watch SubDraw catch a bad invoice on a real project</h2>
-          <p className="mt-6 text-lg text-slate-600 leading-relaxed">We set up a live GC project with real numbers. In 2 minutes you will see:</p>
-          <ul className="mt-6 space-y-4 text-left max-w-md mx-auto">
-            {["A sub invoice come in over the approved total.", "SubDraw flag it automatically before approval.", "The exact override note your PM would have to type to let it slide."].map((item, i) => (
-              <li key={i} className="flex items-start gap-3"><div className="mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: "hsl(221 83% 53%)" }}><Check className="h-3 w-3" strokeWidth={3} /></div><span className="text-slate-700 text-base">{item}</span></li>
-            ))}
-          </ul>
-          <div className="mt-10">
-            <Link href="/login" className="inline-flex items-center justify-center gap-3 rounded-xl text-white font-bold shadow-2xl transition-all hover:opacity-90 hover:scale-105" style={{ backgroundColor: "#F97316", padding: "1rem 2.25rem", fontSize: "1.05rem" }}>
-              Open the Live GC Demo
-              <ArrowRight className="h-5 w-5 shrink-0" />
-            </Link>
-            <p className="mt-3 text-sm text-slate-500">No account. No email. Click and see it work.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="pricing" className="bg-slate-50 py-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-3"><h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">If it catches one overrun, it pays for itself</h2></div>
-          <p className="text-center text-slate-500 mb-10 text-sm max-w-xl mx-auto">Priced by active subcontracts — not seats, not projects. Subcontractors always free.</p>
-          <div className="flex justify-center mb-10">
-            <div className="inline-flex items-center gap-1 rounded-xl p-1" style={{ backgroundColor: "rgba(15,23,42,0.07)" }}>
-              <button onClick={() => setBillingAnnual(false)} className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all ${!billingAnnual ? "bg-white shadow text-slate-900" : "text-slate-500 hover:text-slate-700"}`}>Monthly</button>
-              <button onClick={() => setBillingAnnual(true)} className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all flex items-center gap-2 ${billingAnnual ? "bg-white shadow text-slate-900" : "text-slate-500 hover:text-slate-700"}`}>Annual<span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Save one month free</span></button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
-            {PLANS.map((plan) => {
-              const orderClass = plan.name === "Professional" ? "order-first md:order-none" : plan.name === "Starter" ? "order-2 md:order-none" : "order-3 md:order-none";
-              return (
-                <div key={plan.name} className={`relative rounded-2xl bg-white flex flex-col ${orderClass} ${plan.popular ? "border-2 shadow-2xl z-10 scale-[1.03] ring-4 ring-blue-500/15" : "border border-slate-200 shadow-sm opacity-95"}`} style={plan.popular ? { borderColor: "hsl(221 83% 53%)" } : {}}>
-                  {plan.popular && <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-xs font-bold text-white shadow-lg" style={{ backgroundColor: "hsl(221 83% 53%)" }}>MOST POPULAR</div>}
-                  <div className={`p-7 flex flex-col flex-1 ${plan.popular ? "pt-9" : ""}`}>
-                    <h3 className={`font-extrabold text-slate-900 mb-1 ${plan.popular ? "text-xl" : "text-base"}`}>{plan.name}</h3>
-                    <p className="text-xs text-slate-500 mb-1">{plan.limit}</p>
-                    <p className="text-sm text-slate-600 mb-1">{plan.description}</p>
-                    <p className="text-xs text-slate-400 italic mb-5">{plan.roi}</p>
-                    <div className="mb-1"><span className={`font-extrabold text-slate-900 ${plan.popular ? "text-5xl" : "text-4xl"}`}>${billingAnnual ? plan.annual.toLocaleString() : plan.monthly}</span><span className="text-slate-400 text-sm ml-1">{billingAnnual ? "/yr" : "/mo"}</span></div>
-                    {billingAnnual ? <div className="flex items-center gap-2 mb-6"><span className="text-xs text-slate-400">${plan.monthly}/mo equivalent</span><span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Save one month free</span></div> : <p className="text-xs text-slate-400 mb-6">${plan.annual.toLocaleString()}/yr if billed annually</p>}
-                    <ul className="space-y-2 mb-7">
-                      {["Unlimited team members — no per seat fees ever", "All features included — nothing locked behind higher plans", "Subcontractors always free", "Cancel anytime"].map((item) => <li key={item} className="flex items-start gap-2 text-sm text-slate-700"><Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" strokeWidth={2.5} />{item}</li>)}
-                    </ul>
-                    <Link href="/signup" className={`mt-auto w-full rounded-xl py-3 text-sm font-bold text-center block transition-all hover:opacity-90 hover:scale-[1.02] ${plan.popular ? "text-white shadow-lg" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`} style={plan.popular ? { backgroundColor: "hsl(221 83% 53%)" } : {}}>
-                      Start 7-Day Free Trial
-                    </Link>
+          <div style={{ marginTop: 48, padding: "28px 32px", background: "rgba(0,212,168,.05)", border: "1px solid rgba(0,212,168,.15)", borderRadius: 12 }}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { label: "Invoice Flagging", desc: "Over-budget invoices flagged before approval" },
+                { label: "Digital Lien Waivers", desc: "Collected automatically, tied to payment" },
+                { label: "Retainage Tracking", desc: "Every dollar tracked, schedules generated in one click" },
+                { label: "Change Order Audit Trail", desc: "Every CO logged with approval timestamps" },
+                { label: "Lender-Ready Packages", desc: "Clean draw packages that get approved first time" },
+                { label: "Sub Portal", desc: "Subs submit invoices, check payment status without calling you" },
+              ].map((item) => (
+                <div key={item.label} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <Check className="h-4 w-4 shrink-0 mt-0.5" style={{ color: TEAL }} strokeWidth={2.5} />
+                  <div>
+                    <div style={{ fontSize: ".875rem", fontWeight: 700, color: "#e8ecf4" }}>{item.label}</div>
+                    <div style={{ fontSize: ".78rem", color: "#6b7a96", marginTop: 2 }}>{item.desc}</div>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-slate-400">
-            {["7-day free trial · all plans", "No credit card to start", "Cancel anytime", "Subs always free"].map((item) => <span key={item} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-green-500" /> {item}</span>)}
-          </div>
-          <p className="mt-6 text-center text-slate-400 text-xs">Payments processed through SubDraw include a 1% payment processing fee — less than half the cost of a credit card terminal. Subcontractors are always free on every plan.</p>
         </div>
       </section>
 
-      <section className="bg-slate-900 py-20">
+      {/* ── PROOF ── */}
+      <section id="proof" style={{ background: CHARCOAL, borderTop: "1px solid rgba(255,255,255,.06)", borderBottom: "1px solid rgba(255,255,255,.06)", padding: "96px 0" }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            {/* Left: copy */}
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-6" style={{ background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)" }}>
+                <span style={{ fontSize: ".7rem", fontWeight: 700, color: "#ff3b5c", textTransform: "uppercase", letterSpacing: ".1em" }}>Real Product · Real Catch</span>
+              </div>
+              <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-.03em", color: "#fff", lineHeight: 1.2, marginBottom: 16 }}>
+                SubDraw caught this <span style={{ color: TEAL }}>before</span> Pacific Electric got paid
+              </h2>
+              <p style={{ color: "#6b7a96", fontSize: ".95rem", lineHeight: 1.7, marginBottom: 32 }}>
+                Pacific Electric submitted $56,000 against an approved contract of $50,550.
+                SubDraw flagged the overrun automatically — before anyone clicked approve.
+                The GC sent it back. The invoice got corrected. $5,450 stayed in their pocket.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {PROOF_STATS.map((s) => (
+                  <div key={s.num} style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 800, color: TEAL, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-.03em", flexShrink: 0 }}>{s.num}</div>
+                    <div style={{ fontSize: ".875rem", color: "#6b7a96" }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/login"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: TEAL, color: "#000", fontWeight: 800, fontSize: ".9rem", borderRadius: 10, padding: "14px 24px", textDecoration: "none", marginTop: 32, boxShadow: `0 6px 20px rgba(0,212,168,.25)` }}
+              >
+                See It on Your Own Draw →
+              </Link>
+            </div>
+            {/* Right: real screenshots */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#ff3b5c", background: "rgba(255,59,92,.1)", border: "1px solid rgba(255,59,92,.2)", padding: "3px 10px", borderRadius: 100, textTransform: "uppercase", letterSpacing: ".06em" }}>
+                    🚩 SubDraw flagged this automatically
+                  </span>
+                </div>
+                <img
+                  src="/screenshot-flagged.jpg"
+                  alt="SubDraw Action Required dashboard — Pacific Electric invoice flagged before payment"
+                  style={{ width: "100%", borderRadius: 12, boxShadow: "0 8px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06)", display: "block" }}
+                  loading="lazy"
+                />
+              </div>
+              <div>
+                <img
+                  src="/screenshot-financial.jpg"
+                  alt="SubDraw Financial Scoreboard — Pacific Electric contract totals"
+                  style={{ width: "100%", borderRadius: 10, boxShadow: "0 4px 24px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06)", display: "block" }}
+                  loading="lazy"
+                />
+                <p style={{ fontSize: ".72rem", color: "#4a5568", textAlign: "center", marginTop: 6 }}>
+                  Financial Scoreboard — approved total vs invoiced, live
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── DEMO CTA ── */}
+      <section style={{ background: NAVY, padding: "80px 0" }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 mb-7" style={{ backgroundColor: "rgba(249,115,22,0.12)", borderColor: "rgba(249,115,22,0.3)" }}><span className="text-xs font-bold tracking-wider uppercase" style={{ color: "#fb923c" }}>Zero Risk — See the Product First</span></div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">Stop guessing. Start knowing exactly what every sub owes and has been paid.</h2>
-          <p className="mt-4 text-lg text-slate-300">See a real flagged invoice in 60 seconds — no signup, no credit card, no sales call.</p>
-          <div className="mt-9"><Link href="/login" className="inline-flex items-center gap-3 rounded-xl text-white font-bold shadow-2xl transition-all hover:opacity-90 hover:scale-105 text-base sm:text-lg" style={{ backgroundColor: "#F97316", padding: "1.1rem 2.5rem" }}>See a Flagged Invoice in 60 Seconds<ArrowRight className="h-5 w-5 shrink-0" /></Link></div>
-          <p className="mt-4 text-sm text-slate-500">Or <Link href="/signup" className="underline hover:text-white transition-colors" style={{ color: "hsl(221 83% 70%)" }}>start your free 7-day trial</Link> — no credit card required</p>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">{["No Credit Card", "Subs Always Free", "Cancel Anytime"].map((b) => <span key={b} className="flex items-center gap-1.5 text-slate-600 text-xs"><Check className="h-3 w-3 shrink-0" /> {b}</span>)}</div>
+          <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-.03em", color: "#fff", lineHeight: 1.2, marginBottom: 16 }}>
+            Watch SubDraw catch a bad invoice on a real project
+          </h2>
+          <p style={{ color: "#6b7a96", fontSize: "1rem", lineHeight: 1.7, marginBottom: 28 }}>
+            We set up a live GC project with real numbers. In 2 minutes you will see:
+          </p>
+          <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 12, textAlign: "left", maxWidth: 440, margin: "0 auto 40px" }}>
+            {["A sub invoice come in over the approved total.", "SubDraw flag it automatically before approval.", "The exact override note your PM would have to type to let it slide."].map((item, i) => (
+              <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ minWidth: 20, height: 20, borderRadius: "50%", background: TEAL, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 1, flexShrink: 0 }}>
+                  <Check className="h-3 w-3" style={{ color: "#000" }} strokeWidth={3} />
+                </div>
+                <span style={{ color: "#9ca8bc", fontSize: ".95rem" }}>{item}</span>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/login"
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, background: TEAL, color: "#000", fontWeight: 800, fontSize: "1.05rem", borderRadius: 10, padding: "18px 36px", textDecoration: "none", boxShadow: `0 8px 32px rgba(0,212,168,.3)` }}
+          >
+            Open the Live GC Demo
+            <ArrowRight className="h-5 w-5 shrink-0" />
+          </Link>
+          <p style={{ marginTop: 12, color: "#4a5568", fontSize: ".82rem" }}>No account. No email. Click and see it work.</p>
         </div>
       </section>
 
-      <footer className="bg-slate-900 border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-10">
-            <div><div className="flex items-center gap-2 text-white font-bold text-base mb-3"><div className="h-7 w-7 rounded-md flex items-center justify-center" style={{ backgroundColor: "hsl(221 83% 53%)" }}><HardHat className="h-4 w-4 text-white" strokeWidth={2.5} /></div>SubDraw</div><p className="text-slate-400 text-sm leading-relaxed">The financial control layer between GCs and their subcontractors. Built by people who've been on job sites.</p></div>
-            <div><h4 className="text-white font-semibold text-xs mb-4 uppercase tracking-wider">Product</h4><ul className="space-y-2.5">{[{ label: "Features", onClick: scrollTo("what-it-does"), href: "#what-it-does" }, { label: "Pricing", onClick: scrollTo("pricing"), href: "#pricing" }, { label: "See Demo", onClick: undefined, href: "/login" }, { label: "Log In", onClick: undefined, href: "/login" }].map((link) => <li key={link.label}>{link.onClick ? <a href={link.href} onClick={link.onClick} className="text-slate-400 hover:text-white text-sm transition-colors cursor-pointer">{link.label}</a> : <Link href={link.href} className="text-slate-400 hover:text-white text-sm transition-colors">{link.label}</Link>}</li>)}</ul></div>
-            <div><h4 className="text-white font-semibold text-xs mb-4 uppercase tracking-wider">Get Started</h4><Link href="/login" className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90" style={{ backgroundColor: "#F97316" }}>See Live Demo <ArrowRight className="h-3.5 w-3.5" /></Link><div className="mt-3"><Link href="/signup" className="text-slate-400 hover:text-white text-sm transition-colors">Start Free Trial →</Link></div></div>
+      {/* ── PRICING ── */}
+      <section id="pricing" style={{ background: CHARCOAL, borderTop: "1px solid rgba(255,255,255,.06)", padding: "96px 0" }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-4" style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+              <span style={{ fontSize: ".7rem", fontWeight: 700, color: "#6b7a96", textTransform: "uppercase", letterSpacing: ".1em" }}>Pricing</span>
+            </div>
+            <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.4rem)", fontWeight: 800, letterSpacing: "-.03em", color: "#fff" }}>
+              Know Before You Pay
+            </h2>
+            <p style={{ color: "#6b7a96", fontSize: ".95rem", marginTop: 8, maxWidth: 480, margin: "8px auto 0" }}>
+              Priced by active subcontracts — not seats, not projects. Subcontractors always free.
+            </p>
           </div>
-          <div className="border-t border-white/10 pt-7 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500"><p>© {new Date().getFullYear()} SubDraw. All rights reserved.</p><p>Built for General Contractors · Subs always free</p></div>
+
+          {/* Toggle */}
+          <div style={{ display: "flex", justifyContent: "center", margin: "32px 0" }}>
+            <div style={{ display: "inline-flex", background: "rgba(255,255,255,.05)", borderRadius: 10, padding: 4 }}>
+              {["Monthly", "Annual"].map((label) => {
+                const isActive = label === "Annual" ? billingAnnual : !billingAnnual;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => setBillingAnnual(label === "Annual")}
+                    style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: ".875rem", fontWeight: 600, transition: "all .15s", background: isActive ? "#fff" : "transparent", color: isActive ? "#0b1120" : "#6b7a96", display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    {label}
+                    {label === "Annual" && <span style={{ fontSize: ".65rem", fontWeight: 800, color: "#00c87a", background: "rgba(0,200,122,.1)", border: "1px solid rgba(0,200,122,.2)", padding: "2px 7px", borderRadius: 100 }}>Save 1 month</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+            {PLANS.map((plan) => (
+              <div
+                key={plan.name}
+                style={{
+                  background: plan.popular ? "rgba(0,212,168,.04)" : "#161f30",
+                  border: plan.popular ? `2px solid ${TEAL}` : "1px solid #1e2d45",
+                  borderRadius: 14,
+                  padding: plan.popular ? "36px 28px 28px" : "28px",
+                  position: "relative",
+                  transform: plan.popular ? "scale(1.02)" : "none",
+                }}
+              >
+                {plan.popular && (
+                  <div style={{ position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)", background: TEAL, color: "#000", fontSize: ".65rem", fontWeight: 800, padding: "4px 14px", borderRadius: 100, letterSpacing: ".08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                    Most Popular
+                  </div>
+                )}
+                <div style={{ fontWeight: 800, fontSize: "1.05rem", color: "#e8ecf4", marginBottom: 4 }}>{plan.name}</div>
+                <div style={{ fontSize: ".78rem", color: "#6b7a96", marginBottom: 6 }}>{plan.limit}</div>
+                <div style={{ fontSize: ".85rem", color: "#6b7a96", marginBottom: 6 }}>{plan.description}</div>
+                <div style={{ fontSize: ".8rem", color: "#4a5568", fontStyle: "italic", marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,.06)" }}>{plan.roi}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                  <span style={{ fontSize: "2.4rem", fontWeight: 800, color: "#e8ecf4", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-.04em" }}>
+                    ${billingAnnual ? plan.annual.toLocaleString() : plan.monthly}
+                  </span>
+                  <span style={{ color: "#6b7a96", fontSize: ".85rem" }}>{billingAnnual ? "/yr" : "/mo"}</span>
+                </div>
+                {billingAnnual
+                  ? <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}><span style={{ fontSize: ".72rem", color: "#4a5568" }}>${plan.monthly}/mo equivalent</span><span style={{ fontSize: ".65rem", fontWeight: 800, color: "#00c87a", background: "rgba(0,200,122,.1)", border: "1px solid rgba(0,200,122,.2)", padding: "2px 7px", borderRadius: 100 }}>Save 1 month free</span></div>
+                  : <div style={{ fontSize: ".72rem", color: "#4a5568", marginBottom: 20 }}>${plan.annual.toLocaleString()}/yr billed annually</div>
+                }
+                <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 9, marginBottom: 24 }}>
+                  {["Unlimited team members — no per seat fees ever", "All features included — nothing locked behind higher plans", "Subcontractors always free", "Cancel anytime"].map((item) => (
+                    <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: ".85rem", color: "#6b7a96" }}>
+                      <Check className="h-4 w-4 shrink-0 mt-0.5" style={{ color: TEAL }} strokeWidth={2.5} />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/login"
+                  style={{ display: "block", width: "100%", textAlign: "center", borderRadius: 9, padding: "12px", fontSize: ".9rem", fontWeight: 700, textDecoration: "none", background: plan.popular ? TEAL : "transparent", color: plan.popular ? "#000" : "#6b7a96", border: plan.popular ? "none" : "1px solid #263552", transition: "all .15s" }}
+                >
+                  Start Free →
+                </Link>
+              </div>
+            ))}
+          </div>
+          <p style={{ textAlign: "center", color: "#4a5568", fontSize: ".8rem", marginTop: 24 }}>
+            All plans include a free first draw review. No credit card required to start.
+          </p>
+        </div>
+      </section>
+
+      {/* ── FINAL CTA ── */}
+      <section style={{ background: `radial-gradient(ellipse 100% 100% at 50% 100%, rgba(0,212,168,.1) 0%, transparent 70%), ${NAVY}`, borderTop: "1px solid rgba(255,255,255,.06)", padding: "96px 0", textAlign: "center" }}>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-7" style={{ background: "rgba(0,212,168,.08)", border: "1px solid rgba(0,212,168,.2)" }}>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, color: TEAL, textTransform: "uppercase", letterSpacing: ".1em" }}>Free to Try</span>
+          </div>
+          <h2 style={{ fontSize: "clamp(2rem,4vw,3rem)", fontWeight: 800, letterSpacing: "-.04em", color: "#fff", lineHeight: 1.1, marginBottom: 16 }}>
+            Stop guessing.<br />
+            <span style={{ color: TEAL }}>Start knowing.</span>
+          </h2>
+          <p style={{ color: "#6b7a96", fontSize: "1.05rem", lineHeight: 1.7, maxWidth: 520, margin: "0 auto 40px" }}>
+            See a real flagged invoice in 60 seconds. No signup. No credit card. No sales call.
+          </p>
+          <Link
+            href="/login"
+            style={{ display: "inline-flex", alignItems: "center", gap: 10, background: TEAL, color: "#000", fontWeight: 800, fontSize: "1.1rem", borderRadius: 12, padding: "18px 40px", textDecoration: "none", boxShadow: `0 10px 40px rgba(0,212,168,.35)` }}
+          >
+            Check My First Draw Free →
+          </Link>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 24, marginTop: 20 }}>
+            {["No credit card", "2-minute setup", "Free first draw review", "GCs in CA & UT"].map((t) => (
+              <span key={t} style={{ fontSize: ".78rem", color: "#4a5568", display: "flex", alignItems: "center", gap: 6 }}>
+                <Check className="h-3 w-3 shrink-0" style={{ color: "#00c87a" }} />
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer style={{ background: CHARCOAL, borderTop: "1px solid rgba(255,255,255,.06)", padding: "48px 0 24px" }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-10">
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 7, background: TEAL, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: ".85rem", color: "#000" }}>SD</div>
+                <span style={{ fontWeight: 800, color: "#fff", fontSize: "1.1rem", letterSpacing: "-.03em" }}>Sub<span style={{ color: TEAL }}>Draw</span></span>
+              </div>
+              <p style={{ color: "#4a5568", fontSize: ".875rem", lineHeight: 1.7, maxWidth: 260 }}>
+                Invoice protection and draw management for general contractors. Built so you know before you pay.
+              </p>
+            </div>
+            <div>
+              <h4 style={{ color: "#fff", fontWeight: 700, fontSize: ".72rem", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 14 }}>Product</h4>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 9 }}>
+                {[{ label: "Features", href: "#features", onClick: scrollTo("features") }, { label: "Pricing", href: "#pricing", onClick: scrollTo("pricing") }, { label: "See Demo", href: "/login", onClick: undefined }, { label: "Log In", href: "/login", onClick: undefined }].map((link) => (
+                  <li key={link.label}>
+                    {link.onClick
+                      ? <a href={link.href} onClick={link.onClick} style={{ color: "#4a5568", fontSize: ".875rem", textDecoration: "none", transition: "color .15s" }}>{link.label}</a>
+                      : <Link href={link.href} style={{ color: "#4a5568", fontSize: ".875rem", textDecoration: "none", transition: "color .15s" }}>{link.label}</Link>
+                    }
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 style={{ color: "#fff", fontWeight: 700, fontSize: ".72rem", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 14 }}>Get Started</h4>
+              <Link href="/login" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: TEAL, color: "#000", fontWeight: 800, fontSize: ".875rem", borderRadius: 8, padding: "10px 18px", textDecoration: "none" }}>
+                Try It Free <ArrowRight className="h-4 w-4" />
+              </Link>
+              <div style={{ marginTop: 12 }}>
+                <a href="mailto:hello@subdraw.com" style={{ color: "#4a5568", fontSize: ".875rem", textDecoration: "none" }}>hello@subdraw.com</a>
+              </div>
+            </div>
+          </div>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,.06)", paddingTop: 20, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: ".75rem", color: "#4a5568" }}>
+            <span>© {new Date().getFullYear()} SubDraw. All rights reserved.</span>
+            <div style={{ display: "flex", gap: 20 }}>
+              <a href="#" style={{ color: "#4a5568", textDecoration: "none" }}>Privacy</a>
+              <a href="#" style={{ color: "#4a5568", textDecoration: "none" }}>Terms</a>
+            </div>
+          </div>
         </div>
       </footer>
 
-      <div className={`fixed bottom-0 left-0 right-0 z-40 md:hidden transition-all duration-300 ${pastHero ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"}`} style={{ background: "linear-gradient(to top, rgba(15,23,42,0.98) 80%, transparent)", paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="px-4 py-3"><Link href="/login" className="flex items-center justify-center gap-2 w-full rounded-xl text-white font-bold text-sm py-3.5 shadow-2xl" style={{ backgroundColor: "#F97316" }}>Watch It Flag a Bad Invoice <ArrowRight className="h-4 w-4" /></Link></div>
+      {/* ── MOBILE STICKY CTA ── */}
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40"
+        style={{ transition: "all .3s", transform: pastHero ? "translateY(0)" : "translateY(100%)", opacity: pastHero ? 1 : 0, background: "linear-gradient(to top, rgba(11,17,32,.98) 80%, transparent)", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div style={{ padding: "12px 16px" }}>
+          <Link
+            href="/login"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: TEAL, color: "#000", fontWeight: 800, fontSize: ".9rem", borderRadius: 10, padding: "14px", textDecoration: "none" }}
+          >
+            Watch It Flag a Bad Invoice <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
+        * { box-sizing: border-box; }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,212,168,.5); }
+          60% { opacity: .7; box-shadow: 0 0 0 5px rgba(0,212,168,0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+        }
+      `}</style>
     </div>
   );
 }
