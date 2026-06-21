@@ -37,6 +37,8 @@ import SubmittalDetail from "./pages/submittal-detail";
 import PaymentSuccess from "./pages/payment-success";
 import PaymentSetupRefresh from "./pages/payment-setup-refresh";
 import MagicLogin from "./pages/magic-login";
+import Privacy from "./pages/privacy";
+import Terms from "./pages/terms";
 import { PausedScreen } from "./components/paused-screen";
 import { TrialExpiredGate } from "./components/trial-expired-gate";
 
@@ -247,6 +249,8 @@ function Router() {
         <Route path="/account/payment-setup" component={PaymentSetupRoute} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
+        <Route path="/privacy" component={Privacy} />
+        <Route path="/terms" component={Terms} />
         <Route component={NotFound} />
       </Switch>
     </>
