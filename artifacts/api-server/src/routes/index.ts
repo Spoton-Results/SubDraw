@@ -25,12 +25,12 @@ import analyticsRouter from "./analytics.js";
 import connectRouter from "./connect.js";
 import stripeConnectRouter from "./stripe-connect.js";
 import connectPaymentGuard from "../middlewares/connectPaymentGuard.js";
+import paymentAttemptsRouter from "./payment-attempts.js";
 import pushRouter from "./push.js";
 import demoLeadsRouter from "./demo-leads.js";
 import directoryRouter from "./directory.js";
 
 const router: IRouter = Router();
-
 router.use(healthRouter);
 router.use("/auth", authRouter);
 router.use("/users", usersRouter);
@@ -48,6 +48,7 @@ router.use("/subcontracts", subcontractsRouter);
 router.use("/storage", storageRouter);
 router.use("/contacts", contactsRouter);
 router.use("/profile", profileRouter);
+router.use("/stripe/connect", paymentAttemptsRouter);
 router.use("/stripe/connect", connectPaymentGuard);
 router.use("/stripe", stripeRouter);
 router.use("/team", teamRouter);
@@ -60,5 +61,4 @@ router.use("/stripe/connect", stripeConnectRouter);
 router.use("/push", pushRouter);
 router.use("/demo-leads", demoLeadsRouter);
 router.use("/directory", directoryRouter);
-
 export default router;
