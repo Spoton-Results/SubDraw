@@ -30,7 +30,7 @@ async function initStripe() {
   }
   try {
     console.log("[stripe] Running migrations...");
-    await runMigrations({ databaseUrl, schema: "stripe" });
+    await runMigrations({ databaseUrl });
     console.log("[stripe] Migrations done");
 
     const stripeSync = await getStripeSync();
