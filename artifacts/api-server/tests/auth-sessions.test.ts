@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
+import { publicAuthUser, isMagicLinkUsable } from "../src/lib/authRecoveryPolicy.ts";
 process.env.JWT_SECRET = "unit-test-only-key-not-for-production-123456789";
 process.env.ADMIN_EMAIL = "admin@example.invalid";
 const sessions = await import("../src/lib/sessionTokens.ts");
@@ -45,3 +46,19 @@ test("unknown roles and parented owner claims do not gain owner privileges", () 
   }
 });
 test("legacy root GC owner remains supported", () => assert.equal(auth.isGCOwner(user), true));
+const now = new Date("2026-10-21T12:00:00Z");
+const record = { usedAt: null, createdAt: new Date(now.getTime() - 60000), expiresAt: new Date(now.getTime() + 60000) };
+const account = { pausedAt: null, passwordChangedAt: null };
+test("unused unexpired magic link is eligible", () => assert.equal(isMagicLinkUsable(record, account, now), true));
+test("used magic link is rejected", () => assert.equal(isMagicLinkUsable({ ...record, usedAt: now }, account, now), false));
+test("expired or invalid expiry is rejected", () => {
+  for (const expiresAt of [now, new Date(now.getTime() - 1), new Date("invalid")]) assert.equal(isMagicLinkUsable({ ...record, expiresAt }, account, now), false);
+});
+test("paused account cannot use a magic link", () => assert.equal(isMagicLinkUsable(record, { ...account, pausedAt: now }, now), false));
+test("password change invalidates older magic links", () => assert.equal(isMagicLinkUsable(record, { ...account, passwordChangedAt: now }, now), false));
+test("auth response omits password reset secrets and internal notes", () => {
+  const safe = publicAuthUser({ ...user, passwordHash: "hash", passwordResetToken: "reset-token", passwordResetExpires: now, adminNotes: "internal" });
+  for (const key of ["passwordHash", "passwordResetToken", "passwordResetExpires", "adminNotes"]) assert.equal(key in safe, false);
+  assert.equal(safe.email, user.email);
+  assert.equal(safe.id, user.id);
+});

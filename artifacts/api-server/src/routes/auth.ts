@@ -2,13 +2,19 @@ import { Router } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import { usersTable, subProfilesTable, magicLinkTokensTable } from "@workspace/db/schema";
-import { eq, and, isNull, lt } from "drizzle-orm";
+import { eq, and, isNull, lt, gt } from "drizzle-orm";
 import { hashPassword, comparePassword, generateToken, setAuthCookie, clearAuthCookie } from "../lib/auth.js";
+import { publicAuthUser, isMagicLinkUsable } from "../lib/authRecoveryPolicy.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { sendPasswordResetEmail, sendMagicLinkEmail } from "../lib/email.js";
 import { getGCPlanInfo } from "../lib/stripeStorage.js";
 
 const router = Router();
+router.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 
 function generateMagicToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -26,7 +32,7 @@ async function createMagicToken(userId: string): Promise<string> {
     );
 
   const token = generateMagicToken();
-  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
   await db.insert(magicLinkTokensTable).values({ userId, token, expiresAt });
   return token;
 }
@@ -50,7 +56,7 @@ router.post("/register", async (req, res) => {
   const [user] = await db.insert(usersTable).values({ email, passwordHash, role, companyName }).returning();
   const token = generateToken(user);
   setAuthCookie(res, token);
-  const { passwordHash: _, ...safeUser } = user;
+  const safeUser = publicAuthUser(user);
   res.status(201).json({ user: safeUser });
 });
 
@@ -77,7 +83,7 @@ router.post("/login", async (req, res) => {
   await db.update(usersTable).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, user.id));
   const token = generateToken(user);
   setAuthCookie(res, token);
-  const { passwordHash: _, ...safeUser } = user;
+  const safeUser = publicAuthUser(user);
   res.status(200).json({ user: safeUser });
 });
 
@@ -93,7 +99,7 @@ router.get("/me", requireAuth, async (req, res) => {
     res.status(401).json({ error: "User not found" });
     return;
   }
-  const { passwordHash: _, ...safeUser } = user;
+  const safeUser = publicAuthUser(user);
   let subProfile = null;
   if (user.role === "SUB") {
     const [profile] = await db.select().from(subProfilesTable).where(eq(subProfilesTable.userId, user.id)).limit(1);
@@ -148,7 +154,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
   const passwordChangedAt = new Date();
   const [updated] = await db
     .update(usersTable)
-    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, updatedAt: new Date() })
+    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, passwordResetToken: null, passwordResetExpires: null, updatedAt: new Date() })
     .where(eq(usersTable.id, user.id))
     .returning();
 
@@ -187,7 +193,7 @@ router.post("/set-password", requireAuth, async (req, res) => {
   const passwordChangedAt = new Date();
   const [updated] = await db
     .update(usersTable)
-    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, updatedAt: new Date() })
+    .set({ passwordHash: newHash, mustChangePassword: false, passwordChangedAt, passwordResetToken: null, passwordResetExpires: null, updatedAt: new Date() })
     .where(eq(usersTable.id, user.id))
     .returning();
 
@@ -209,8 +215,7 @@ router.patch("/update-profile", requireAuth, async (req, res) => {
     .set({ companyName: String(companyName).trim(), updatedAt: new Date() })
     .where(eq(usersTable.id, userPayload.id))
     .returning();
-  const { passwordHash: _, passwordResetToken: __, passwordResetExpires: ___, ...safeUser } = updated;
-  res.json(safeUser);
+  res.json(publicAuthUser(updated));
 });
 
 router.post("/forgot-password", async (req, res) => {
@@ -246,7 +251,7 @@ router.post("/magic-link/request", async (req, res) => {
     .where(eq(usersTable.email, String(email).toLowerCase().trim()))
     .limit(1);
 
-  if (user) {
+  if (user && !user.pausedAt) {
     const token = await createMagicToken(user.id);
     const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
     const magicUrl = `${appUrl}/api/auth/magic-link/verify?token=${token}`;
@@ -263,50 +268,36 @@ router.post("/magic-link/request", async (req, res) => {
 router.get("/magic-link/verify", async (req, res) => {
   const { token } = req.query;
   const appUrl = process.env.APP_URL || `https://${(req as any).hostname}`;
-
   if (!token || typeof token !== "string") {
     res.redirect(`${appUrl}/login?error=invalid_link`);
     return;
   }
-
-  const [record] = await db
-    .select()
-    .from(magicLinkTokensTable)
-    .where(eq(magicLinkTokensTable.token, token))
-    .limit(1);
-
-  if (!record) {
-    res.redirect(`${appUrl}/login?error=invalid_link`);
-    return;
+  try {
+    const session = await db.transaction(async tx => {
+      const [record] = await tx.select().from(magicLinkTokensTable).where(eq(magicLinkTokensTable.token, token)).limit(1);
+      if (!record) return null;
+      const [user] = await tx.select().from(usersTable).where(eq(usersTable.id, record.userId)).limit(1).for("update");
+      if (!user || !["GC", "SUB"].includes(user.role) || !isMagicLinkUsable(record, user)) return null;
+      const now = new Date();
+      const [consumed] = await tx.update(magicLinkTokensTable)
+        .set({ usedAt: now })
+        .where(and(eq(magicLinkTokensTable.id, record.id), isNull(magicLinkTokensTable.usedAt), gt(magicLinkTokensTable.expiresAt, now)))
+        .returning({ id: magicLinkTokensTable.id });
+      if (!consumed) return null;
+      const jwt = generateToken(user);
+      await tx.update(usersTable).set({ lastLoginAt: now, updatedAt: now }).where(eq(usersTable.id, user.id));
+      return jwt;
+    });
+    if (!session) {
+      res.redirect(`${appUrl}/login?error=invalid_link`);
+      return;
+    }
+    setAuthCookie(res, session);
+    res.redirect(`${appUrl}/dashboard`);
+  } catch {
+    console.error("[auth] Magic-link verification unavailable");
+    res.status(503).json({ error: "Login verification is temporarily unavailable. Request a new link if needed." });
   }
-
-  if (record.expiresAt < new Date()) {
-    res.redirect(`${appUrl}/login?error=link_expired`);
-    return;
-  }
-
-  if (!record.usedAt) {
-    await db
-      .update(magicLinkTokensTable)
-      .set({ usedAt: new Date() })
-      .where(eq(magicLinkTokensTable.id, record.id));
-  }
-
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, record.userId))
-    .limit(1);
-
-  if (!user) {
-    res.redirect(`${appUrl}/login?error=invalid_link`);
-    return;
-  }
-
-  const jwt = generateToken(user);
-  setAuthCookie(res, jwt);
-
-  res.redirect(`${appUrl}/dashboard`);
 });
 
 router.post("/demo-login", async (req, res) => {
@@ -332,15 +323,15 @@ router.post("/demo-login", async (req, res) => {
         .limit(1);
     }
 
-    if (!user) {
-      res.status(503).json({ error: "Demo account is being set up. Please try again in a moment." });
+    if (!user || !user.isDemo || user.pausedAt) {
+      res.status(503).json({ error: "Demo account is unavailable. Please try again later." });
       return;
     }
 
     await db.update(usersTable).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, user.id));
     const token = generateToken(user);
     setAuthCookie(res, token);
-    const { passwordHash: _, ...safeUser } = user;
+    const safeUser = publicAuthUser(user);
     res.status(200).json({ user: safeUser });
   } catch (err: any) {
     console.error("[demo-login] Error:", err?.message ?? err);
@@ -365,14 +356,18 @@ router.post("/reset-password", async (req, res) => {
   }
   const newHash = await hashPassword(String(newPassword));
   const passwordChangedAt = new Date();
-  await db.update(usersTable).set({
+  const [updated] = await db.update(usersTable).set({
     passwordHash: newHash,
     passwordResetToken: null,
     passwordResetExpires: null,
     mustChangePassword: false,
     passwordChangedAt,
     updatedAt: new Date(),
-  }).where(eq(usersTable.id, user.id));
+  }).where(and(eq(usersTable.id, user.id), eq(usersTable.passwordResetToken, String(token)), gt(usersTable.passwordResetExpires, new Date()))).returning({ id: usersTable.id });
+  if (!updated) {
+    res.status(400).json({ error: "This reset link is invalid or has expired." });
+    return;
+  }
   res.json({ message: "Password reset successfully. You can now log in with your new password." });
 });
 
