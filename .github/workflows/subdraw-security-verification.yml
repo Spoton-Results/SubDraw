@@ -39,10 +39,10 @@ jobs:
       - name: Install locked dependencies
         id: install
         run: pnpm install --frozen-lockfile
-      - name: Run payment and session regression tests
+      - name: Run security policy regression tests
         id: policies
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm --filter @workspace/api-server exec tsx --test tests/auth-sessions.test.ts tests/payment-attempts.test.ts tests/payment-reconciliation.test.ts
+        run: pnpm --filter @workspace/api-server exec tsx --test tests/auth-sessions.test.ts tests/private-storage.test.ts tests/payment-attempts.test.ts tests/payment-reconciliation.test.ts
       - name: Compile referenced workspace libraries
         id: libraries
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -78,13 +78,13 @@ jobs:
             echo '## SubDraw verification'
             echo "Commit: $GITHUB_SHA"
             echo "Install: $INSTALL_RESULT"
-            echo "Policy/session tests: $POLICY_RESULT"
+            echo "Security policy tests: $POLICY_RESULT"
             echo "Workspace libraries: $LIBRARY_RESULT"
             echo "API typecheck: $API_TYPES_RESULT"
             echo "Frontend typecheck: $FRONTEND_TYPES_RESULT"
             echo "API build: $API_BUILD_RESULT"
             echo "Frontend build: $FRONTEND_BUILD_RESULT"
             echo ''
-            echo 'This run does not verify database migrations, concurrent API requests, webhook transactions, authorization endpoints, real Stripe behavior, or production readiness.'
+            echo 'This run does not verify database migrations, concurrent API requests, webhook transactions, authorization endpoints, real Stripe behavior, storage configuration, or production readiness.'
             echo 'No deployment, database migration, or live payment action is configured in this workflow.'
           } >> "$GITHUB_STEP_SUMMARY"
