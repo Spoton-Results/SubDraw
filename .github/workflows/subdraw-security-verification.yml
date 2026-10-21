@@ -39,10 +39,10 @@ jobs:
       - name: Install locked dependencies
         id: install
         run: pnpm install --frozen-lockfile
-      - name: Run payment-policy regression tests
+      - name: Run payment and session regression tests
         id: policies
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm --filter @workspace/api-server exec tsx --test tests/payment-attempts.test.ts tests/payment-reconciliation.test.ts
+        run: pnpm --filter @workspace/api-server exec tsx --test tests/auth-sessions.test.ts tests/payment-attempts.test.ts tests/payment-reconciliation.test.ts
       - name: Compile referenced workspace libraries
         id: libraries
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -78,7 +78,7 @@ jobs:
             echo '## SubDraw verification'
             echo "Commit: $GITHUB_SHA"
             echo "Install: $INSTALL_RESULT"
-            echo "Payment-policy tests: $POLICY_RESULT"
+            echo "Policy/session tests: $POLICY_RESULT"
             echo "Workspace libraries: $LIBRARY_RESULT"
             echo "API typecheck: $API_TYPES_RESULT"
             echo "Frontend typecheck: $FRONTEND_TYPES_RESULT"
