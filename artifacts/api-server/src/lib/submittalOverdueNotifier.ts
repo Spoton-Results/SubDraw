@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { submittalsTable, subcontractsTable, projectsTable, usersTable } from "@workspace/db/schema";
-import { and, lt, isNull } from "drizzle-orm";
+import { and, eq, lt, isNull } from "drizzle-orm";
 import { createNotification } from "../routes/notifications.js";
 
 export async function runSubmittalOverdueNotifications() {
