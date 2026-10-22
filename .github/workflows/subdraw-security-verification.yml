@@ -50,11 +50,15 @@ jobs:
       - name: Typecheck API source with the actual compiler
         id: api_types
         if: ${{ !cancelled() && steps.libraries.outcome == 'success' }}
-        run: pnpm --filter @workspace/api-server exec tsc --noEmit --project tsconfig.json
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/api-server exec tsc --noEmit --project tsconfig.json 2>&1 | tee "$RUNNER_TEMP/subdraw-api-tsc.log"
       - name: Typecheck frontend source with the actual compiler
         id: frontend_types
         if: ${{ !cancelled() && steps.libraries.outcome == 'success' }}
-        run: pnpm --filter @workspace/subtracker exec tsc --noEmit --project tsconfig.json
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/subtracker exec tsc --noEmit --project tsconfig.json 2>&1 | tee "$RUNNER_TEMP/subdraw-frontend-tsc.log"
       - name: Build API without starting the server
         id: api_build
         if: ${{ !cancelled() && steps.api_types.outcome == 'success' }}
@@ -63,7 +67,7 @@ jobs:
         id: frontend_build
         if: ${{ !cancelled() && steps.frontend_types.outcome == 'success' }}
         run: pnpm --filter @workspace/subtracker run build
-      - name: Write verification scope and results
+      - name: Write verification scope and redacted diagnostics
         if: ${{ !cancelled() }}
         env:
           INSTALL_RESULT: ${{ steps.install.outcome }}
@@ -84,6 +88,22 @@ jobs:
             echo "Frontend typecheck: $FRONTEND_TYPES_RESULT"
             echo "API build: $API_BUILD_RESULT"
             echo "Frontend build: $FRONTEND_BUILD_RESULT"
+            echo ''
+            echo '### TypeScript diagnostic locations (messages omitted)'
+            for kind in api frontend; do
+              log="$RUNNER_TEMP/subdraw-$kind-tsc.log"
+              echo "#### $kind"
+              if [ -f "$log" ]; then
+                matches=$(grep -E '^(src/|artifacts/|lib/)[A-Za-z0-9_./-]+\([0-9]+,[0-9]+\): error TS[0-9]+' "$log" | sed -E 's/^((src\/|artifacts\/|lib\/)[A-Za-z0-9_./-]+\([0-9]+,[0-9]+\): error TS[0-9]+).*/\1/' | sort -u | head -60 || true)
+                if [ -n "$matches" ]; then
+                  printf '%s\n' '```text' "$matches" '```'
+                else
+                  echo 'No compiler diagnostic locations captured; inspect the job step for non-TypeScript failures.'
+                fi
+              else
+                echo 'Step did not produce a compiler log.'
+              fi
+            done
             echo ''
             echo 'This run does not verify database migrations, concurrent API requests, webhook transactions, authorization endpoints, real Stripe behavior, storage configuration, or production readiness.'
             echo 'No deployment, database migration, or live payment action is configured in this workflow.'
