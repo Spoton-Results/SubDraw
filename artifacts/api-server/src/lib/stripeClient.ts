@@ -2,6 +2,9 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { StripeSync, runMigrations } from "stripe-replit-sync";
 import Stripe from "stripe";
 
+// API-version migration draft. Deployment requires the checks in docs/stripe-api-alignment.md.
+export const STRIPE_API_VERSION = "2026-02-25.clover" as const;
+
 let _stripeSyncInstance: StripeSync | null = null;
 
 function getStripeSecretKey() {
@@ -17,7 +20,7 @@ function isRunningOnReplit() {
 async function buildStripeClient(): Promise<Stripe> {
   const fromEnv = getStripeSecretKey();
   if (fromEnv) {
-    return new Stripe(fromEnv, { apiVersion: "2025-05-28.basil" });
+    return new Stripe(fromEnv, { apiVersion: STRIPE_API_VERSION });
   }
 
   if (!isRunningOnReplit()) {
@@ -28,7 +31,7 @@ async function buildStripeClient(): Promise<Stripe> {
   const proxyFetch = connectors.createProxyFetch("stripe");
 
   const stripe = new Stripe("sk_placeholder", {
-    apiVersion: "2025-05-28.basil",
+    apiVersion: STRIPE_API_VERSION,
     httpClient: Stripe.createFetchHttpClient(proxyFetch as typeof fetch),
   });
 
@@ -59,8 +62,9 @@ export async function getStripeSync(): Promise<StripeSync> {
 
   const connectors = new ReplitConnectors();
   const proxyFetch = connectors.createProxyFetch("stripe");
+
   const stripeViaProxy = new Stripe("sk_placeholder", {
-    apiVersion: "2025-05-28.basil",
+    apiVersion: STRIPE_API_VERSION,
     httpClient: Stripe.createFetchHttpClient(proxyFetch as typeof fetch),
   });
 

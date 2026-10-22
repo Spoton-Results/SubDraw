@@ -65,16 +65,19 @@ router.get("/billing", requireAuth, requireGCOwner, async (req, res) => {
   // Project breakdown for billing page
   const projectsBreakdown = await getActiveProjectsWithSubcontractCounts(user.id);
 
-  // Next charge amount from upcoming invoice
+  // Preview the next invoice for this user's explicit subscription; no invoice is finalized or charged.
   let nextChargeAmount: number | null = null;
   let annualRenewsAt: string | null = null;
-  if (dbUser?.stripeCustomerId && subscription) {
+  if (dbUser?.stripeCustomerId && dbUser.stripeSubscriptionId && subscription) {
     try {
       const stripe = await getUncachableStripeClient();
-      const upcoming = await stripe.invoices.retrieveUpcoming({ customer: dbUser.stripeCustomerId });
+      const upcoming = await stripe.invoices.createPreview({
+        customer: dbUser.stripeCustomerId,
+        subscription: dbUser.stripeSubscriptionId,
+      });
       nextChargeAmount = upcoming.amount_due ?? null;
     } catch {
-      // upcoming invoice not available
+      // Invoice preview not available; preserve the unknown amount as null.
     }
     if (planInfo.billingInterval === "year" && subscription.current_period_end) {
       annualRenewsAt = new Date(subscription.current_period_end * 1000).toISOString();

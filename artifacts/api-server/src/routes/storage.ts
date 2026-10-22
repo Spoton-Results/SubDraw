@@ -1,156 +1,106 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { Readable } from "stream";
 import multer from "multer";
-import {
-  RequestUploadUrlResponse,
-} from "@workspace/api-zod";
+import { RequestUploadUrlResponse } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import {
-  generateR2Key,
-  makeR2Path,
-  isR2Path,
-  extractR2Key,
-  uploadBufferToR2,
-} from "../lib/r2";
+import { getObjectAclPolicy } from "../lib/objectAcl";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { uploadPrivateFile, privateDownloadUrl, PrivateFileNotFound } from "../lib/privateR2.js";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 150 * 1024 * 1024 },
-});
-
-/**
- * POST /storage/uploads/request-url
- *
- * Accepts the file as multipart form data, uploads it server-side to
- * Cloudflare R2 via the Cloudflare REST API (api.cloudflare.com), and
- * returns the public URL + objectPath.
- *
- * Requires CLOUDFLARE_API_TOKEN with R2:Edit permission.
- */
-router.post("/uploads/request-url", upload.single("file"), async (req: Request, res: Response) => {
-  const file = req.file;
-  if (!file) {
-    res.status(400).json({ error: "No file provided. Send the file as multipart form-data with field name 'file'." });
-    return;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 2, parts: 3 } });
+function requireUploadActor(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as any).user;
+  if (!user || !["GC", "SUB"].includes(user.role) || user.isDemo || user.impersonatedBy) {
+    res.status(403).json({ error: "File upload is not permitted for this session" }); return;
   }
-
-  const name = file.originalname;
-  const size = file.size;
-  const contentType = file.mimetype || "application/octet-stream";
-  const key = generateR2Key("uploads", name);
-
-  try {
-    const publicUrl = await uploadBufferToR2(file.buffer, key, contentType);
-    const objectPath = makeR2Path(key);
-
-    res.json(
-      RequestUploadUrlResponse.parse({
-        uploadURL: publicUrl,
-        objectPath,
-        uploaded: true,
-        metadata: { name, size, contentType },
-      }),
-    );
-  } catch (error: any) {
-    console.error("[upload] Upload failed:", error?.message ?? error);
-    res.status(500).json({ error: error?.message ?? "Failed to upload file" });
-  }
-});
-
-/**
- * GET /storage/r2/*
- *
- * Download a file from Cloudflare R2 via presigned GET URL redirect.
- * objectPath stored in DB is like "/r2/uploads/timestamp-filename.pdf"
- * Frontend calls /api/storage/r2/uploads/timestamp-filename.pdf
- */
-router.get("/r2/*path", async (req: Request, res: Response) => {
-  try {
-    const raw = req.params.path;
-    const keyPath = Array.isArray(raw) ? raw.join("/") : raw;
-    const r2Path = makeR2Path(keyPath);
-
-    if (!isR2Path(r2Path)) {
-      res.status(400).json({ error: "Invalid R2 path" });
+  next();
+}
+function privateHeaders(res: Response): void {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+}
+function receiveFile(req: Request, res: Response, next: NextFunction): void {
+  upload.single("file")(req, res, error => {
+    if (error) {
+      const tooLarge = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE";
+      res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? "File exceeds the 50 MB upload limit" : "Invalid multipart upload" });
       return;
     }
-
-    const key = extractR2Key(r2Path);
-    const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL ?? "").replace(/\/$/, "");
-    if (!publicBase) { res.status(500).json({ error: "R2 public URL not configured" }); return; }
-    res.redirect(307, `${publicBase}/${key}`);
+    next();
+  });
+}
+router.post("/uploads/request-url", requireAuth, requireUploadActor, receiveFile, async (req, res) => {
+  privateHeaders(res);
+  const file = req.file;
+  if (!file) { res.status(400).json({ error: "Provide one file in the file field" }); return; }
+  try {
+    const stored = await uploadPrivateFile((req as any).user.id, file.buffer, file.originalname, file.mimetype || "application/octet-stream");
+    res.json(RequestUploadUrlResponse.parse({ ...stored, uploaded: true,
+      metadata: { name: file.originalname, size: file.size, contentType: file.mimetype || "application/octet-stream" },
+    }));
+  } catch {
+    console.error("[private-storage] Upload unavailable");
+    res.status(503).json({ error: "Private upload storage is unavailable or not verified private" });
+  }
+});
+router.get("/r2/*path", requireAuth, async (req, res) => {
+  privateHeaders(res);
+  const raw = req.params.path;
+  const key = Array.isArray(raw) ? raw.join("/") : raw;
+  if (typeof key !== "string") { res.status(404).json({ error: "File not found" }); return; }
+  try {
+    const url = await privateDownloadUrl((req as any).user.id, key);
+    res.redirect(307, url);
   } catch (error) {
-    console.error("Error serving R2 object:", error);
-    res.status(500).json({ error: "Failed to serve file" });
+    if (error instanceof PrivateFileNotFound) { res.status(404).json({ error: "File not found" }); return; }
+    console.error("[private-storage] Download unavailable");
+    res.status(503).json({ error: "Private download storage is unavailable or not verified private" });
   }
 });
 
-/**
- * GET /storage/public-objects/*
- *
- * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS (legacy GCS).
- */
-router.get("/public-objects/*filePath", async (req: Request, res: Response) => {
+// Intentionally public legacy assets only; no new private upload is written here.
+router.get("/public-objects/*filePath", async (req, res) => {
   try {
     const raw = req.params.filePath;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
     const file = await objectStorageService.searchPublicObject(filePath);
-    if (!file) {
-      res.status(404).json({ error: "File not found" });
-      return;
-    }
-
+    if (!file) { res.status(404).json({ error: "File not found" }); return; }
     const response = await objectStorageService.downloadObject(file);
-
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
-  } catch (error) {
-    console.error("Error serving public object:", error);
-    res.status(500).json({ error: "Failed to serve public object" });
+    if (response.body) Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
+    else res.end();
+  } catch {
+    res.status(500).json({ error: "Failed to serve public asset" });
   }
 });
-
-/**
- * GET /storage/objects/*
- *
- * Serve legacy GCS object entities from PRIVATE_OBJECT_DIR.
- * Kept for backward compatibility with files uploaded before R2 migration.
- */
-router.get("/objects/*path", async (req: Request, res: Response) => {
+router.get("/objects/*path", requireAuth, async (req, res) => {
+  privateHeaders(res);
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
-    const objectPath = `/objects/${wildcardPath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-
+    if (typeof wildcardPath !== "string" || wildcardPath.includes("\\") || wildcardPath.split("/").some(part => part === "." || part === "..")) {
+      res.status(404).json({ error: "File not found" }); return;
+    }
+    const objectFile = await objectStorageService.getObjectEntityFile(`/objects/${wildcardPath}`);
+    const acl = await getObjectAclPolicy(objectFile);
+    if (!acl || acl.visibility !== "private" || acl.owner !== (req as any).user.id) {
+      res.status(404).json({ error: "File not found" }); return;
+    }
     const response = await objectStorageService.downloadObject(objectFile);
-
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
+    privateHeaders(res);
+    res.setHeader("Content-Disposition", "attachment");
+    if (response.body) Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
+    else res.end();
   } catch (error) {
-    console.error("Error serving object:", error);
-    if (error instanceof ObjectNotFoundError) {
-      res.status(404).json({ error: "Object not found" });
-      return;
-    }
-    res.status(500).json({ error: "Failed to serve object" });
+    if (error instanceof ObjectNotFoundError) { res.status(404).json({ error: "File not found" }); return; }
+    console.error("[private-storage] Legacy object unavailable");
+    res.status(503).json({ error: "Unable to verify private file access" });
   }
 });
-
 export default router;
